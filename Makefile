@@ -39,4 +39,4 @@ clean:
 	rm -rf $(OBJ) $(BIN)
 
 run:
-	$(BIN)/$(EXE) $(ARGS)
+	@$(BIN)/$(EXE) $(ARGS)
