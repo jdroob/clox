@@ -10,9 +10,9 @@ int main(int argc, char *argv[]) {
     Chunk_t chunk = {0};
     initChunk(&chunk);
     int constant = addConstant(&chunk, 1.2);
-    writeChunk(&chunk, OP_RETURN);
-    writeChunk(&chunk, OP_CONSTANT);
-    writeChunk(&chunk, constant);   // 'constant' is the offset in the val array where 1.2 can be found
+    writeChunk(&chunk, OP_RETURN, 123);
+    writeChunk(&chunk, OP_CONSTANT, 123);
+    writeChunk(&chunk, constant, 123);   // 'constant' is the offset in the val array where 1.2 can be found
     #ifdef DEBUG
         disassembleChunk(&chunk, "test chunk");
     #endif
