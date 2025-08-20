@@ -2,6 +2,9 @@
 #include "line.h"
 #include "memory.h"
 
+#define CONSTANT_POOL_LONG_IDX_MAX 0x1000000
+#define CONSTANT_POOL_SHORT_IDX_MAX 256
+
 void initChunk(Chunk_t *chunk) {
     chunk->count = 0;
     chunk->capacity = 0;
@@ -18,6 +21,31 @@ void writeChunk(Chunk_t *chunk, uint8_t byte, int line) {
     }
     chunk->code[chunk->count++] = byte;
     writeLineMap(&chunk->lines, line);
+}
+
+void writeConstant(Chunk_t *chunk, Value_t value, int line) {
+    if (chunk->constants.capacity >= CONSTANT_POOL_LONG_IDX_MAX) {
+        fprintf(stderr, "Constant pool is too large.");
+        exit(EXIT_FAILURE);
+    }
+    int idx = addConstant(chunk, value);
+    if (chunk->constants.count < CONSTANT_POOL_SHORT_IDX_MAX) {
+        writeChunk(chunk, OP_CONSTANT, line);
+        writeChunk(chunk, idx, line);
+        return;
+    }
+    //    3 least significant bytes of idx must be written to bytecode
+    //    e.g. index = 257
+    //         index =    0000 0000 0000 0001 0000 0001
+    //         index =       0    0    0    1    0    1
+    //
+    uint8_t byte0 = (unsigned)idx & 0x00F;
+    uint8_t byte1 = (unsigned)idx & 0x0F0; 
+    uint8_t byte2 = (unsigned)idx & 0xF00;
+    writeChunk(chunk, OP_CONSTANT_LONG, line);
+    writeChunk(chunk, byte2, line);    // fun fact: this is big endian
+    writeChunk(chunk, byte1, line);
+    writeChunk(chunk, byte0, line);
 }
 
 int addConstant(Chunk_t *chunk, Value_t value) {

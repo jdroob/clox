@@ -9,16 +9,12 @@ int main(int argc, char *argv[]) {
     
     Chunk_t chunk = {0};
     initChunk(&chunk);
-    int constant = addConstant(&chunk, 1.2);
-    int constant2 = addConstant(&chunk, 3.4);
-    int constant3 = addConstant(&chunk, 5.6);
     writeChunk(&chunk, OP_RETURN, 123);
-    writeChunk(&chunk, OP_CONSTANT, 123);
-    writeChunk(&chunk, constant, 123);   // 'constant' is the offset in the val array where 1.2 can be found
-    writeChunk(&chunk, OP_CONSTANT, 456);
-    writeChunk(&chunk, constant2, 456);   // 'constant2' is the offset in the val array where 1.2 can be found
-    writeChunk(&chunk, OP_CONSTANT, 456);
-    writeChunk(&chunk, constant3, 456);   // 'constant3' is the offset in the val array where 1.2 can be found
+    writeConstant(&chunk, 1.2, 123);
+    writeConstant(&chunk, 3.4, 456);
+    writeConstant(&chunk, 5.6, 456);
+    writeConstant(&chunk, 7.8, 456);
+    writeConstant(&chunk, 9.10, 788);
     writeChunk(&chunk, OP_RETURN, 789);
     writeChunk(&chunk, OP_RETURN, 789);
     writeChunk(&chunk, OP_RETURN, 789);
@@ -27,7 +23,6 @@ int main(int argc, char *argv[]) {
     writeChunk(&chunk, OP_RETURN, 789);
     writeChunk(&chunk, OP_RETURN, 789);
     writeChunk(&chunk, OP_RETURN, 789);
-
     #ifdef DEBUG
         disassembleChunk(&chunk, "test chunk");
     #endif

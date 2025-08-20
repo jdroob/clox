@@ -18,6 +18,20 @@ static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_
     return offset + 2;
 }
 
+static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint8_t offset) {
+    uint8_t byte2 = chunk->code[offset + 1];
+    uint8_t byte1 = chunk->code[offset + 2];
+    uint8_t byte0 = chunk->code[offset + 3];
+    unsigned constantIdx = 0;
+    constantIdx |= byte2 << 16;
+    constantIdx |= byte1 << 8;
+    constantIdx |= byte0;
+    printf("%-16s %4d '", name, constantIdx);
+    printValue(chunk->constants.values[constantIdx]);
+    printf("'\n");
+    return offset + 4;
+}
+
 unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     printf("%04d ", offset);
     if (offset > 0 &&
@@ -33,6 +47,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
             return simpleInstruction("OP_RETURN", offset);
         case OP_CONSTANT:
             return constantInstruction("OP_CONSTANT", chunk, offset);
+        case OP_CONSTANT_LONG:
+            return longConstantInstruction("OP_CONSTANT_LONG", chunk, offset);
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
             return offset + 1;
