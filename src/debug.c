@@ -19,13 +19,10 @@ static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_
 }
 
 static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint8_t offset) {
-    uint8_t byte2 = chunk->code[offset + 1];
-    uint8_t byte1 = chunk->code[offset + 2];
-    uint8_t byte0 = chunk->code[offset + 3];
     unsigned constantIdx = 0;
-    constantIdx |= byte2 << 16;
-    constantIdx |= byte1 << 8;
-    constantIdx |= byte0;
+    constantIdx |= chunk->code[offset + 1] << 16;
+    constantIdx |= chunk->code[offset + 2] << 8;
+    constantIdx |= chunk->code[offset + 3];
     printf("%-16s %4d '", name, constantIdx);
     printValue(chunk->constants.values[constantIdx]);
     printf("'\n");

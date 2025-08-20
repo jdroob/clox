@@ -21,9 +21,9 @@ typedef struct {
 
 void initChunk(Chunk_t *chunk);
 void writeChunk(Chunk_t *chunk, uint8_t byte, int line);
+void freeChunk(Chunk_t *chunk);
 void writeConstant(Chunk_t *chunk, Value_t value, int line);
 int addConstant(Chunk_t *chunk, Value_t value);
-void freeChunk(Chunk_t *chunk);
 int getLine(Chunk_t *chunk, unsigned int offset);
 
 #endif // CLOX_CHUNK_H

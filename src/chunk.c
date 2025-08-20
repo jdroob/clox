@@ -34,18 +34,16 @@ void writeConstant(Chunk_t *chunk, Value_t value, int line) {
         writeChunk(chunk, idx, line);
         return;
     }
+
     //    3 least significant bytes of idx must be written to bytecode
     //    e.g. index = 257
     //         index =    0000 0000 0000 0001 0000 0001
     //         index =       0    0    0    1    0    1
-    //
-    uint8_t byte0 = (unsigned)idx & 0x00F;
-    uint8_t byte1 = (unsigned)idx & 0x0F0; 
-    uint8_t byte2 = (unsigned)idx & 0xF00;
+
     writeChunk(chunk, OP_CONSTANT_LONG, line);
-    writeChunk(chunk, byte2, line);    // fun fact: this is big endian
-    writeChunk(chunk, byte1, line);
-    writeChunk(chunk, byte0, line);
+    writeChunk(chunk, (unsigned)idx & 0x0F00, line);    // fun fact: this is big endian
+    writeChunk(chunk, (unsigned)idx & 0x00F0, line);
+    writeChunk(chunk, (unsigned)idx & 0x000F, line);
 }
 
 int addConstant(Chunk_t *chunk, Value_t value) {
