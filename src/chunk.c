@@ -2,8 +2,8 @@
 #include "line.h"
 #include "memory.h"
 
-#define CONSTANT_POOL_LONG_IDX_MAX 0x1000000
-#define CONSTANT_POOL_SHORT_IDX_MAX 256
+#define CONSTANT_POOL_LONG_LEN_MAX 0x1000000
+#define CONSTANT_POOL_SHORT_LEN_MAX 256
 
 void initChunk(Chunk_t *chunk) {
     chunk->count = 0;
@@ -24,12 +24,12 @@ void writeChunk(Chunk_t *chunk, uint8_t byte, int line) {
 }
 
 void writeConstant(Chunk_t *chunk, Value_t value, int line) {
-    if (chunk->constants.capacity >= CONSTANT_POOL_LONG_IDX_MAX) {
+    if (chunk->constants.capacity >= CONSTANT_POOL_LONG_LEN_MAX) {
         fprintf(stderr, "Constant pool is too large.");
         exit(EXIT_FAILURE);
     }
     int idx = addConstant(chunk, value);
-    if (chunk->constants.count < CONSTANT_POOL_SHORT_IDX_MAX) {
+    if (chunk->constants.count < CONSTANT_POOL_SHORT_LEN_MAX) {
         writeChunk(chunk, OP_CONSTANT, line);
         writeChunk(chunk, idx, line);
         return;

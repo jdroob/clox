@@ -1,7 +1,7 @@
 #include "debug.h"
 #include "value.h"
 
-unsigned int simpleInstruction(const char *name, uint8_t offset) {
+static unsigned int simpleInstruction(const char *name, uint8_t offset) {
     printf("%s\n", name);
     return offset + 1;
 }
@@ -29,7 +29,7 @@ static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, ui
     return offset + 4;
 }
 
-unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
+static unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     printf("%04d ", offset);
     if (offset > 0 &&
         getLine(chunk, offset) == getLine(chunk, offset - 1)) {

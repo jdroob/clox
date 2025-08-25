@@ -1,11 +1,15 @@
 #include "common.h"
 #include "chunk.h"
+#include "jrmalloc.h"
 #include "debug.h"
+
+uint8_t BUFFER[MAX_BUFF_LEN] = {0};
 
 int main(int argc, char *argv[]) {
     // for (int i=0; i<argc; ++i) {
     //     printf("arg%d: %s\n", i, argv[i]);
     // }
+    init();
     
     Chunk_t chunk = {0};
     initChunk(&chunk);

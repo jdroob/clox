@@ -8,4 +8,6 @@
 #include <stdbool.h>
 #include <limits.h>
 
+#define MAX_BUFF_LEN 4194304
+
 #endif // COMMON_H

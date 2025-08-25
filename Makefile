@@ -6,6 +6,7 @@ OBJ = obj
 BIN = bin
 CFLAGS = -Wall -g
 DEBUG_CFLAGS = -DDEBUG
+DEBUG_JRMALLOC_CFLAGS = -DDEBUG_JRMALLOC
 EXE = lox
 
 # Get all source files and generate corresponding object file paths
@@ -33,6 +34,10 @@ setup:
 
 debug: CFLAGS+=$(DEBUG_CFLAGS)
 debug: default
+
+debug_jrmalloc: CFLAGS+=$(DEBUG_JRMALLOC_CFLAGS)
+debug_jrmalloc: setup
+	$(CC) $(SRC)/jrmalloc.c -I$(INCLUDES) $(CFLAGS) -o $(BIN)/jrm
 
 # Clean up generated files
 clean:
