@@ -7,12 +7,12 @@
 typedef struct jrchunk_t jrchunk_t;
 struct jrchunk_t {
     jrchunk_t *prev;
-    size_t size;
     jrchunk_t *next;
-    int padding;
+    size_t size;
 };
 
 void init(void);
 void *jrmalloc(size_t size);
+void jrfree(void *p);
 
 #endif // CLOX_JRMALLOC_H

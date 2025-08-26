@@ -16,6 +16,11 @@ uint8_t BUFFER[MAX_BUFF_LEN] = {0};
 #endif
 static jrchunk_t *head;
 static jrchunk_t *start;
+static jrchunk_t *end;
+
+#define ALLOCD_CHUNK_ARR_SIZE MAX_BUFF_LEN / sizeof(uint8_t *) 
+uint8_t *allocatedChunks[ALLOCD_CHUNK_ARR_SIZE] = {0};
+size_t nAllocatedChunks = 0;
 
 /** 
  * jrchunk format:
@@ -23,7 +28,7 @@ static jrchunk_t *start;
  *  byte1-8: previous free chunk (0x00000000_00000000)
  *  byte9-12: size
  *  byte 13-20: next free chunk
- *  byte 21-24: padding 
+ *  byte 21-32: padding
  */
 
 
@@ -43,82 +48,181 @@ static void printFreeList(void) {
     }
 }
 
-static void initChunk(jrchunk_t *chunk, jrchunk_t *prev, jrchunk_t *next) {
+static void update(jrchunk_t *chunk) {
+    // Remove chunk from free list by updating pointers
+    if (chunk->prev) {
+        chunk->prev->next = chunk->next;
+    }
+    if (chunk->next) {
+        chunk->next->prev = chunk->prev;
+    }
+    // If this was the head, update head pointer
+    if (chunk == head) {
+        head = chunk->next;
+    }
+}
+
+static void insertChunk(jrchunk_t *chunk, jrchunk_t *prev, jrchunk_t *next) {
     chunk->prev = prev;
-    // TODO: re-implement me :)
-    if (!prev) chunk->size = MAX_BUFF_LEN - sizeof(jrchunk_t);
-    else if (!next) chunk->size = MAX_BUFF_LEN - (chunk - start) - sizeof(jrchunk_t);
-    else chunk->size = MAX_BUFF_LEN - (next - prev) - sizeof(jrchunk_t);
     chunk->next = next;
-    chunk->padding = 0;
+    chunk->size = 0;
+    
+    uint8_t *chunk_start = (uint8_t *)chunk + sizeof(jrchunk_t);
+    uint8_t *candidate = next ? (uint8_t *)next : (uint8_t *)end;
+    for (unsigned i=0; i<nAllocatedChunks; ++i) {
+        if (candidate > allocatedChunks[i] && chunk_start < allocatedChunks[i]) {
+            candidate = allocatedChunks[i];
+        }
+    }
+    uint8_t *chunk_end = candidate;
+    if (chunk_start > (uint8_t *)end || chunk_end > (uint8_t *)end) {
+        fprintf(stderr, "Unable to grow buffer.\n");
+        exit(EXIT_FAILURE);
+    }
+    chunk->size = chunk_end - chunk_start;
+    
+    if (prev) prev->next = chunk;
+    if (next) next->prev = chunk;
 }
 
 static jrchunk_t *findValidChunk(size_t size) {
     jrchunk_t *curr = head;
     size_t nbytes = size + sizeof(jrchunk_t);
-    while (curr && (curr->size < nbytes)) curr = curr->next;
+    
+    // Find a chunk with enough space
+    while (curr && (curr->size < size)) {
+        curr = curr->next;
+    }
+    
     if (!curr) {
         fprintf(stderr, "Unable to allocate new jrchunk.\n");
         exit(EXIT_FAILURE);
     }
-    if (curr == head) {
-        head += nbytes;
-        initChunk(head, curr->prev, curr->next);
-        return curr;
+    
+    // Split the chunk if it's larger than needed
+    if (curr->size - size > nbytes) {
+        // Create a new chunk for the remaining space
+        jrchunk_t *new_chunk = (jrchunk_t *)((uint8_t *)curr + nbytes);
+        insertChunk(new_chunk, curr->prev, curr->next);
+        
+        // Update the current chunk
+        curr->size = size;
+        curr->next = new_chunk;
+        curr->prev = NULL; // This chunk is now allocated
+        
+        // Update head if necessary
+        if (curr == head) {
+            head = new_chunk;
+        }
     } else {
-        jrchunk_t *tmp = curr;
-        curr += nbytes;
-        initChunk(curr, curr->prev, curr->next);
-        return tmp;
+        // Use the entire chunk
+        update(curr);
+    }
+    
+    return curr;
+}
+
+void coalesce(void) {
+    jrchunk_t *curr = head;
+    while (curr && curr->next) {
+        // Check if current chunk is adjacent to next chunk
+        uint8_t *curr_end = (uint8_t *)curr + sizeof(jrchunk_t) + curr->size;
+        if (curr_end == (uint8_t *)curr->next) {
+            // Merge curr with curr->next
+            jrchunk_t *next_chunk = curr->next;
+            curr->size += sizeof(jrchunk_t) + next_chunk->size;
+            curr->next = next_chunk->next;
+            if (next_chunk->next) {
+                next_chunk->next->prev = curr;
+            }
+            // Don't advance curr, check for more coalescing
+        } else {
+            curr = curr->next;
+        }
+    }
+}
+
+void updateAllocatedChunks(uint8_t *addr) {
+    for (unsigned i=0; i<nAllocatedChunks; ++i) {
+        if (addr == allocatedChunks[i]) {
+            allocatedChunks[i] = 0;
+            return;
+        }
     }
 }
 
 /* interface functions */
 void init(void) {
     start = head = (jrchunk_t *)BUFFER;
-    initChunk(head, NULL, NULL);
+    end = (jrchunk_t *)(BUFFER + MAX_BUFF_LEN);
+    printf("DEBUG: BUFFER=%p, MAX_BUFF_LEN=%d, end=%p\n", BUFFER, MAX_BUFF_LEN, end);
+    printf("DEBUG: Available buffer size: %ld bytes\n", (uint8_t*)end - (uint8_t*)start);
+    insertChunk(head, NULL, NULL);
 }
 
 void *jrmalloc(size_t size) {
-    return (void *)findValidChunk(size);
+    uint8_t *addr = (uint8_t *)findValidChunk(size);
+    if (nAllocatedChunks > ALLOCD_CHUNK_ARR_SIZE) {
+        fprintf(stderr, "Unable to jrmalloc.\n");
+        exit(EXIT_FAILURE);
+    }
+    allocatedChunks[nAllocatedChunks++] = addr;
+    return (void *)addr;
 }
 
 void jrfree(void *chunk) {
-    // Case 1: one chunk
+    updateAllocatedChunks((uint8_t *)chunk);
+    
+    jrchunk_t *free_chunk = (jrchunk_t *)chunk;
+    
+    // Case 1: Insert at beginning (chunk address < head address)
     if (chunk < (void *)head) {
-        jrchunk_t *tmp = head;
-        head = chunk;
-        initChunk(head, NULL, tmp);
+        insertChunk(free_chunk, NULL, head);
+        head = free_chunk;
+        coalesce();
         return;
     }
-    // where is this chunk releative to the freeList
-    jrchunk_t *first = head;
-    jrchunk_t *second = head->next;
-    while (first &&
-           second &&
-           !((void *)first <= chunk && chunk <= (void *)second)) {
-            first = first->next;
-            second = second->next;
+    
+    // Case 2: Find correct position in the free list
+    jrchunk_t *curr = head;
+    while (curr->next && curr->next < free_chunk) {
+        curr = curr->next;
     }
-    initChunk(chunk, first, second);
-    return;
-
-    fprintf(stderr, "Unable to place chunk back in free list.");
-    exit(EXIT_FAILURE);
+    
+    // Insert after curr
+    insertChunk(free_chunk, curr, curr->next);
+    coalesce();
 }
 
 #ifdef DEBUG_JRMALLOC
 int main(void) {
     init();
-    // printf("Looking for chunk of at least size 255....");
-    // printChunk(findValidChunk(255));
-    void *a = jrmalloc(255);
-    void *b = jrmalloc(1024);
-    printf("After jrmalloc'ing 2 chunks:\na: %p\nb: %p\n", a, b);
+    printf("=== Initial state ===\n");
+    printf("start: %p\nend: %p\n", start, end);
     printFreeList();
+
+    printf("\n=== Allocating 3 chunks ===\n");
+    printFreeList();
+    void *a = jrmalloc(10);
+    void *b = jrmalloc(20);
+    void *c = jrmalloc(30);
+    printf("a: %p, b: %p, c: %p\n", a, b, c);
+
+    printf("\n=== Freeing middle chunk (b) ===\n");
+    printFreeList();
+    
+    printf("\n=== Freeing first chunk (a) - should coalesce ===\n");
     jrfree(a);
     jrfree(b);
-    printf("After jrfree'ing 2 ptrs:\na: %p\nb: %p\n", a, b);
+    printFreeList();
+
+    printf("\n=== Freeing last chunk (c) - should coalesce all ===\n");
+    jrfree(c);
+    printf("After freeing c:\n");
+    printFreeList();
+    
+    printf("\n=== Final state after all frees ===\n");
+    printf("Expected: One large chunk of size close to %d\n", MAX_BUFF_LEN - (int)sizeof(jrchunk_t));
     printFreeList();
 }
 #endif
