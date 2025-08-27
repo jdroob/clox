@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <stdalign.h>
+#include <string.h>
 #include <stdbool.h>
 #include <limits.h>
 
