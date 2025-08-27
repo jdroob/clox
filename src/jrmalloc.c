@@ -19,11 +19,9 @@ extern uint8_t BUFFER[];
 #else
 uint8_t BUFFER[MAX_BUFF_LEN] = {0};
 #endif
-static jrchunk_t *head;
-static jrchunk_t *start;
-static jrchunk_t *end;
 
-#define ALLOCD_CHUNK_ARR_SIZE   MAX_BUFF_LEN / sizeof(uint8_t *) 
+static jrchunk_t *head, *start, *end;
+#define ALLOCD_CHUNK_ARR_SIZE MAX_BUFF_LEN / sizeof(uint8_t *) 
 uint8_t *allocatedChunks[ALLOCD_CHUNK_ARR_SIZE] = {0};
 size_t nAllocatedChunks = 0;
 
@@ -115,7 +113,7 @@ static jrchunk_t *findValidChunk(size_t size) {
         exit(EXIT_FAILURE);
     }
     
-    // Split the chunk if it's larger than needed
+    // split the chunk if it's larger than needed
     if (curr->size - size > nbytes) {
         uint8_t *new_chunk_addr = (uint8_t *)curr + sizeof(jrchunk_t) + size;
         jrchunk_t *new_chunk = (jrchunk_t *)alignPtr(new_chunk_addr);
@@ -146,7 +144,7 @@ void coalesce(void) {
             if (next_chunk->next) {
                 next_chunk->next->prev = curr;
             }
-            // Don't advance curr, check for more coalescing
+            // don't advance curr - check for more coalescing
         } else {
             curr = curr->next;
         }
@@ -207,10 +205,10 @@ void *jrrealloc(void *ptr, size_t size) {
         }
     }
 
-    // Case 3: ptr is invalid (i.e. treat as malloc)
+    // case 3: ptr is invalid (i.e. treat as malloc)
     if (!chunkAddr) return jrmalloc(size);
 
-    // Case 4: normal realloc
+    // case 4: normal realloc
     // 4.1 find valid chunk
     uint8_t *newChunkAddr = (uint8_t *)findValidChunk(roundUp(size));
     if (nAllocatedChunks > ALLOCD_CHUNK_ARR_SIZE) {
@@ -253,7 +251,7 @@ void jrfree(void *ptr) {
         return;
     }
         
-    // Case 1: Insert at beginning (chunk address < head address)
+    // case 1: insert at beginning (chunk address < head address)
     if (chunkAddr < head) {
         insertChunk(chunkAddr, NULL, head);
         head = chunkAddr;
@@ -261,11 +259,9 @@ void jrfree(void *ptr) {
         return;
     }
     
-    // Case 2: Find correct position in the free list
+    // case 2: find correct position in the free list
     jrchunk_t *curr = head;
     while (curr->next && curr->next < chunkAddr) curr = curr->next;
-    
-    // Insert after curr
     insertChunk(chunkAddr, curr, curr->next);
     coalesce();
 }
