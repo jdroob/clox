@@ -60,21 +60,18 @@ static size_t roundUp(size_t size) {
 }
 
 static void *alignPtr(void *ptr) {
-    const size_t alignment = 16; // Use 16-byte alignment
     uintptr_t addr = (uintptr_t)ptr;
-    uintptr_t aligned = (addr + alignment - 1) & ~(alignment - 1);
+    uintptr_t aligned = (addr + JR_ALIGNMENT - 1) & ~(JR_ALIGNMENT - 1);
     return (void *)aligned;
 }
 
 static void update(jrchunk_t *chunk) {
-    // Remove chunk from free list by updating pointers
     if (chunk->prev) {
         chunk->prev->next = chunk->next;
     }
     if (chunk->next) {
         chunk->next->prev = chunk->prev;
     }
-    // If this was the head, update head pointer
     if (chunk == head) {
         head = chunk->next;
     }
@@ -107,7 +104,6 @@ static jrchunk_t *findValidChunk(size_t size) {
     jrchunk_t *curr = head;
     size_t nbytes = size + sizeof(jrchunk_t) + JR_ALIGNMENT;
     
-    // Find a chunk with enough space
     while (curr && (curr->size < size)) {
         curr = curr->next;
     }
@@ -119,22 +115,18 @@ static jrchunk_t *findValidChunk(size_t size) {
     
     // Split the chunk if it's larger than needed
     if (curr->size - size > nbytes) {
-        // Create a new chunk for the remaining space
         uint8_t *new_chunk_addr = (uint8_t *)curr + sizeof(jrchunk_t) + size;
         jrchunk_t *new_chunk = (jrchunk_t *)alignPtr(new_chunk_addr);
         insertChunk(new_chunk, curr->prev, curr->next);
         
-        // Update the current chunk
         curr->size = size;
         curr->next = new_chunk;
-        curr->prev = NULL; // This chunk is now allocated
+        curr->prev = NULL;
         
-        // Update head if necessary
         if (curr == head) {
             head = new_chunk;
         }
     } else {
-        // Use the entire chunk
         update(curr);
     }
     
@@ -144,10 +136,8 @@ static jrchunk_t *findValidChunk(size_t size) {
 void coalesce(void) {
     jrchunk_t *curr = head;
     while (curr && curr->next) {
-        // Check if current chunk is adjacent to next chunk
         uint8_t *curr_end = (uint8_t *)curr + sizeof(jrchunk_t) + curr->size;
         if (curr_end == (uint8_t *)curr->next) {
-            // Merge curr with curr->next
             jrchunk_t *next_chunk = curr->next;
             curr->size += sizeof(jrchunk_t) + next_chunk->size;
             curr->next = next_chunk->next;
@@ -174,8 +164,8 @@ void updateAllocatedChunks(uint8_t *addr) {
 void init(void) {
     start = head = (jrchunk_t *)BUFFER;
     end = (jrchunk_t *)(BUFFER + MAX_BUFF_LEN);
-    printf("DEBUG: BUFFER=%p, MAX_BUFF_LEN=%d, end=%p\n", BUFFER, MAX_BUFF_LEN, end);
-    printf("DEBUG: Available buffer size: %ld bytes\n", (uint8_t*)end - (uint8_t*)start);
+    // printf("DEBUG: BUFFER=%p, MAX_BUFF_LEN=%d, end=%p\n", BUFFER, MAX_BUFF_LEN, end);
+    // printf("DEBUG: Available buffer size: %ld bytes\n", (uint8_t*)end - (uint8_t*)start);
     insertChunk(head, NULL, NULL);
 }
 
@@ -210,13 +200,12 @@ void *jrrealloc(void *ptr, size_t size) {
             
             if (alignedUser == ptr) {
                 chunkAddr = (jrchunk_t *)chunkStart;
-                // allocatedChunks[i] = 0;
                 break;
             }
         }
     }
 
-    // Case 3: ptr points to unalloc'd region (i.e. treat as malloc)
+    // Case 3: ptr is invalid (i.e. treat as malloc)
     if (!chunkAddr) return jrmalloc(size);
 
     // Case 4: normal realloc
@@ -251,7 +240,6 @@ void jrfree(void *ptr) {
             
             if (alignedUser == ptr) {
                 chunkAddr = (jrchunk_t *)chunkStart;
-                // updateAllocatedChunks(chunkStart);
                 allocatedChunks[i] = 0;
                 break;
             }
