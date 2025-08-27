@@ -11,7 +11,7 @@
  *          - if able to find big enough chunk, copy over, free orig chunk, return pointer to new chunk
  *          - if newSize is 0, free chunk and return pointer to original chunk
  *          - if origSize is 0, just treat as malloc
- *    6) In memory.c/h, implement reallocate2 that uses this allocation library
+ *    6) In memory.c/h, implement reallocate2 that uses this allocation library    <- DONE
  */
 
 #ifndef DEBUG_JRMALLOC
