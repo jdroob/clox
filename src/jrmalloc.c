@@ -37,6 +37,7 @@ size_t nAllocatedChunks = 0;
 
 
 /* helpers */
+#ifdef DEBUG_JRMALLOC
 static void printChunk(jrchunk_t *chunk) {
     printf("chunk @ address: %p\n", chunk);
     printf("previous chunk: %p\n", chunk->prev);
@@ -53,6 +54,7 @@ static void printFreeList(void) {
     }
     puts("===========================");
 }
+#endif
 
 static size_t roundUp(size_t size) {
     size_t num = (size + JR_ALIGNMENT - 1) / JR_ALIGNMENT;
