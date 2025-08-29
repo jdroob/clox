@@ -1,19 +1,15 @@
 #include "common.h"
 #include "chunk.h"
-#include "jrmalloc.h"
 #include "debug.h"
+#include "vm.h"
 
 uint8_t BUFFER[MAX_BUFF_LEN] = {0};
 
 int main(int argc, char *argv[]) {
-    // for (int i=0; i<argc; ++i) {
-    //     printf("arg%d: %s\n", i, argv[i]);
-    // }
-    init();
+    initVM();
     
     Chunk_t chunk = {0};
     initChunk(&chunk);
-    writeChunk(&chunk, OP_RETURN, 123);
     writeConstant(&chunk, 1.2, 123);
     writeConstant(&chunk, 3.4, 456);
     writeConstant(&chunk, 5.6, 456);
@@ -27,9 +23,8 @@ int main(int argc, char *argv[]) {
     writeChunk(&chunk, OP_RETURN, 789);
     writeChunk(&chunk, OP_RETURN, 789);
     writeChunk(&chunk, OP_RETURN, 789);
-    #ifdef DEBUG
-        disassembleChunk(&chunk, "test chunk");
-    #endif
+    interpret(&chunk);
+    freeVM();
     freeChunk(&chunk);
     return EXIT_SUCCESS;
 }

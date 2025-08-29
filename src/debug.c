@@ -6,7 +6,7 @@ static unsigned int simpleInstruction(const char *name, uint8_t offset) {
     return offset + 1;
 }
 
-static void printValue(Value_t val) {
+void printValue(Value_t val) {
     printf("%g", val);
 }
 
@@ -29,7 +29,7 @@ static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, ui
     return offset + 4;
 }
 
-static unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
+unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     printf("%04d ", offset);
     if (offset > 0 &&
         getLine(chunk, offset) == getLine(chunk, offset - 1)) {
