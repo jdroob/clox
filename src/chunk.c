@@ -29,7 +29,7 @@ void writeConstant(Chunk_t *chunk, Value_t value, int line) {
         exit(EXIT_FAILURE);
     }
     int idx = addConstant(chunk, value);
-    if (chunk->constants.count < CONSTANT_POOL_SHORT_LEN_MAX) {
+    if (chunk->constants.count <= CONSTANT_POOL_SHORT_LEN_MAX) {
         writeChunk(chunk, OP_CONSTANT, line);
         writeChunk(chunk, idx, line);
         return;

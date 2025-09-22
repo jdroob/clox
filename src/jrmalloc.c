@@ -5,7 +5,7 @@
  * Roadmap for this experiment:
  *    1) Get jrmalloc working correctly <- DONE
  *    2) Get jrfree working correctly   <- DONE
- *    3) Implement a defreagging routine    <- ON HOLD
+ *    3) Implement a defragging routine    <- ON HOLD
  *    4) Experiment with more optimal chunk-finding policies    <- GOOD ENOUGH
  *    5) Implement jrrealloc        <- DONE?
  *          - if able to find big enough chunk, copy over, free orig chunk, return pointer to new chunk
@@ -14,11 +14,11 @@
  *    6) In memory.c/h, implement reallocate2 that uses this allocation library    <- DONE
  */
 
-#ifndef DEBUG_JRMALLOC
+//#ifndef DEBUG_JRMALLOC
 extern uint8_t BUFFER[];
-#else
-uint8_t BUFFER[MAX_BUFF_LEN] = {0};
-#endif
+//#else
+//uint8_t BUFFER[MAX_BUFF_LEN] = {0};
+//#endif
 
 static jrchunk_t *head, *start, *end;
 #define ALLOCD_CHUNK_ARR_SIZE MAX_BUFF_LEN / sizeof(uint8_t *) 
@@ -220,8 +220,8 @@ void *jrrealloc(void *ptr, size_t size) {
     allocatedChunks[nAllocatedChunks++] = newChunkAddr;
 
     // 4.2 copy from old ptr to new ptr
-    size_t oldSize = chunkAddr->size;
-    memcpy((void *)userAddr, ptr, oldSize);
+    size_t copySize = size < chunkAddr->size ? size : chunkAddr->size;
+    memcpy((void *)userAddr, ptr, copySize);
 
     // 4.3 free old ptr
     jrfree(ptr);

@@ -1,13 +1,20 @@
 #include "debug.h"
 #include "value.h"
 
+#define OPTOSTR(instruction) \
+    ((instruction) == OP_RETURN ? "OP_RETURN" : \
+    (instruction) == OP_NEGATE ? "OP_NEGATE" : \
+    (instruction) == OP_ADD ? "OP_ADD" : \
+    (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
+    (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
+    (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
+    (instruction) == OP_CONSTANT ? "OP_CONSTANT" : \
+    (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
+    "UNKNOWN_INSTRUCTION")
+
 static unsigned int simpleInstruction(const char *name, uint8_t offset) {
     printf("%s\n", name);
     return offset + 1;
-}
-
-void printValue(Value_t val) {
-    printf("%g", val);
 }
 
 static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_t offset) {
@@ -39,17 +46,27 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     }
 
     uint8_t instruction = chunk->code[offset];
+    char *name = OPTOSTR(instruction);
     switch (instruction) {
         case OP_RETURN:
-            return simpleInstruction("OP_RETURN", offset);
+        case OP_NEGATE:
+        case OP_ADD:
+        case OP_SUBTRACT:
+        case OP_MULTIPLY:
+        case OP_DIVIDE:
+            return simpleInstruction(name, offset);
         case OP_CONSTANT:
-            return constantInstruction("OP_CONSTANT", chunk, offset);
+            return constantInstruction(name, chunk, offset);
         case OP_CONSTANT_LONG:
-            return longConstantInstruction("OP_CONSTANT_LONG", chunk, offset);
+            return longConstantInstruction(name, chunk, offset);
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
             return offset + 1;
     }
+}
+
+void printValue(Value_t val) {
+    printf("%g", val);
 }
 
 void disassembleChunk(Chunk_t *chunk, const char *name) {

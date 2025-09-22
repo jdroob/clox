@@ -10,6 +10,6 @@
 #include <stdbool.h>
 #include <limits.h>
 
-#define MAX_BUFF_LEN 4194304
+#define MAX_BUFF_LEN 4194304 // 2^22
 
 #endif // COMMON_H
