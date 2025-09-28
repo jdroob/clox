@@ -7,21 +7,22 @@
 #define STACK_MAX 256
 
 typedef enum {
-    INTERP_OK,
-    INTERP_COMP_ERR,
-    INTERP_RUNTIME_ERR
+    INTERPRET_OK,
+    INTERPRET_COMPILE_ERROR,
+    INTERPRET_RUNTIME_ERROR
 } InterpResult_t;
 
 typedef struct {
     Chunk_t *chunk;
     uint8_t *ip;
-    Value_t stack[STACK_MAX];
+    uint32_t capacity;
+    Value_t *stack;
     Value_t *stackTop;
 } VM_t;
 
 void initVM(void);
 void freeVM(void);
-InterpResult_t interpret(Chunk_t *chunk);
+InterpResult_t interpret(const char *source);
 void push(Value_t value);
 Value_t pop(void);
 

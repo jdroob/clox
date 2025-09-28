@@ -15,7 +15,8 @@
  */
 
 //#ifndef DEBUG_JRMALLOC
-extern uint8_t BUFFER[];
+// extern uint8_t BUFFER[];
+uint8_t BUFFER[MAX_BUFF_LEN] = {0};
 //#else
 //uint8_t BUFFER[MAX_BUFF_LEN] = {0};
 //#endif
@@ -110,7 +111,7 @@ static jrchunk_t *findValidChunk(size_t size) {
     
     if (!curr) {
         fprintf(stderr, "Unable to allocate new jrchunk.\n");
-        exit(EXIT_FAILURE);
+        return NULL;    // return NULL - just like realloc
     }
     
     // split the chunk if it's larger than needed
@@ -211,6 +212,7 @@ void *jrrealloc(void *ptr, size_t size) {
     // case 4: normal realloc
     // 4.1 find valid chunk
     uint8_t *newChunkAddr = (uint8_t *)findValidChunk(roundUp(size));
+    if (!newChunkAddr) return NULL;    // just like real realloc
     if (nAllocatedChunks > ALLOCD_CHUNK_ARR_SIZE) {
         fprintf(stderr, "Unable to jrrealloc.\n");
         exit(EXIT_FAILURE);
