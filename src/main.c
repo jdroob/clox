@@ -48,9 +48,9 @@ static void repl(void) {
 
 static void runFile(char *path) {
     char *source = readFile(path);
-    #ifdef DEBUG
-    printf("source code read from readFile: %s\n", source);
-    #endif
+    // #ifdef DEBUG
+    // printf("source code read from readFile: %s\n", source);
+    // #endif
 
     InterpResult_t result = interpret(source);
     jrfree(source);
