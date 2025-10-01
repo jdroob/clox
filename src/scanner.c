@@ -1,6 +1,3 @@
-#include <stdio.h>
-#include <string.h>
-
 #include "common.h"
 #include "scanner.h"
 
@@ -109,11 +106,41 @@ static void skipWhiteSpace(void) {
     }
 }
 
+static Token_t string(void) {
+    char c;
+    while (!isAtEnd() && (c = peek()) != '"') {
+        if (c == '\n') scanner.line++;
+        advance();
+    }
+
+    if (isAtEnd()) return errorToken("Unterminated string.");
+
+    advance();  // consume "
+    return makeToken(TOKEN_STRING);
+}
+
+static bool isDigit(char c) {
+    return c >= '0' && c <= '9';
+}
+
+static Token_t number(void) {
+    char c;
+    while (!isAtEnd() && isDigit(c = peek())) advance();
+
+    if (c == '.') {
+        advance();  // consume '.'
+        while (!isAtEnd() && isDigit(c = peek())) advance();
+    }
+
+    return makeToken(TOKEN_NUMBER);
+}
+
 Token_t scanToken(void) {
     skipWhiteSpace();
     scanner.start = scanner.current;
     if (isAtEnd()) return makeToken(TOKEN_EOF);
     char c = advance();
+    if (isDigit(c)) return number();
 
     switch (c) {
         case '(': return makeToken(TOKEN_LEFT_PAREN);
@@ -148,6 +175,12 @@ Token_t scanToken(void) {
                              match('<') ? TOKEN_BITSHIFT_LEFT : TOKEN_LESS);
         case '*':
             return makeToken(match('*') ? TOKEN_STAR_STAR : TOKEN_STAR);
+        
+        case '"':
+            return string();
+
+        default:
+
     }
 
     return errorToken("Unexpected character.");
