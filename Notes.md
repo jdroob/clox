@@ -3,6 +3,7 @@
 - 8/14/2025
     - Woo! Back to C :)
 
+## Chapter 17: Scanning
 - 10/3/2025
     - Been a while lol
     - Got back from Europe in mid-September
@@ -174,3 +175,18 @@
                 1,19-1,20:          NEWLINE        '\n'
                 2,0-2,0:            ENDMARKER      ''
             ```
+
+        2) List<List<T>> l; - how does C++ parse this correctly? IOW, how does it know the '>>' are closing angle brackets to the type arguments?
+
+        Answer:
+        
+        Based on [this](https://github.com/munificent/craftinginterpreters/blob/master/note/answers/chapter16_scanning.md#2), apparently C++ activates a rule when a `<` is scanned. Once a `<` is scanned, `>>` are treated as closing angle brackets rather than a bitshift right operator. My guess is while this is how it's *scanned*, the parser can eventually learn that `>>` should be treated as a bitshift right rather than two `>` tokens.
+
+
+        3) How do you implement contextual keywords?
+
+        Answer:
+        
+        Just scan the keyword as an identifier (i.e., assume it's in "identifier mode" until proven otherwise). Then, when parsing, determine if we're parsing *that* context. If so, the parser needs to check the scanned identifier to determine if the identifier matches contextual keyword (that can appear in that position in the syntactic grammar). If so, treat it as a contextual keyword instead of an identifier.
+
+    ## Chapter 16: Compiling Expressions 
