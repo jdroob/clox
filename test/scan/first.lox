@@ -1,4 +1,3 @@
-   
    (
 // single line comment
 /*
@@ -44,3 +43,6 @@ this
 true
 fork
 nil
+"1 + 2 = ${1+2}"
+"${"I${"C"}"}"
+"Nested ${"interpolation?! Are you ${"mad?!"}"}"

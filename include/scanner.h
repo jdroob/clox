@@ -22,7 +22,7 @@ typedef enum {
     TOKEN_STAR_STAR,
 
     // Literals
-    TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_NUMBER,
+    TOKEN_IDENTIFIER, TOKEN_STRING, TOKEN_INTERPOLATION, TOKEN_NUMBER,
 
     // Keywords
     TOKEN_AND, TOKEN_BREAK, TOKEN_CLASS, TOKEN_ELSE, TOKEN_FALSE, TOKEN_FUN, TOKEN_FOR, TOKEN_FOREACH, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
@@ -37,6 +37,8 @@ typedef struct {
     const char *start;
     const char *current;
     int line;
+    int interpolationState;
+    int stringNestingLevel;
 } Scanner_t;
 
 typedef struct {

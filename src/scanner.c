@@ -7,6 +7,12 @@ void initScanner(const char *source) {
     scanner.start = source;
     scanner.current = source;
     scanner.line = 1;
+    scanner.interpolationState = -1; // -1 = not interpolating, 0+ = interpolating
+    scanner.stringNestingLevel = -1; // -1 = not in string, 0+ = in string
+}
+
+static void resetInterpolationState(void) {
+    scanner.stringNestingLevel = scanner.interpolationState = -1;
 }
 
 static Token_t makeToken(TokenType_e type) {
@@ -106,21 +112,20 @@ static void skipWhiteSpace(void) {
     }
 }
 
-static Token_t string(void) {
-    char c;
-    while (!isAtEnd() && (c = peek()) != '"') {
-        if (c == '\n') scanner.line++;
-        advance();
-    }
-
-    if (isAtEnd()) return errorToken("Unterminated string.");
-
-    advance();  // consume "
-    return makeToken(TOKEN_STRING);
-}
-
 static bool isDigit(char c) {
     return c >= '0' && c <= '9';
+}
+
+static Token_t number(void) {
+    char c;
+    while (!isAtEnd() && isDigit(c = peek())) advance();
+
+    if (c == '.') {
+        advance();  // consume '.'
+        while (!isAtEnd() && isDigit(c = peek())) advance();
+    }
+
+    return makeToken(TOKEN_NUMBER);
 }
 
 static bool isAlpha(char c) {
@@ -198,22 +203,117 @@ static Token_t identifier(void) {
     return makeToken(identifierType());
 }
 
-static Token_t number(void) {
+static Token_t string(void);
+static Token_t interpolate(void) {
     char c;
-    while (!isAtEnd() && isDigit(c = peek())) advance();
+    if (peek() == '$' && peekNext() == '{') {
+        advance(); advance();
+        scanner.start = scanner.current;
+    }
+    while (!isAtEnd() && (c = peek()) != '}') {
+        // only allow for expressions using literals and identifiers as operands in an interpolated sequence
+        skipWhiteSpace();
+        if (isAlpha(c)) return identifier();
+        if (isDigit(c)) return number();
 
-    if (c == '.') {
-        advance();  // consume '.'
-        while (!isAtEnd() && isDigit(c = peek())) advance();
+        switch (c) {
+            case '(': return makeToken(TOKEN_LEFT_PAREN);
+            case ')': return makeToken(TOKEN_RIGHT_PAREN);
+            case '{': return makeToken(TOKEN_LEFT_BRACE);
+            case '}': return makeToken(TOKEN_RIGHT_BRACE);  // remvove?
+            case '[': return makeToken(TOKEN_LEFT_BRACK);
+            case ']': return makeToken(TOKEN_RIGHT_BRACK);
+            case ';': return makeToken(TOKEN_SEMICOLON);
+            case ',': return makeToken(TOKEN_COMMA);
+            case '.': return makeToken(TOKEN_DOT);
+            case '%': return makeToken(TOKEN_MODULO);
+            case '?': return makeToken(TOKEN_QUESTION_MARK);
+            case ':': return makeToken(TOKEN_COLON);
+            case '&': return makeToken(TOKEN_BITWISE_AND);
+            case '|': return makeToken(TOKEN_BITWISE_OR);
+            case '^': return makeToken(TOKEN_BITWISE_XOR);
+            case '/': return makeToken(TOKEN_SLASH);
+            case '+': 
+                return makeToken(match('+') ? TOKEN_PLUS_PLUS : TOKEN_PLUS);
+            case '-': 
+                return makeToken(match('-') ? TOKEN_MINUS_MINUS : TOKEN_MINUS);
+            case '=':
+                return makeToken(match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
+            case '!':
+                return makeToken(match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
+            case '>':
+                return makeToken(match('=') ? TOKEN_GREATER_EQUAL : 
+                                match('>') ? TOKEN_BITSHIFT_RIGHT : TOKEN_GREATER);
+            case '<':
+                return makeToken(match('=') ? TOKEN_LESS_EQUAL : 
+                                match('<') ? TOKEN_BITSHIFT_LEFT : TOKEN_LESS);
+            case '*':
+                return makeToken(match('*') ? TOKEN_STAR_STAR : TOKEN_STAR);
+            case '"':
+                advance();
+                if (scanner.stringNestingLevel == scanner.interpolationState) {
+                    // entering nested string
+                    scanner.stringNestingLevel++;
+                } else if (scanner.stringNestingLevel > scanner.interpolationState) {
+                    // closing out nested string
+                    scanner.stringNestingLevel--;
+                    // return makeToken(TOKEN_STRING);
+                }
+                return string();
+            default:
+                return errorToken("Unexpected character.");
+        }
     }
 
-    return makeToken(TOKEN_NUMBER);
+    if (c == '}') {
+        advance();  // consume '}'
+        scanner.start = scanner.current;
+        scanner.interpolationState--;
+        // return makeToken(TOKEN_INTERPOLATION);
+        return makeToken(TOKEN_STRING);
+    }
+
+    return errorToken("Unterminated interpolation sequence.");
+}
+
+static Token_t string(void) {
+    char c;
+    while (!isAtEnd() && (c = peek()) != '"') {
+        if (c == '\n') scanner.line++;
+        if (peek() == '$' && peekNext() == '{') {
+            if (scanner.interpolationState == -1) {
+                scanner.interpolationState = 1;
+            } else {
+                scanner.interpolationState++;
+            }
+            // advance(); advance();
+            return makeToken(TOKEN_INTERPOLATION);
+        } else if (scanner.interpolationState > 0 && peek() == '}') {
+            scanner.interpolationState--;
+            advance();
+            scanner.start = scanner.current;
+            continue;
+        }
+        advance();
+    }
+
+    if (isAtEnd()) return errorToken("Unterminated string.");
+
+    advance();  // consume "
+    scanner.stringNestingLevel--;
+    // if (scanner.stringNestingLevel == 0 && scanner.interpolationState == 0) {
+    if (!scanner.stringNestingLevel && !scanner.interpolationState) {
+        resetInterpolationState();
+    }
+    return makeToken(TOKEN_STRING);
 }
 
 Token_t scanToken(void) {
     skipWhiteSpace();
     scanner.start = scanner.current;
     if (isAtEnd()) return makeToken(TOKEN_EOF);
+    if (scanner.interpolationState > 0) return interpolate();   // interpolation state
+    if (scanner.interpolationState == 0) return string();       // post-interpolation state (need to close out string literal)
     char c = advance();
     if (isAlpha(c)) return identifier();
     if (isDigit(c)) return number();
@@ -252,10 +352,12 @@ Token_t scanToken(void) {
         case '*':
             return makeToken(match('*') ? TOKEN_STAR_STAR : TOKEN_STAR);
         case '"':
+            if (scanner.stringNestingLevel == -1) {
+                scanner.stringNestingLevel = 1;
+            } else {
+                scanner.stringNestingLevel++;
+            }
             return string();
-
-        default:
-
     }
 
     return errorToken("Unexpected character.");
