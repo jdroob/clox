@@ -5,6 +5,9 @@
 #include "value.h"
 #include "line.h"
 
+#define CONSTANT_POOL_LONG_LEN_MAX 0x1000000
+#define CONSTANT_POOL_SHORT_LEN_MAX 256
+
 typedef enum {
     OP_CONSTANT,
     OP_CONSTANT_LONG,

@@ -56,8 +56,15 @@ void freeVM(void) {
 static InterpResult_t run(void) {
     #define READ_BYTE() (*vm.ip++)
     #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+    // #define READ_LONG_CONSTANT() \
+    //     (vm.chunk->constants.values[(READ_BYTE() << 16) | (READ_BYTE() << 8) | READ_BYTE()])
     #define READ_LONG_CONSTANT() \
-        (vm.chunk->constants.values[(READ_BYTE() << 16) | (READ_BYTE() << 8) | READ_BYTE()])
+    ({ \
+        uint8_t byte1 = READ_BYTE(); \
+        uint8_t byte2 = READ_BYTE(); \
+        uint8_t byte3 = READ_BYTE(); \
+        vm.chunk->constants.values[(byte1 << 16) | (byte2 << 8) | byte3]; \
+    })
 
     for (;;) {
         uint8_t instruction;
@@ -112,10 +119,19 @@ static InterpResult_t run(void) {
 }
 
 InterpResult_t interpret(const char *source) {
-    // Chunk_t *chunk = compile(source);
-    // vm.chunk = chunk;
-    // vm.ip = chunk->code;
-    // return run();
-    compile(source);
-    return INTERPRET_OK;
+    Chunk_t chunk;
+    initChunk(&chunk);
+    
+    if (!compile(source, &chunk)) {
+        freeChunk(&chunk);
+        return INTERPRET_COMPILE_ERROR;
+    }
+    
+    vm.chunk = &chunk;
+    vm.ip = vm.chunk->code;
+
+    InterpResult_t result = run();
+
+    freeChunk(&chunk);
+    return result;
 }

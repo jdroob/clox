@@ -44,7 +44,7 @@ typedef struct {
 typedef struct {
     TokenType_e type;
     const char *start;
-    size_t length;
+    int length;
     int line;
 } Token_t;
 
