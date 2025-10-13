@@ -18,15 +18,6 @@ static void resetStack(void) {
 
 void push(Value_t value) {
     if (vm.capacity < vm.stackTop - vm.stack + 1) {
-        // vm.capacity *= 2;
-        // void *tmp = jrrealloc(vm.stack, vm.capacity * sizeof(Value_t));
-        // if (!tmp) {
-        //     fprintf(stderr, "Error! VM stack overflow\n");
-        //     exit(EXIT_FAILURE);
-        // }
-        // vm.stack = (Value_t *)tmp;
-        // vm.stackTop = vm.stack + offset;
-        
         uint32_t oldCapacity = vm.capacity;
         off_t offset = vm.stackTop - vm.stack;
         vm.capacity = GROW_CAPACITY(vm.capacity);
@@ -107,6 +98,29 @@ static InterpResult_t run(void) {
             case OP_SUBTRACT: BINARY_OP(-); break;
             case OP_MULTIPLY: BINARY_OP(*); break;
             case OP_DIVIDE: BINARY_OP(/); break;
+            case OP_GT: BINARY_OP(>); break;
+            case OP_GEQ: BINARY_OP(>=); break;
+            case OP_LT: BINARY_OP(<); break;
+            case OP_LEQ: BINARY_OP(<=); break;
+            case OP_EQ: BINARY_OP(==); break;
+            case OP_NEQ: BINARY_OP(==); break;
+            case OP_QMARK: {
+                Value_t condition = pop();
+                if (!condition) {
+                    unsigned depth = 1;
+                    while (depth) {
+                        uint8_t op = READ_BYTE();
+                        if (op == OP_QMARK) depth++;
+                        if (op == OP_COLON) depth--;
+                    }
+                }
+                break;
+            }
+            case OP_COLON: {  // whenever we're here, we've already executed the true branch... so skip false branch
+                while ((instruction = READ_BYTE()) != OP_ENDTERNARY);
+                break;
+            }
+            case OP_ENDTERNARY: break;
             default:
         }
     }

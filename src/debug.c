@@ -3,14 +3,23 @@
 
 #define OPTOSTR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
-    (instruction) == OP_NEGATE ? "OP_NEGATE" : \
-    (instruction) == OP_ADD ? "OP_ADD" : \
-    (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
-    (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
-    (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
-    (instruction) == OP_CONSTANT ? "OP_CONSTANT" : \
-    (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
-    "UNKNOWN_INSTRUCTION")
+     (instruction) == OP_NEGATE ? "OP_NEGATE" : \
+     (instruction) == OP_QMARK ? "OP_QMARK" : \
+     (instruction) == OP_COLON ? "OP_COLON" : \
+     (instruction) == OP_ENDTERNARY ? "OP_ENDTERNARY" : \
+     (instruction) == OP_ADD ? "OP_ADD" : \
+     (instruction) == OP_GT ? "OP_GT" : \
+     (instruction) == OP_GEQ ? "OP_GEQ" : \
+     (instruction) == OP_LT ? "OP_LT" : \
+     (instruction) == OP_LEQ ? "OP_LEQ" : \
+     (instruction) == OP_EQ ? "OP_EQ" : \
+     (instruction) == OP_NEQ ? "OP_NEQ" : \
+     (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
+     (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
+     (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
+     (instruction) == OP_CONSTANT ? "OP_CONSTANT" : \
+     (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
+     "UNKNOWN_INSTRUCTION")
 
 static unsigned int simpleInstruction(const char *name, uint8_t offset) {
     printf("%s\n", name);
@@ -50,7 +59,16 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     switch (instruction) {
         case OP_RETURN:
         case OP_NEGATE:
+        case OP_QMARK:
+        case OP_COLON:
+        case OP_ENDTERNARY:
         case OP_ADD:
+        case OP_GT:
+        case OP_GEQ:
+        case OP_LT:
+        case OP_LEQ:
+        case OP_EQ:
+        case OP_NEQ:
         case OP_SUBTRACT:
         case OP_MULTIPLY:
         case OP_DIVIDE:

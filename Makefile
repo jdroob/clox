@@ -38,6 +38,9 @@ debug: default
 debug_scanner: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_SCANNER
 debug_scanner: default
 
+debug_chunk: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_CHUNK
+debug_chunk: default
+
 debug_jrmalloc: CFLAGS+=$(DEBUG_JRMALLOC_CFLAGS)
 debug_jrmalloc: setup
 	$(CC) $(SRC)/jrmalloc.c -I$(INCLUDES) $(CFLAGS) -o $(BIN)/jrm

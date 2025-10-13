@@ -168,12 +168,29 @@ static void binary(void) {
     parsePrecedence((Precedence_t)rule->precedence + 1);
 
     switch (operatorType) {
-        case TOKEN_PLUS:    emitByte(OP_ADD); break;
-        case TOKEN_MINUS:   emitByte(OP_SUBTRACT); break;
-        case TOKEN_STAR:    emitByte(OP_MULTIPLY); break;
-        case TOKEN_SLASH:   emitByte(OP_ADD); break;
+        case TOKEN_PLUS:            emitByte(OP_ADD); break;
+        case TOKEN_MINUS:           emitByte(OP_SUBTRACT); break;
+        case TOKEN_STAR:            emitByte(OP_MULTIPLY); break;
+        case TOKEN_SLASH:           emitByte(OP_DIVIDE); break;
+        case TOKEN_GREATER:         emitByte(OP_GT); break;
+        case TOKEN_LESS:            emitByte(OP_LT); break;
+        case TOKEN_GREATER_EQUAL:   emitByte(OP_GEQ); break;
+        case TOKEN_LESS_EQUAL:      emitByte(OP_LEQ); break;
         default: return;    // unreachable
     }
+}
+
+static void ternary1(void) {
+    // we just scanned a question mark...
+    emitByte(OP_QMARK);
+    expression();   // true branch
+}
+
+static void ternary2(void) {
+    // we just scanned a colon...
+    emitByte(OP_COLON);
+    expression();   // false branch;
+    emitByte(OP_ENDTERNARY);
 }
 
 // side note: this is called designated initializer syntax (C99)
@@ -194,8 +211,8 @@ ParseRule_t rules[] = {
     [TOKEN_SLASH]           =  {NULL, binary, PREC_FACTOR},
     [TOKEN_STAR]            =  {NULL, binary, PREC_FACTOR},
     [TOKEN_MODULO]          =  {NULL, binary, PREC_FACTOR},
-    [TOKEN_QUESTION_MARK]   =  {NULL, NULL, PREC_NONE},
-    [TOKEN_COLON]           =  {NULL, NULL, PREC_NONE},
+    [TOKEN_QUESTION_MARK]   =  {NULL, ternary1, PREC_TERNARY},
+    [TOKEN_COLON]           =  {NULL, ternary2, PREC_TERNARY},
     [TOKEN_BITWISE_AND]     =  {NULL, binary, PREC_BITWISE},
     [TOKEN_BITWISE_OR]      =  {NULL, binary, PREC_BITWISE},
     [TOKEN_BITWISE_XOR]     =  {NULL, binary, PREC_BITWISE},
@@ -285,5 +302,11 @@ bool compile(const char *source, Chunk_t *chunk) {
     expression();
     consume(TOKEN_EOF, "Expect end or expression.");
     endCompiler();
+
+    #ifdef DEBUG_CHUNK
+    #include "debug.h"
+    disassembleChunk(currentChunk(), "code");
+    #endif
+
     return !parser.hadError;
 }
