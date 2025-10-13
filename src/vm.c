@@ -51,10 +51,10 @@ static InterpResult_t run(void) {
     //     (vm.chunk->constants.values[(READ_BYTE() << 16) | (READ_BYTE() << 8) | READ_BYTE()])
     #define READ_LONG_CONSTANT() \
     ({ \
-        uint8_t byte1 = READ_BYTE(); \
         uint8_t byte2 = READ_BYTE(); \
-        uint8_t byte3 = READ_BYTE(); \
-        vm.chunk->constants.values[(byte1 << 16) | (byte2 << 8) | byte3]; \
+        uint8_t byte1 = READ_BYTE(); \
+        uint8_t byte0 = READ_BYTE(); \
+        vm.chunk->constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
 
     for (;;) {
@@ -110,6 +110,14 @@ static InterpResult_t run(void) {
                     unsigned depth = 1;
                     while (depth) {
                         uint8_t op = READ_BYTE();
+                        if (op == OP_CONSTANT) {
+                            READ_BYTE();    // discard const pool idx
+                        }
+                        if (op == OP_CONSTANT_LONG) {
+                            READ_BYTE(); // discard byte2
+                            READ_BYTE(); // discard byte1
+                            READ_BYTE(); // discard byte0
+                        }
                         if (op == OP_QMARK) depth++;
                         if (op == OP_COLON) depth--;
                     }
@@ -117,8 +125,16 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_COLON: {  // whenever we're here, we've already executed the true branch... so skip false branch
-                while ((instruction = READ_BYTE()) != OP_ENDTERNARY);
-                break;
+                while ((instruction = READ_BYTE()) != OP_ENDTERNARY) {
+                    if (instruction == OP_CONSTANT) {
+                        READ_BYTE();    // discard const pool idx
+                    }
+                    if (instruction == OP_CONSTANT_LONG) {
+                        READ_BYTE(); // discard byte2
+                        READ_BYTE(); // discard byte1
+                        READ_BYTE(); // discard byte0
+                    }
+                }
             }
             case OP_ENDTERNARY: break;
             default:

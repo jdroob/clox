@@ -176,6 +176,8 @@ static void binary(void) {
         case TOKEN_LESS:            emitByte(OP_LT); break;
         case TOKEN_GREATER_EQUAL:   emitByte(OP_GEQ); break;
         case TOKEN_LESS_EQUAL:      emitByte(OP_LEQ); break;
+        case TOKEN_EQUAL_EQUAL:     emitByte(OP_EQ); break;
+        case TOKEN_BANG_EQUAL:      emitByte(OP_NEQ); break;
         default: return;    // unreachable
     }
 }
