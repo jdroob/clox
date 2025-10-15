@@ -3,7 +3,21 @@
 
 #include "common.h"
 
-typedef double Value_t;
+typedef enum {
+    VAL_NUM,
+    VAL_BOOL,
+    VAL_STR
+} ValueType_e;
+
+typedef struct {
+    ValueType_e type;
+    union {
+        bool boolean;
+        double num;
+    } val;
+} Value_t;
+
+// typedef double Value_t;
 
 typedef struct {
     size_t capacity;
@@ -14,5 +28,6 @@ typedef struct {
 void initValueArray(ValueArray_t *array);
 void writeValueArray(ValueArray_t *array, Value_t value);
 void freeValueArray(ValueArray_t *array);
+Value_t makeValue(double val, ValueType_e type);
 
 #endif // CLOX_VALUE_H

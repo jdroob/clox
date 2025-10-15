@@ -84,7 +84,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
 }
 
 void printValue(Value_t val) {
-    printf("%g", val);
+    if (val.type == VAL_NUM) printf("%g", val.val.num);
+    else printf("%d", val.val.boolean);
 }
 
 void disassembleChunk(Chunk_t *chunk, const char *name) {

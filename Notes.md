@@ -189,4 +189,60 @@
         
         Just scan the keyword as an identifier (i.e., assume it's in "identifier mode" until proven otherwise). Then, when parsing, determine if we're parsing *that* context. If so, the parser needs to check the scanned identifier to determine if the identifier matches contextual keyword (that can appear in that position in the syntactic grammar). If so, treat it as a contextual keyword instead of an identifier.
 
-    ## Chapter 16: Compiling Expressions 
+    ## Chapter 17: Compiling Expressions 
+    - TODO: how Pratt parsing works
+
+    1) To really understand the parser, you need to see how execution threads through the interesting parsing functions—parsePrecedence() and the parser functions stored in the table. Take this (strange) expression:
+
+    `(-1 + 2) * 3 - -4`
+
+    Write a trace of how those functions are called. Show the order they are called, which calls which, and the arguments passed to them.<br>
+    Answer:
+    ```
+    expression()
+        parsePrecedence(PREC_COMMA)
+            grouping()  // for '('
+                expression()
+                    parsePrecedence(PREC_COMMA)
+                        unary() // for '-'
+                            parsePrecedence(PREC_UNARY)
+                                number()    // for '1'
+                                    emitConstant(1)
+                        emitByte(OP_NEGATE)
+                        binary()    // for '+'
+                            parsePrecedence(PREC_FACTOR)    // PREC_TERM + 1
+                                number()    // for '2'
+                                    emitConstant(2)
+                            emitByte(OP_ADD)
+        /* at this point: parser.prev = '*', parser.current = '3' */
+            binary()    // for '*'
+                parsePrecedence(PREC_UNARY) // PREC_FACTOR + 1
+                    number()    // for '3'
+                        emitConstant(3)
+                emitByte(OP_MULTIPLY)
+        /* at this point: parser.prev = '-', parser.current = '-' */
+            binary()    // for first '-' in 3 - -4
+                parsePrecedence(PREC_FACTOR)    // PREC_TERM + 1
+                    unary() // for '-' in -4
+                        parsePrecedence(PREC_UNARY)
+                            number()    // for '4'
+                                emitConstant(4)
+                        emitByte(OP_NEGATE)
+                emitByte(OP_SUBTRACT)
+    ```
+
+    2) The ParseRule row for TOKEN_MINUS has both prefix and infix function pointers. That’s because - is both a prefix operator (unary negation) and an infix one (subtraction).
+    
+    In the full Lox language, what other tokens can be used in both prefix and infix positions? What about in C or in another language of your choice?<br>
+    Answer:
+    In Lox, there will be rows with both prefix and infix rules for the same tokens in the following cases:
+        - `TOKEN_LEFT_PAREN`: for grouping and function call
+        - `TOKEN_LEFT_BRACK`: for array literal and indexing
+
+    I think that's it? In C there's obviously '*' for dereferencing and multiplication. And '&' for 'address-of' and bitwise AND.
+
+    3) You might be wondering about complex “mixfix” expressions that have more than two operands separated by tokens. C’s conditional or “ternary” operator, ?:, is a widely known one. Add support for that operator to the compiler. You don’t have to generate any bytecode, just show how you would hook it up to the parser and handle the operands.<br>
+    Answer:
+        Donezo
+
+    ## Chapter 18: Types of Values 

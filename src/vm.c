@@ -3,11 +3,13 @@
 #include "memory.h"
 #include "common.h"
 #include "compiler.h"
+#include "value.h"
 
-#define BINARY_OP(op) do { \
-    double b = pop(); \
-    double a = pop(); \
-    push(a op b); \
+#define BINARY_OP(op, type) do { \
+    double b = pop().val.num; \
+    double a = pop().val.num; \
+    double c = a op b; \
+    push(makeValue(c, type)); \
 } while(false)
 
 VM_t vm;
@@ -91,22 +93,22 @@ static InterpResult_t run(void) {
             }
             case OP_NEGATE: {
                 // TODO: move this bounds-checking logic
-                if (vm.stackTop != vm.stack) *(vm.stackTop - 1) = -(*(vm.stackTop - 1));
+                if (vm.stackTop != vm.stack) (vm.stackTop - 1)->val.num = -((vm.stackTop - 1)->val.num);
                 break;
             }
-            case OP_ADD: BINARY_OP(+); break;
-            case OP_SUBTRACT: BINARY_OP(-); break;
-            case OP_MULTIPLY: BINARY_OP(*); break;
-            case OP_DIVIDE: BINARY_OP(/); break;
-            case OP_GT: BINARY_OP(>); break;
-            case OP_GEQ: BINARY_OP(>=); break;
-            case OP_LT: BINARY_OP(<); break;
-            case OP_LEQ: BINARY_OP(<=); break;
-            case OP_EQ: BINARY_OP(==); break;
-            case OP_NEQ: BINARY_OP(==); break;
+            case OP_ADD:        BINARY_OP(+, VAL_NUM); break;
+            case OP_SUBTRACT:   BINARY_OP(-, VAL_NUM); break;
+            case OP_MULTIPLY:   BINARY_OP(*, VAL_NUM); break;
+            case OP_DIVIDE:     BINARY_OP(/, VAL_NUM); break;
+            case OP_GT:         BINARY_OP(>, VAL_BOOL); break;
+            case OP_GEQ:        BINARY_OP(>=, VAL_BOOL); break;
+            case OP_LT:         BINARY_OP(<, VAL_BOOL); break;
+            case OP_LEQ:        BINARY_OP(<=, VAL_BOOL); break;
+            case OP_EQ:         BINARY_OP(==, VAL_BOOL); break;
+            case OP_NEQ:        BINARY_OP(!=, VAL_BOOL); break;
             case OP_QMARK: {
                 Value_t condition = pop();
-                if (!condition) {
+                if (!condition.val.boolean) {
                     unsigned depth = 1;
                     while (depth) {
                         uint8_t op = READ_BYTE();

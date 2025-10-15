@@ -124,7 +124,7 @@ static void emitConstant(double value) {
         error("Too many constants in one chunk.");
         return;
     }
-    int constantIdx = addConstant(currentChunk(), value);
+    int constantIdx = addConstant(currentChunk(), (Value_t){ .type = VAL_NUM, .val.num = value });
     if (constantIdx > UINT8_MAX) {
         emitLongConstant(constantIdx);
         return;
