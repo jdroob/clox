@@ -8,6 +8,7 @@
 #include <stdalign.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <limits.h>
 #include <sys/types.h>
 #include <unistd.h>

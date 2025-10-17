@@ -119,12 +119,12 @@ static void endCompiler(void) {
     emitReturn();
 }
 
-static void emitConstant(double value) {
+static void emitConstant(Value_t value) {
     if (currentChunk()->constants.capacity > CONSTANT_POOL_LONG_LEN_MAX) {
         error("Too many constants in one chunk.");
         return;
     }
-    int constantIdx = addConstant(currentChunk(), (Value_t){ .type = VAL_NUM, .val.num = value });
+    int constantIdx = addConstant(currentChunk(), value);
     if (constantIdx > UINT8_MAX) {
         emitLongConstant(constantIdx);
         return;
@@ -142,7 +142,7 @@ static void expression(void) {
 
 static void number(void) {
     double value = strtod(parser.previous.start, NULL);
-    emitConstant(value);
+    emitConstant(NUMBER_VAL(value));
 }
 
 static void grouping(void) {
@@ -195,6 +195,15 @@ static void ternary2(void) {
     emitByte(OP_ENDTERNARY);
 }
 
+static void literal(void) {
+    switch (parser.previous.type) {
+        case TOKEN_TRUE: emitByte(OP_TRUE); break;
+        case TOKEN_FALSE: emitByte(OP_FALSE); break;
+        case TOKEN_NIL: emitByte(OP_NIL); break;
+        default: return;    // unreachable
+    }
+}
+
 // side note: this is called designated initializer syntax (C99)
 ParseRule_t rules[] = {
     [TOKEN_LEFT_PAREN]      =  {grouping, NULL, PREC_NONE},
@@ -238,16 +247,16 @@ ParseRule_t rules[] = {
     [TOKEN_BREAK]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_CLASS]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_ELSE]            =  {NULL, NULL, PREC_NONE},
-    [TOKEN_FALSE]           =  {NULL, NULL, PREC_NONE},
+    [TOKEN_FALSE]           =  {literal, NULL, PREC_NONE},
     [TOKEN_FUN]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_FOR]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
-    [TOKEN_NIL]             =  {NULL, NULL, PREC_NONE},
+    [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
     [TOKEN_PRINT]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_RETURN]          =  {NULL, NULL, PREC_NONE},
     [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_THIS]            =  {NULL, NULL, PREC_NONE},
-    [TOKEN_TRUE]            =  {NULL, NULL, PREC_NONE},
+    [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
     [TOKEN_VAR]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_WHILE]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_CONTINUE]        =  {NULL, NULL, PREC_NONE},

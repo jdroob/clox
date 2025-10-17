@@ -6,6 +6,7 @@
 typedef enum {
     VAL_NUM,
     VAL_BOOL,
+    VAL_NIL,
     VAL_STR
 } ValueType_e;
 
@@ -14,8 +15,19 @@ typedef struct {
     union {
         bool boolean;
         double num;
-    } val;
+    } as;
 } Value_t;
+
+#define BOOL_VAL(value)   ((Value_t){.type = VAL_BOOL, .as.boolean = value})
+#define NIL_VAL           ((Value_t){.type = VAL_NIL, .as.num = 0})
+#define NUMBER_VAL(value) ((Value_t){.type = VAL_NUM, .as.num = value})
+
+#define AS_BOOL(value)   ((value).as.boolean)
+#define AS_NUMBER(value) ((value).as.num)
+
+#define IS_BOOL(value)   ((value).type == VAL_BOOL)
+#define IS_NUMBER(value) ((value).type == VAL_NUM)
+#define IS_NIL(value)    ((value).type == VAL_NIL)
 
 // typedef double Value_t;
 

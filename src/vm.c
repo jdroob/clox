@@ -5,17 +5,27 @@
 #include "compiler.h"
 #include "value.h"
 
-#define BINARY_OP(op, type) do { \
-    double b = pop().val.num; \
-    double a = pop().val.num; \
-    double c = a op b; \
-    push(makeValue(c, type)); \
-} while(false)
-
 VM_t vm;
 
 static void resetStack(void) {
     vm.stackTop = vm.stack;
+}
+
+static void runtimeError(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+    vfprintf(stderr, format, args);
+    va_end(args);
+    fputs("\n", stderr);
+
+    size_t instructionOffset = vm.ip - vm.chunk->code - 1;
+    int line = getLine(vm.chunk, instructionOffset);
+    fprintf(stderr, "[line %d] in script\n", line);
+    resetStack();
+}
+
+static Value_t peek(int distance) {
+    return vm.stackTop[-1 - distance];
 }
 
 void push(Value_t value) {
@@ -58,6 +68,16 @@ static InterpResult_t run(void) {
         uint8_t byte0 = READ_BYTE(); \
         vm.chunk->constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
+    #define BINARY_OP(valueType, op) do { \
+        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
+            runtimeError("Operands must be numbers."); \
+            return INTERPRET_RUNTIME_ERROR; \
+        }   \
+        double b = AS_NUMBER(pop()); \
+        double a = AS_NUMBER(pop()); \
+        double c = a op b; \
+        push(valueType(c)); \
+    } while(false)
 
     for (;;) {
         uint8_t instruction;
@@ -91,25 +111,41 @@ static InterpResult_t run(void) {
                 printf("\n");
                 break;
             }
-            case OP_NEGATE: {
-                // TODO: move this bounds-checking logic
-                if (vm.stackTop != vm.stack) (vm.stackTop - 1)->val.num = -((vm.stackTop - 1)->val.num);
+            case OP_TRUE: {
+                push(BOOL_VAL(true));
                 break;
             }
-            case OP_ADD:        BINARY_OP(+, VAL_NUM); break;
-            case OP_SUBTRACT:   BINARY_OP(-, VAL_NUM); break;
-            case OP_MULTIPLY:   BINARY_OP(*, VAL_NUM); break;
-            case OP_DIVIDE:     BINARY_OP(/, VAL_NUM); break;
-            case OP_GT:         BINARY_OP(>, VAL_BOOL); break;
-            case OP_GEQ:        BINARY_OP(>=, VAL_BOOL); break;
-            case OP_LT:         BINARY_OP(<, VAL_BOOL); break;
-            case OP_LEQ:        BINARY_OP(<=, VAL_BOOL); break;
-            case OP_EQ:         BINARY_OP(==, VAL_BOOL); break;
-            case OP_NEQ:        BINARY_OP(!=, VAL_BOOL); break;
+            case OP_FALSE: {
+                push(BOOL_VAL(false));
+                break;
+            }
+            case OP_NIL: {
+                push(NIL_VAL);
+                break;
+            }
+            case OP_NEGATE: {
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Operand must be a number.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (vm.stackTop != vm.stack) 
+                    (vm.stackTop - 1)->as.num = -AS_NUMBER(*(vm.stackTop - 1));
+                break;
+            }
+            case OP_ADD:        BINARY_OP(NUMBER_VAL, +); break;
+            case OP_SUBTRACT:   BINARY_OP(NUMBER_VAL, -); break;
+            case OP_MULTIPLY:   BINARY_OP(NUMBER_VAL, *); break;
+            case OP_DIVIDE:     BINARY_OP(NUMBER_VAL, /); break;
+            case OP_GT:         BINARY_OP(BOOL_VAL, >); break;
+            case OP_GEQ:        BINARY_OP(BOOL_VAL, >=); break;
+            case OP_LT:         BINARY_OP(BOOL_VAL, <); break;
+            case OP_LEQ:        BINARY_OP(BOOL_VAL, <=); break;
+            case OP_EQ:         BINARY_OP(BOOL_VAL, ==); break;
+            case OP_NEQ:        BINARY_OP(BOOL_VAL, !=); break;
             case OP_QMARK: {
                 Value_t condition = pop();
-                if (!condition.val.boolean) {
-                    unsigned depth = 1;
+                if (!AS_BOOL(condition)) {
+                    unsigned char depth = 1;
                     while (depth) {
                         uint8_t op = READ_BYTE();
                         if (op == OP_CONSTANT) {

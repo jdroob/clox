@@ -25,9 +25,9 @@ void freeValueArray(ValueArray_t *array) {
 Value_t makeValue(double val, ValueType_e type) {
     switch (type) {
         case VAL_NUM:
-            return (Value_t){ .type = VAL_NUM, .val.num = val };
+            return (Value_t)NUMBER_VAL(val);
         case VAL_BOOL:
-            return (Value_t){ .type = VAL_BOOL, .val.boolean = (bool)(val) };
+            return (Value_t)BOOL_VAL(val);
         default:
             fprintf(stderr, "Error: Unknown Value type\n");
             exit(EXIT_FAILURE);

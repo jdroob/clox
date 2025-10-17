@@ -17,6 +17,9 @@
      (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
      (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
      (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
+     (instruction) == OP_TRUE ? "OP_TRUE" : \
+     (instruction) == OP_FALSE ? "OP_FALSE" : \
+     (instruction) == OP_NIL ? "OP_NIL" : \
      (instruction) == OP_CONSTANT ? "OP_CONSTANT" : \
      (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
      "UNKNOWN_INSTRUCTION")
@@ -72,6 +75,9 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SUBTRACT:
         case OP_MULTIPLY:
         case OP_DIVIDE:
+        case OP_TRUE:
+        case OP_FALSE:
+        case OP_NIL:
             return simpleInstruction(name, offset);
         case OP_CONSTANT:
             return constantInstruction(name, chunk, offset);
@@ -84,8 +90,17 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
 }
 
 void printValue(Value_t val) {
-    if (val.type == VAL_NUM) printf("%g", val.val.num);
-    else printf("%d", val.val.boolean);
+    switch(val.type) {
+        case VAL_BOOL:
+            printf(AS_BOOL(val) ? "true" : "false");
+            break;
+        case VAL_NIL:
+            printf("nil");
+            break;
+        case VAL_NUM:
+            printf("%g", AS_NUMBER(val));
+            break;
+    }
 }
 
 void disassembleChunk(Chunk_t *chunk, const char *name) {
