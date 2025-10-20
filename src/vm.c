@@ -36,6 +36,16 @@ static bool isTruthy(Value_t value) {
     return (IS_NUMBER(value) ? value.as.num != 0 : IS_BOOL(value) ? AS_BOOL(value) : false);
 }
 
+static bool valuesEqual(Value_t a, Value_t b) {
+    if (a.type != b.type) return false;
+    switch (a.type) {
+        case VAL_BOOL: return AS_BOOL(a) == AS_BOOL(b);
+        case VAL_NUM:  return AS_NUMBER(a) == AS_NUMBER(b);
+        case VAL_NIL:  return IS_NIL(b);
+        default: return false;  // unreachable
+    }
+}
+
 void push(Value_t value) {
     if (vm.capacity < vm.stackTop - vm.stack + 1) {
         uint32_t oldCapacity = vm.capacity;
@@ -76,15 +86,10 @@ static InterpResult_t run(void) {
         uint8_t byte0 = READ_BYTE(); \
         vm.chunk->constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
-    #define BINARY_OP(valueType, op) do { \
-        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
-            runtimeError("Operands must be numbers."); \
-            return INTERPRET_RUNTIME_ERROR; \
-        }   \
-        double b = AS_NUMBER(pop()); \
-        double a = AS_NUMBER(pop()); \
-        double c = a op b; \
-        push(valueType(c)); \
+    #define BINARY_OP(type, op) do { \
+        Value_t b = pop(); \
+        Value_t a = pop(); \
+        push(type##_VAL((AS_##type(a) op AS_##type(b)))); \
     } while(false)
 
     for (;;) {
@@ -144,16 +149,18 @@ static InterpResult_t run(void) {
                 push(BOOL_VAL(isFalsey(pop())));
                 break;
             }
-            case OP_ADD:        BINARY_OP(NUMBER_VAL, +); break;
-            case OP_SUBTRACT:   BINARY_OP(NUMBER_VAL, -); break;
-            case OP_MULTIPLY:   BINARY_OP(NUMBER_VAL, *); break;
-            case OP_DIVIDE:     BINARY_OP(NUMBER_VAL, /); break;
-            case OP_GT:         BINARY_OP(BOOL_VAL, >); break;
-            case OP_GEQ:        BINARY_OP(BOOL_VAL, >=); break;
-            case OP_LT:         BINARY_OP(BOOL_VAL, <); break;
-            case OP_LEQ:        BINARY_OP(BOOL_VAL, <=); break;
-            case OP_EQ:         BINARY_OP(BOOL_VAL, ==); break;
-            case OP_NEQ:        BINARY_OP(BOOL_VAL, !=); break;
+            case OP_ADD:        BINARY_OP(NUMBER, +); break;
+            case OP_SUBTRACT:   BINARY_OP(NUMBER, -); break;
+            case OP_MULTIPLY:   BINARY_OP(NUMBER, *); break;
+            case OP_DIVIDE:     BINARY_OP(NUMBER, /); break;
+            case OP_GT:         BINARY_OP(BOOL, >); break;
+            case OP_LT:         BINARY_OP(BOOL, <); break;
+            case OP_EQ: {
+                Value_t b = pop();
+                Value_t a = pop();
+                push(BOOL_VAL(valuesEqual(a, b)));
+                break;
+            }
             case OP_QMARK: {
                 Value_t condition = pop();
                 if (!isTruthy(condition)) {

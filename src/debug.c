@@ -9,11 +9,8 @@
      (instruction) == OP_ENDTERNARY ? "OP_ENDTERNARY" : \
      (instruction) == OP_ADD ? "OP_ADD" : \
      (instruction) == OP_GT ? "OP_GT" : \
-     (instruction) == OP_GEQ ? "OP_GEQ" : \
      (instruction) == OP_LT ? "OP_LT" : \
-     (instruction) == OP_LEQ ? "OP_LEQ" : \
      (instruction) == OP_EQ ? "OP_EQ" : \
-     (instruction) == OP_NEQ ? "OP_NEQ" : \
      (instruction) == OP_NOT ? "OP_NOT" : \
      (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
      (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
@@ -68,11 +65,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_ENDTERNARY:
         case OP_ADD:
         case OP_GT:
-        case OP_GEQ:
         case OP_LT:
-        case OP_LEQ:
         case OP_EQ:
-        case OP_NEQ:
         case OP_SUBTRACT:
         case OP_MULTIPLY:
         case OP_DIVIDE:

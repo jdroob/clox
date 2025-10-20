@@ -175,10 +175,15 @@ static void binary(void) {
         case TOKEN_SLASH:           emitByte(OP_DIVIDE); break;
         case TOKEN_GREATER:         emitByte(OP_GT); break;
         case TOKEN_LESS:            emitByte(OP_LT); break;
-        case TOKEN_GREATER_EQUAL:   emitByte(OP_GEQ); break;
-        case TOKEN_LESS_EQUAL:      emitByte(OP_LEQ); break;
         case TOKEN_EQUAL_EQUAL:     emitByte(OP_EQ); break;
-        case TOKEN_BANG_EQUAL:      emitByte(OP_NEQ); break;
+        /**
+         * a >= b same as !(a < b)
+         * a <= b same as !(a > b)
+         * a != b same as !(a == b)
+         */
+        case TOKEN_GREATER_EQUAL:   emitBytes(OP_LT, OP_NOT); break;
+        case TOKEN_LESS_EQUAL:      emitBytes(OP_GT, OP_NOT); break;
+        case TOKEN_BANG_EQUAL:      emitBytes(OP_EQ, OP_NOT); break;
         default: return;    // unreachable
     }
 }
@@ -229,7 +234,7 @@ ParseRule_t rules[] = {
     [TOKEN_BITWISE_OR]      =  {NULL, binary, PREC_BITWISE},
     [TOKEN_BITWISE_XOR]     =  {NULL, binary, PREC_BITWISE},
     [TOKEN_BANG]            =  {unary, NULL, PREC_UNARY},
-    [TOKEN_BANG_EQUAL]      =  {NULL, binary, PREC_COMPARISON},
+    [TOKEN_BANG_EQUAL]      =  {NULL, binary, PREC_EQUALITY},
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},
     [TOKEN_EQUAL_EQUAL]     =  {NULL, binary, PREC_EQUALITY},
     [TOKEN_GREATER]         =  {NULL, binary, PREC_COMPARISON},
