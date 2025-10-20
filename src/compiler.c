@@ -158,6 +158,7 @@ static void unary(void) {
 
     switch (operatorType) {
         case TOKEN_MINUS: emitByte(OP_NEGATE); break;
+        case TOKEN_BANG:  emitByte(OP_NOT); break;
         default: return;    // unreachable
     }
 }

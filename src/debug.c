@@ -14,6 +14,7 @@
      (instruction) == OP_LEQ ? "OP_LEQ" : \
      (instruction) == OP_EQ ? "OP_EQ" : \
      (instruction) == OP_NEQ ? "OP_NEQ" : \
+     (instruction) == OP_NOT ? "OP_NOT" : \
      (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
      (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
      (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
@@ -78,6 +79,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_TRUE:
         case OP_FALSE:
         case OP_NIL:
+        case OP_NOT:
             return simpleInstruction(name, offset);
         case OP_CONSTANT:
             return constantInstruction(name, chunk, offset);

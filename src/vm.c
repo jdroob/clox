@@ -28,6 +28,14 @@ static Value_t peek(int distance) {
     return vm.stackTop[-1 - distance];
 }
 
+static bool isFalsey(Value_t value) {
+    return (IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value)));
+}
+
+static bool isTruthy(Value_t value) {
+    return (IS_NUMBER(value) ? value.as.num != 0 : IS_BOOL(value) ? AS_BOOL(value) : false);
+}
+
 void push(Value_t value) {
     if (vm.capacity < vm.stackTop - vm.stack + 1) {
         uint32_t oldCapacity = vm.capacity;
@@ -132,6 +140,10 @@ static InterpResult_t run(void) {
                     (vm.stackTop - 1)->as.num = -AS_NUMBER(*(vm.stackTop - 1));
                 break;
             }
+            case OP_NOT: {
+                push(BOOL_VAL(isFalsey(pop())));
+                break;
+            }
             case OP_ADD:        BINARY_OP(NUMBER_VAL, +); break;
             case OP_SUBTRACT:   BINARY_OP(NUMBER_VAL, -); break;
             case OP_MULTIPLY:   BINARY_OP(NUMBER_VAL, *); break;
@@ -144,7 +156,7 @@ static InterpResult_t run(void) {
             case OP_NEQ:        BINARY_OP(BOOL_VAL, !=); break;
             case OP_QMARK: {
                 Value_t condition = pop();
-                if (!AS_BOOL(condition)) {
+                if (!isTruthy(condition)) {
                     unsigned char depth = 1;
                     while (depth) {
                         uint8_t op = READ_BYTE();

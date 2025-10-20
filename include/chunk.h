@@ -15,6 +15,7 @@ typedef enum {
     OP_TRUE,
     OP_FALSE,
     OP_NEGATE,
+    OP_NOT,
     OP_QMARK,
     OP_COLON,
     OP_ENDTERNARY,
