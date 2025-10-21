@@ -12,6 +12,7 @@
 #include <limits.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <math.h>
 #include "jrmalloc.h"
 
 #define MAX_BUFF_LEN 4194304 // 2^22

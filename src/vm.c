@@ -132,6 +132,18 @@ static InterpResult_t run(void) {
                 push(BOOL_VAL(false));
                 break;
             }
+            case OP_ZERO: {
+                push(NUMBER_VAL(0));
+                break;
+            }
+            case OP_ONE: {
+                push(NUMBER_VAL(1));
+                break;
+            }
+            case OP_NEG_ONE: {
+                push(NUMBER_VAL(-1));
+                break;
+            }
             case OP_NIL: {
                 push(NIL_VAL);
                 break;

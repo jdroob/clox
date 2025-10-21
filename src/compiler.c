@@ -142,7 +142,16 @@ static void expression(void) {
 
 static void number(void) {
     double value = strtod(parser.previous.start, NULL);
-    emitConstant(NUMBER_VAL(value));
+    double tolerance = 1e-10;
+    if (fabs(value) <= tolerance) {
+        emitByte(OP_ZERO);
+    } else if (fabs(value - 1) <= tolerance) {
+        emitByte(OP_ONE);
+    } else if (value < 0 && fabs(value + 1) <= tolerance) {
+        emitByte(OP_NEG_ONE);
+    } else {
+        emitConstant(NUMBER_VAL(value));
+    }
 }
 
 static void grouping(void) {

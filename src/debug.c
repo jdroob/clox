@@ -17,6 +17,9 @@
      (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
      (instruction) == OP_TRUE ? "OP_TRUE" : \
      (instruction) == OP_FALSE ? "OP_FALSE" : \
+     (instruction) == OP_ZERO ? "OP_ZERO" : \
+     (instruction) == OP_ONE ? "OP_ONE" : \
+     (instruction) == OP_NEG_ONE ? "OP_NEG_ONE" : \
      (instruction) == OP_NIL ? "OP_NIL" : \
      (instruction) == OP_CONSTANT ? "OP_CONSTANT" : \
      (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
@@ -72,6 +75,9 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_DIVIDE:
         case OP_TRUE:
         case OP_FALSE:
+        case OP_ZERO:
+        case OP_ONE:
+        case OP_NEG_ONE:
         case OP_NIL:
         case OP_NOT:
             return simpleInstruction(name, offset);

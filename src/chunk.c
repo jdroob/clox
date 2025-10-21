@@ -39,9 +39,6 @@ void writeConstant(Chunk_t *chunk, Value_t value, int line) {
     //         index =       0    0    0    1    0    1
 
     writeChunk(chunk, OP_CONSTANT_LONG, line);
-    // writeChunk(chunk, (unsigned)idx & 0x00FF0000, line);    // fun fact: this is big endian
-    // writeChunk(chunk, (unsigned)idx & 0x0000FF00, line);
-    // writeChunk(chunk, (unsigned)idx & 0x000000FF, line);
     writeChunk(chunk, ((unsigned)idx  >> 16) & 0x000000FF, line);    // fun fact: this is big endian
     writeChunk(chunk, ((unsigned)idx  >> 8) & 0x000000FF, line);
     writeChunk(chunk, (unsigned)idx & 0x000000FF, line);
