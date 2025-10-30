@@ -16,7 +16,11 @@ static char *readFile(char *filename) {
     size_t fileSize = ftell(file);
     rewind(file);
 
+    #ifdef JRMALLOC
     char *buffer = (char *)jrmalloc(fileSize + 1);
+    #else
+    char *buffer = (char *)malloc(fileSize + 1);
+    #endif
     if (!buffer) {
         fprintf(stderr, "Not enough memory to read \"%s\"\n", filename);
         exit(74);
@@ -49,7 +53,11 @@ static void repl(void) {
 static void runFile(char *path) {
     char *source = readFile(path);
     InterpResult_t result = interpret(source);
+    #ifdef JRMALLOC
     jrfree(source);
+    #else
+    free(source);
+    #endif
 
     if (result == INTERPRET_COMPILE_ERROR) exit(65);
     if (result == INTERPRET_RUNTIME_ERROR) exit(70);

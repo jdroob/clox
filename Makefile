@@ -7,27 +7,22 @@ BIN = bin
 CFLAGS = -Wall -g -Wno-sequence-point
 DEBUG_CFLAGS = -DDEBUG
 DEBUG_JRMALLOC_CFLAGS = -DDEBUG_JRMALLOC
+JRMALLOC_CFLAGS = -DJRMALLOC
 EXE = lox
 
-# Get all source files and generate corresponding object file paths
 SOURCES = $(wildcard $(SRC)/*.c)
 OBJECTS = $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SOURCES))
 
-# Declare phony targets
 .PHONY: default setup clean
 
-# Default target
 default: $(EXE)
 
-# Link object files to create the executable
 $(EXE): $(OBJECTS)
 	$(CC) $(OBJECTS) -I$(INCLUDES) -o $(BIN)/$(EXE)
 
-# Pattern rule to compile .c files to .o files
 $(OBJ)/%.o: $(SRC)/%.c | setup
 	$(CC) -c $< -I$(INCLUDES) $(CFLAGS) -o $@
 
-# Create the object directory if it doesn't exist
 setup:
 	mkdir -p $(OBJ)
 	mkdir -p $(BIN)
@@ -41,11 +36,16 @@ debug_scanner: default
 debug_chunk: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_CHUNK
 debug_chunk: default
 
-debug_jrmalloc: CFLAGS+=$(DEBUG_JRMALLOC_CFLAGS)
-debug_jrmalloc: setup
+debug_chunk_jrmalloc: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_CHUNK -DJRMALLOC
+debug_chunk_jrmalloc: default
+
+debug_jrmalloc: CFLAGS+=$(DEBUG_JRMALLOC_CFLAGS) -DJRMALLOC
+debug_jrmalloc: jrmalloc
 	$(CC) $(SRC)/jrmalloc.c -I$(INCLUDES) $(CFLAGS) -o $(BIN)/jrm
 
-# Clean up generated files
+jrmalloc: CFLAGS+=$(JRMALLOC_CFLAGS)
+jrmalloc: default
+
 clean:
 	rm -rf $(OBJ) $(BIN)
 

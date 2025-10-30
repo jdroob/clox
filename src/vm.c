@@ -55,6 +55,20 @@ static bool valuesEqual(Value_t a, Value_t b) {
     }
 }
 
+static void concatenate(void) {
+    ObjString_t *b = AS_STRING(pop());
+    ObjString_t *a = AS_STRING(pop());
+
+    size_t length = a->length + b->length;
+    char *chars = ALLOCATE(char, length + 1);
+    memcpy(chars, a->chars, a->length);
+    memcpy(chars + a->length, b->chars, b->length);
+    chars[length] = '\0';
+
+    ObjString_t *string = takeString(chars, length);
+    push(OBJ_VAL(string));
+}
+
 void push(Value_t value) {
     if (vm.capacity < vm.stackTop - vm.stack + 1) {
         uint32_t oldCapacity = vm.capacity;
@@ -71,11 +85,17 @@ Value_t pop(void) {
 }
 
 void initVM(void) {
+    #ifdef JRMALLOC
     init();     // init jrmalloc
+    #endif
     vm.chunk = NULL;
     vm.ip = 0;
     vm.capacity = STACK_MAX;
+    #ifdef JRMALLOC
     vm.stack = jrmalloc(STACK_MAX * sizeof(Value_t));
+    #else
+    vm.stack = ALLOCATE(Value_t, STACK_MAX);
+    #endif
     resetStack();
 }
 
@@ -170,7 +190,17 @@ static InterpResult_t run(void) {
                 push(BOOL_VAL(isFalsey(pop())));
                 break;
             }
-            case OP_ADD:        BINARY_OP(NUMBER, +); break;
+            case OP_ADD: {
+                if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
+                    concatenate();
+                } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
+                    BINARY_OP(NUMBER, +); 
+                } else {
+                    runtimeError("Operands must be two numbers or two strings.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
             case OP_SUBTRACT:   BINARY_OP(NUMBER, -); break;
             case OP_MULTIPLY:   BINARY_OP(NUMBER, *); break;
             case OP_DIVIDE:     BINARY_OP(NUMBER, /); break;

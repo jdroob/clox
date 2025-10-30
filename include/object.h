@@ -27,6 +27,7 @@ static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
 }
 
+ObjString_t *takeString(char *chars, int length);
 ObjString_t *copyString(const char *chars, int length);
 
 # endif // CLOX_OBJ_H

@@ -15,11 +15,15 @@ static Obj_t *allocateObject(size_t size, Obj_e objectType) {
     return obj;
 }        
 
-ObjString_t *allocateString(char *chars, int length) {
+static ObjString_t *allocateString(char *chars, int length) {
     ObjString_t *string = ALLOCATE_OBJ(ObjString_t, OBJ_STRING);
     string->length = length;
     string->chars = chars;
     return string;
+}
+
+ObjString_t *takeString(char *chars, int length) {
+    return allocateString(chars, length);
 }
 
 ObjString_t *copyString(const char *chars, int length) {

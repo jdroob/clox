@@ -5,6 +5,7 @@
    comment
 */
 //"1 + 2 = ${1+2}"
-"john" == "john"
+//"john" == "john"
+"john" + "john"
 //"${"I${"C"}"}"
 //"Nested ${"interpolation?! Are you ${"mad?!"}"}"
