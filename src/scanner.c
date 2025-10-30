@@ -280,31 +280,43 @@ static Token_t string(void) {
     char c;
     while (!isAtEnd() && (c = peek()) != '"') {
         if (c == '\n') scanner.line++;
-        if (peek() == '$' && peekNext() == '{') {
-            if (scanner.interpolationState == -1) {
-                scanner.interpolationState = 1;
-            } else {
-                scanner.interpolationState++;
-            }
-            // advance(); advance();
-            return makeToken(TOKEN_INTERPOLATION);
-        } else if (scanner.interpolationState > 0 && peek() == '}') {
-            scanner.interpolationState--;
-            advance();
-            scanner.start = scanner.current;
-            continue;
-        }
+
+        //==============================
+        // UNCOMMENT ME FOR STRING INTERPOLATION :)
+        //==============================
+        // if (peek() == '$' && peekNext() == '{') {
+        //     if (scanner.interpolationState == -1) {
+        //         scanner.interpolationState = 1;
+        //     } else {
+        //         scanner.interpolationState++;
+        //     }
+        //     // advance(); advance();
+        //     return makeToken(TOKEN_INTERPOLATION);
+        // } else if (scanner.interpolationState > 0 && peek() == '}') {
+        //     scanner.interpolationState--;
+        //     advance();
+        //     scanner.start = scanner.current;
+        //     continue;
+        // }
+        //==============================
+
         advance();
     }
 
     if (isAtEnd()) return errorToken("Unterminated string.");
 
     advance();  // consume "
-    scanner.stringNestingLevel--;
-    // if (scanner.stringNestingLevel == 0 && scanner.interpolationState == 0) {
-    if (!scanner.stringNestingLevel && !scanner.interpolationState) {
-        resetInterpolationState();
-    }
+
+    //==============================
+    // UNCOMMENT ME FOR STRING INTERPOLATION :)
+    //==============================
+    // scanner.stringNestingLevel--;
+    // // if (scanner.stringNestingLevel == 0 && scanner.interpolationState == 0) {
+    // if (!scanner.stringNestingLevel && !scanner.interpolationState) {
+    //     resetInterpolationState();
+    // }
+    //==============================
+
     return makeToken(TOKEN_STRING);
 }
 

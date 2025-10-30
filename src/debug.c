@@ -1,5 +1,6 @@
 #include "debug.h"
 #include "value.h"
+#include "object.h"
 
 #define OPTOSTR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
@@ -91,6 +92,14 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     }
 }
 
+void printObject(Value_t val) {
+    switch (OBJ_TYPE(val)) {
+        case OBJ_STRING:
+            printf("\"%s\"", AS_CSTRING(val));
+            break;
+    }
+}
+
 void printValue(Value_t val) {
     switch(val.type) {
         case VAL_BOOL:
@@ -102,6 +111,7 @@ void printValue(Value_t val) {
         case VAL_NUM:
             printf("%g", AS_NUMBER(val));
             break;
+        case VAL_OBJ: printObject(val);
     }
 }
 

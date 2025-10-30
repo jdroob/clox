@@ -1,0 +1,10 @@
+// single line comment
+/*
+   multi
+   line
+   comment
+*/
+//"1 + 2 = ${1+2}"
+"john" == "john"
+//"${"I${"C"}"}"
+//"Nested ${"interpolation?! Are you ${"mad?!"}"}"

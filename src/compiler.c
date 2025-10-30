@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "compiler.h"
 #include "scanner.h"
+#include "object.h"
 
 typedef struct {
     Token_t previous;
@@ -154,6 +155,11 @@ static void number(void) {
     }
 }
 
+static void string(void) {
+    emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, 
+                                     parser.previous.length - 2)));
+}
+
 static void grouping(void) {
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
@@ -254,7 +260,7 @@ ParseRule_t rules[] = {
     [TOKEN_BITSHIFT_RIGHT]  =  {NULL, binary, PREC_BITSHIFT},
     [TOKEN_STAR_STAR]       =  {NULL, binary, PREC_EXP},
     [TOKEN_IDENTIFIER]      =  {NULL, NULL, PREC_NONE},
-    [TOKEN_STRING]          =  {NULL, NULL, PREC_NONE},
+    [TOKEN_STRING]          =  {string, NULL, PREC_NONE},
     [TOKEN_INTERPOLATION]   =  {NULL, NULL, PREC_NONE},
     [TOKEN_NUMBER]          =  {number, NULL, PREC_NONE},
     [TOKEN_AND]             =  {NULL, binary, PREC_AND},

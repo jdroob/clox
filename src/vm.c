@@ -4,6 +4,7 @@
 #include "common.h"
 #include "compiler.h"
 #include "value.h"
+#include "object.h"
 
 VM_t vm;
 
@@ -42,6 +43,14 @@ static bool valuesEqual(Value_t a, Value_t b) {
         case VAL_BOOL: return AS_BOOL(a) == AS_BOOL(b);
         case VAL_NUM:  return AS_NUMBER(a) == AS_NUMBER(b);
         case VAL_NIL:  return IS_NIL(b);
+        case VAL_OBJ:  {
+            switch (OBJ_TYPE(a))
+            {
+                case OBJ_STRING:
+                    return AS_STRING(a)->length == AS_STRING(b)->length &&
+                            !memcmp(AS_CSTRING(a), AS_CSTRING(b), AS_STRING(a)->length);
+            }
+        }
         default: return false;  // unreachable
     }
 }

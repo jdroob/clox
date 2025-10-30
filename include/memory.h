@@ -13,6 +13,9 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize);
                               sizeof(type) * newCapacity)
 
 #define FREE_ARRAY(type, pointer, capacity) \
-    ((type *)reallocate(pointer, sizeof(type) * capacity, 0))                              
+    ((type *)reallocate(pointer, sizeof(type) * capacity, 0))
+    
+#define ALLOCATE(type, count) \
+    ((type *)reallocate(NULL, 0, sizeof(type) * (count)))
 
 #endif // CLOX_MEMORY_H
