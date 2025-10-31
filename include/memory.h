@@ -2,8 +2,10 @@
 #define CLOX_MEMORY_H
 
 #include "common.h"
+#include "object.h"
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize);
+void freeObjects(void);
 
 #define GROW_CAPACITY(capacity) \
     ((capacity) < 8 ? 8 : (capacity) * 2)
@@ -14,6 +16,9 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize);
 
 #define FREE_ARRAY(type, pointer, capacity) \
     ((type *)reallocate(pointer, sizeof(type) * capacity, 0))
+
+#define FREE(type, pointer) \
+    ((type *)reallocate(pointer, sizeof(type), 0))
     
 #define ALLOCATE(type, count) \
     ((type *)reallocate(NULL, 0, sizeof(type) * (count)))

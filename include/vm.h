@@ -3,6 +3,7 @@
 
 #include "chunk.h"
 #include "value.h"
+#include "object.h"
 
 #define STACK_MAX 256
 
@@ -18,7 +19,10 @@ typedef struct {
     uint32_t capacity;
     Value_t *stack;
     Value_t *stackTop;
+    Obj_t *objects;
 } VM_t;
+
+extern VM_t vm;
 
 void initVM(void);
 void freeVM(void);

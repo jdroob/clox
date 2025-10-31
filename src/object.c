@@ -12,6 +12,8 @@
 static Obj_t *allocateObject(size_t size, Obj_e objectType) {
     Obj_t *obj = (Obj_t *)reallocate(NULL, 0, size);
     obj->type = objectType;
+    obj->next = vm.objects;
+    vm.objects = obj;
     return obj;
 }        
 

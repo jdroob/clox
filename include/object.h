@@ -10,6 +10,7 @@ typedef enum {
 
 struct Obj_t {
     Obj_e type;
+    Obj_t *next;
 };
 
 struct ObjString_t {

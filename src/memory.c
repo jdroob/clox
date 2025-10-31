@@ -1,5 +1,6 @@
 #include "common.h"
 #include "memory.h"
+#include "vm.h"
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
     if (!newSize) {
@@ -21,4 +22,24 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
         exit(EXIT_FAILURE);
     }
     return result;
+}
+
+static void freeObject(Obj_t *object) {
+    switch (object->type) {
+        case OBJ_STRING: {
+            ObjString_t *string = (ObjString_t *)object;
+            FREE_ARRAY(char, string->chars, string->length + 1);
+            FREE(ObjString_t, object);
+            break;
+        }
+    }
+}
+
+void freeObjects(void) {
+    Obj_t *object = vm.objects;
+    while (object) {
+        Obj_t *next = object->next;
+        freeObject(object);
+        object = next;
+    }
 }

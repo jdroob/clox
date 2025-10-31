@@ -96,11 +96,25 @@ void initVM(void) {
     #else
     vm.stack = ALLOCATE(Value_t, STACK_MAX);
     #endif
+    vm.objects = NULL;
     resetStack();
 }
 
 void freeVM(void) {
+    freeObjects();
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
+}
+
+void updateObjList(Obj_t *obj) {
+    if (!vm.objects) {  // empty object list
+        vm.objects = obj;
+        obj->next = NULL;
+        return;
+    }
+    Obj_t *curr = vm.objects;
+    while (curr->next) curr = curr->next;
+    curr->next = obj;
+    obj->next = NULL;
 }
 
 static InterpResult_t run(void) {
