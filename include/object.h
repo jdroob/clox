@@ -16,6 +16,7 @@ struct Obj_t {
 struct ObjString_t {
     Obj_t obj;
     int length;
+    bool isConst;
     char chars[];
 };
 
@@ -28,7 +29,7 @@ static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
 }
 
-ObjString_t *takeString(char *chars, int length);
-ObjString_t *copyString(const char *chars, int length);
+ObjString_t *takeString(char *chars, int length);   // create dynamic string
+ObjString_t *copyString(const char *chars, int length); // copy string from source
 
 # endif // CLOX_OBJ_H

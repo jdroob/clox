@@ -17,21 +17,19 @@ static Obj_t *allocateObject(size_t size, Obj_e objectType) {
     return obj;
 }        
 
-static ObjString_t *allocateString(char *chars, int length) {
+static ObjString_t *allocateString(char *chars, int length, bool isConst) {
     ObjString_t *string = ALLOCATE_OBJ(ObjString_t, length + 1, OBJ_STRING);
     string->length = length;
+    string->isConst = isConst;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';
     return string;
 }
 
 ObjString_t *takeString(char *chars, int length) {
-    return allocateString(chars, length);
+    return allocateString(chars, length, false);
 }
 
 ObjString_t *copyString(const char *chars, int length) {
-    // char *heapChars = ALLOCATE(char, length + 1);
-    // memcpy(heapChars, chars, length);
-    // heapChars[length] = '\0';
-    return allocateString(chars, length);
+    return allocateString(chars, length, true);
 }
