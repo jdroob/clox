@@ -66,6 +66,7 @@ static void concatenate(void) {
     chars[length] = '\0';
 
     ObjString_t *string = takeString(chars, length);
+    FREE(char, chars);
     push(OBJ_VAL(string));
 }
 
@@ -86,7 +87,7 @@ Value_t pop(void) {
 
 void initVM(void) {
     #ifdef JRMALLOC
-    init();     // init jrmalloc
+    init(); // init jrmalloc
     #endif
     vm.chunk = NULL;
     vm.ip = 0;
@@ -120,8 +121,6 @@ void updateObjList(Obj_t *obj) {
 static InterpResult_t run(void) {
     #define READ_BYTE() (*vm.ip++)
     #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
-    // #define READ_LONG_CONSTANT() \
-    //     (vm.chunk->constants.values[(READ_BYTE() << 16) | (READ_BYTE() << 8) | READ_BYTE()])
     #define READ_LONG_CONSTANT() \
     ({ \
         uint8_t byte2 = READ_BYTE(); \
