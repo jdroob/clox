@@ -17,19 +17,31 @@ static Obj_t *allocateObject(size_t size, Obj_e objectType) {
     return obj;
 }        
 
-static ObjString_t *allocateString(char *chars, int length, bool isConst) {
+static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32_t hash) {
     ObjString_t *string = ALLOCATE_OBJ(ObjString_t, sizeof(ObjString_t) + length + 1, OBJ_STRING);
     string->length = length;
     string->isConst = isConst;
+    string->hash = hash;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';
     return string;
 }
 
+static uint32_t hashString(const char *key, int length) {
+    uint32_t hash = 2166136261u;
+    for (int i=0; i<length; ++i) {
+        hash ^= (uint8_t)key[i];
+        hash *= 1677719;
+    }
+    return hash;
+}
+
 ObjString_t *takeString(char *chars, int length) {
-    return allocateString(chars, length, false);
+    uint32_t hash = hashString(chars, length);
+    return allocateString(chars, length, false, hash);
 }
 
 ObjString_t *copyString(const char *chars, int length) {
-    return allocateString(chars, length, true);
+    uint32_t hash = hashString(chars, length);
+    return allocateString((char *)chars, length, true, hash);
 }

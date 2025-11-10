@@ -17,6 +17,7 @@ struct ObjString_t {
     Obj_t obj;
     int length;
     bool isConst;
+    uint32_t hash;
     char chars[];
 };
 
