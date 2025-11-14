@@ -17,6 +17,8 @@ typedef struct {
 
 void initTable(Table_t *table);
 void freeTable(Table_t *table);
-bool setTable(Table_t *table, ObjString_t *key, Value_t value);
+bool tableSet(Table_t *table, ObjString_t *key, Value_t value);
+bool tableDelete(Table_t *table, ObjString_t *key);
+bool tableGet(Table_t *table, ObjString_t *key, Value_t *value);
 
 #endif // CLOX_TABLE_H

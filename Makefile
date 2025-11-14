@@ -4,6 +4,7 @@ INCLUDES = include
 SRC = src
 OBJ = obj
 BIN = bin
+ARGS =
 CFLAGS = -Wall -g -Wno-sequence-point
 DEBUG_CFLAGS = -DDEBUG
 DEBUG_JRMALLOC_CFLAGS = -DDEBUG_JRMALLOC
