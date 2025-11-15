@@ -156,7 +156,7 @@ static void number(void) {
 }
 
 static void string(void) {
-    emitConstant(OBJ_VAL(copyString(parser.previous.start + 1, 
+    emitConstant(OBJ_VAL(makeString(parser.previous.start + 1, 
                                      parser.previous.length - 2)));
 }
 

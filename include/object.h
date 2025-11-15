@@ -30,7 +30,8 @@ static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
 }
 
-ObjString_t *takeString(char *chars, int length);   // create dynamic string
-ObjString_t *copyString(const char *chars, int length); // copy string from source
+ObjString_t *makeString(char *chars, int length);
+// ObjString_t *takeString(char *chars, int length);   // create dynamic string
+// ObjString_t *copyString(const char *chars, int length); // copy string from source
 
 # endif // CLOX_OBJ_H

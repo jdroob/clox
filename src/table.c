@@ -47,36 +47,37 @@ static Entry_t *findEntry(Entry_t *entries, int capacity, ObjString_t *key) {
 
 /**
  * Given a table and a (new) capacity:
- *  (i)   Allocate a new table of size capacity
- *  (ii)  Initialize key-value pairs in table to NULL / NIL_VAL
- *  (iii) Walk original table. For each non-NULL key, 
- *      (iii.1) Determine where in new table, key-value pair should be stored
+ *  (i)   Allocate a new entries array of size capacity
+ *  (ii)  Initialize key-value pairs in array to NULL / NIL_VAL
+ *  (iii) Walk original entries array. For each non-NULL key, 
+ *      (iii.1) Determine where in new array, key-value pair should be stored
  *      (iii.2) Store new key-value pair
  * 
- *  (iv) Free original table
- *  (v)  Set table's entries to new entries table  
+ *  (iv) Free original array
+ *  (v)  Set table's entries field to new entries array  
  */
 static void adjustCapacity(Table_t *table, int capacity) {
-    // 1. Allocate capacity entries and set to NULL
-    // 2. Fill in empty array
     Entry_t *entries = ALLOCATE(Entry_t, capacity);
     for (int i=0; i<capacity; ++i) {
         entries[i].key = NULL;
         entries[i].value = NIL_VAL;
     }
 
-    table->count = 0;
-    for (int i=0; i<capacity; ++i) {
-        Entry_t *entry = &table->entries[i];
-        if (entry->key == NULL) continue;
+    table->count = 0;   // reset count b/c we're not counting tombstones from prev
+    if (table->capacity != 0) {
+        for (int i=0; i<capacity; ++i) {
+            Entry_t *entry = &table->entries[i];
+            if (entry->key == NULL) continue;
 
-        Entry_t *dest = findEntry(entries, capacity, entry->key);   // find new bucket in new array
-        dest->key = entry->key;
-        dest->value = entry->value;
-        table->count++;
+            Entry_t *dest = findEntry(entries, capacity, entry->key);   // find new bucket in new array
+            dest->key = entry->key;
+            dest->value = entry->value;
+            table->count++;
+        }
+        FREE_ARRAY(Entry_t, table->entries, table->capacity);
     }
 
-    FREE_ARRAY(Entry_t, table->entries, table->capacity);
+    table->capacity = capacity;
     table->entries = entries;
 }
 
@@ -90,7 +91,7 @@ static void adjustCapacity(Table_t *table, int capacity) {
  * (iv)  Return the boolean result of whether the key is new.
  */
 bool tableSet(Table_t *table, ObjString_t *key, Value_t value) {
-    if (table->capacity + 1 < table->capacity * TABLE_MAX_LOAD) {
+    if (table->count + 1 > table->capacity * TABLE_MAX_LOAD) {
         int capacity = GROW_CAPACITY(table->capacity);
         adjustCapacity(table, capacity);
     }
@@ -129,12 +130,11 @@ bool tableDelete(Table_t *table, ObjString_t *key) {
     Entry_t *entry = findEntry(table->entries, table->capacity, key);
     if (entry->key == NULL) return false;   // Did not find entry to delete
 
-    // entry->key = copyString(TOMBSTONE, TOMBSTONE_LEN);
     // Tombstone
     entry->key = NULL;
     entry->value = BOOL_VAL(true);
 
-    // table->count--;  // Treat tombstones as occupied pseudo-occupied entries to avoid infinite loop during probing sequences
+    // table->count--;  // Treat tombstones as pseudo-occupied entries to avoid infinite loop during probing sequences
     return true;
 }
 
@@ -148,5 +148,21 @@ void tableAddAll(Table_t *src, Table_t *dst) {
         Entry_t *entry = &src->entries[i];
         if (entry->key == NULL) continue;
         tableSet(dst, entry->key, entry->value);
+    }
+}
+
+ObjString_t *tableFindString(Table_t *table, const char *chars, int length, uint32_t hash) {
+    if (table->count == 0) return NULL;
+
+    Entry_t *entry;
+    int index = hash % table->capacity;
+    for (;;) {
+        entry = &table->entries[index];
+        // Found non-tombstone empty entry
+        if (entry->key == NULL && IS_NIL(entry->value)) return NULL;
+        if (entry->key->length == length &&
+            entry->key->hash == hash &&
+            !memcmp(entry->key->chars, chars, length)) return entry->key;
+        index = (index + 1) % table->capacity;
     }
 }

@@ -24,6 +24,7 @@ static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32
     string->hash = hash;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';
+    tableSet(&vm.strings, string, NIL_VAL);
     return string;
 }
 
@@ -36,12 +37,23 @@ static uint32_t hashString(const char *key, int length) {
     return hash;
 }
 
-ObjString_t *takeString(char *chars, int length) {
+ObjString_t *makeString(char *chars, int length) {
     uint32_t hash = hashString(chars, length);
+    ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
+    if (interned != NULL) return interned;
     return allocateString(chars, length, false, hash);
 }
 
-ObjString_t *copyString(const char *chars, int length) {
-    uint32_t hash = hashString(chars, length);
-    return allocateString((char *)chars, length, true, hash);
-}
+// ObjString_t *takeString(char *chars, int length) {
+//     uint32_t hash = hashString(chars, length);
+//     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
+//     if (interned != NULL) return interned;
+//     return allocateString(chars, length, false, hash);
+// }
+
+// ObjString_t *copyString(const char *chars, int length) {
+//     uint32_t hash = hashString(chars, length);
+//     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
+//     if (interned != NULL) return interned;
+//     return allocateString((char *)chars, length, true, hash);
+// }

@@ -65,7 +65,7 @@ static void concatenate(void) {
     memcpy(chars + a->length, b->chars, b->length);
     chars[length] = '\0';
 
-    ObjString_t *string = takeString(chars, length);
+    ObjString_t *string = makeString(chars, length);
     FREE(char, chars);
     push(OBJ_VAL(string));
 }
@@ -98,11 +98,13 @@ void initVM(void) {
     vm.stack = ALLOCATE(Value_t, STACK_MAX);
     #endif
     vm.objects = NULL;
+    initTable(&vm.strings);
     resetStack();
 }
 
 void freeVM(void) {
     freeObjects();
+    freeTable(&vm.strings);
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
 }
 
