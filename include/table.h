@@ -5,7 +5,7 @@
 #include "value.h"
 
 typedef struct {
-    ObjString_t *key;
+    Value_t key;
     Value_t value;
 } Entry_t;
 

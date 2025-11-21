@@ -24,7 +24,7 @@ static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32
     string->hash = hash;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';
-    tableSet(&vm.strings, string, NIL_VAL);
+    tableSet(&vm.strings, OBJ_VAL(string), NIL_VAL);
     return string;
 }
 

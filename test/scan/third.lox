@@ -6,7 +6,7 @@
 */
 //"1 + 2 = ${1+2}"
 //"john" == "john"
-"john" + "john"
+"john" + "john" + "bek"
 //1+1
 //"${"I${"C"}"}"
 //"Nested ${"interpolation?! Are you ${"mad?!"}"}"
