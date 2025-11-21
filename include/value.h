@@ -10,6 +10,7 @@ typedef enum {
     VAL_BOOL,
     VAL_OBJ,
     VAL_NIL,
+    VAL_EMPTY, // Internal empty type
 } ValueType_e;
 
 typedef struct {
@@ -25,6 +26,7 @@ typedef struct {
 #define NUMBER_VAL(value) ((Value_t){.type = VAL_NUM, .as.num = value})
 #define OBJ_VAL(object)   ((Value_t){.type = VAL_OBJ, .as.obj = object})
 #define NIL_VAL           ((Value_t){.type = VAL_NIL, .as.num = 0})
+#define EMPTY_VAL         ((Value_t){.type = VAL_EMPTY, .as.num = 0})
 
 #define AS_BOOL(value)   ((value).as.boolean)
 #define AS_NUMBER(value) ((value).as.num)
@@ -34,6 +36,7 @@ typedef struct {
 #define IS_NUMBER(value) ((value).type == VAL_NUM)
 #define IS_OBJ(value)    ((value).type == VAL_OBJ)
 #define IS_NIL(value)    ((value).type == VAL_NIL)
+#define IS_EMPTY(value)  ((value).type == VAL_EMPTY)
 
 typedef struct {
     size_t capacity;

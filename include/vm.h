@@ -31,5 +31,6 @@ void freeVM(void);
 InterpResult_t interpret(const char *source);
 void push(Value_t value);
 Value_t pop(void);
+bool valuesEqual(Value_t a, Value_t b);
 
 #endif // CLOX_VM_H

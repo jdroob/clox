@@ -12,6 +12,7 @@ static void resetStack(void) {
     vm.stackTop = vm.stack;
 }
 
+void freeVM(void);
 static void runtimeError(const char *format, ...) {
     va_list args;
     va_start(args, format);
@@ -23,6 +24,7 @@ static void runtimeError(const char *format, ...) {
     int line = getLine(vm.chunk, instructionOffset);
     fprintf(stderr, "[line %d] in script\n", line);
     resetStack();
+    freeVM();
 }
 
 static Value_t peek(int distance) {
@@ -37,21 +39,23 @@ static bool isTruthy(Value_t value) {
     return (IS_NUMBER(value) ? value.as.num != 0 : IS_BOOL(value) ? AS_BOOL(value) : false);
 }
 
-static bool valuesEqual(Value_t a, Value_t b) {
+bool valuesEqual(Value_t a, Value_t b) {
     if (a.type != b.type) return false;
     switch (a.type) {
         case VAL_BOOL: return AS_BOOL(a) == AS_BOOL(b);
         case VAL_NUM:  return AS_NUMBER(a) == AS_NUMBER(b);
         case VAL_NIL:  return IS_NIL(b);
+        case VAL_EMPTY: return true;
         case VAL_OBJ:  {
             switch (OBJ_TYPE(a))
             {
                 case OBJ_STRING:
                     return AS_STRING(a)->length == AS_STRING(b)->length &&
+                           AS_STRING(a)->hash == AS_STRING(b)->hash &&
                             !memcmp(AS_CSTRING(a), AS_CSTRING(b), AS_STRING(a)->length);
             }
         }
-        default: return false;  // unreachable
+        default: return false;
     }
 }
 
