@@ -69,6 +69,10 @@ static void errorAtCurrent(const char *msg) {
     errorAt(&parser.current, msg);
 }
 
+static bool check(TokenType_e type) {
+    return parser.current.type == type;
+}
+
 static void advance(void) {
     parser.previous = parser.current;
 
@@ -77,6 +81,14 @@ static void advance(void) {
         if (parser.current.type != TOKEN_ERROR) break;
         errorAtCurrent(parser.current.start);
     }
+}
+
+static bool match(TokenType_e type) {
+    if (check(type)) {
+        advance();
+        return true;
+    }
+    return false;
 }
 
 static void consume(TokenType_e type, const char *msg) {
@@ -286,6 +298,8 @@ ParseRule_t rules[] = {
     [TOKEN_NOT_FOUND]       =  {NULL, NULL, PREC_NONE},
 };
 
+static void expression(void);
+static void declaration(void);
 static void parsePrecedence(Precedence_t precedence) {
     advance();
     ParseFn_t prefixRule = getRule(parser.previous.type)->prefix;
@@ -305,6 +319,22 @@ static void parsePrecedence(Precedence_t precedence) {
 
 static ParseRule_t *getRule(TokenType_e type) {
     return &rules[type];
+}
+
+void printStatement(void) {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expected a ';'.");
+    emitByte(OP_PRINT);
+}
+
+static void statement(void) {
+    if (match(TOKEN_PRINT)) {
+        printStatement();
+    }
+}
+
+static void declaration(void) {
+    statement();
 }
 
 bool compile(const char *source, Chunk_t *chunk) {
@@ -331,8 +361,11 @@ bool compile(const char *source, Chunk_t *chunk) {
     #endif
 
     advance();
-    expression();
-    consume(TOKEN_EOF, "Expect end or expression.");
+//    expression();
+//    consume(TOKEN_EOF, "Expect end or expression.");
+    while (!match(TOKEN_EOF)) {
+        declaration();
+    }
     endCompiler();
 
     #ifdef DEBUG_CHUNK

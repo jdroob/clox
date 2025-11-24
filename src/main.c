@@ -37,6 +37,25 @@ static char *readFile(char *filename) {
     return buffer;
 }
 
+static char *trim(const char *line) {
+    /**
+     * Trim leading whitespace
+     */
+    char *curr = (char *)line;
+    while (*curr && 
+          (*curr == ' '  ||
+           *curr == '\t' || 
+           *curr == '\n' ||
+           *curr == '\r')) {
+        curr++;
+    }
+    return curr;
+}
+
+static bool endREPL(char *start) {
+    return start && !start[0] && !strlen(start);
+}
+
 static void repl(void) {
     char line[1024] = {0};
     for (;;) {
@@ -45,9 +64,9 @@ static void repl(void) {
             printf("\n");
             break;
         }
+        if (endREPL(trim(line))) return;
+        interpret(line);
     }
-
-    interpret(line);
 }
 
 static void runFile(char *path) {
