@@ -123,9 +123,9 @@ static void emitLongConstant(int idx) {
     //         index =       0    0    0    1    0    1
 
     emitByte(OP_CONSTANT_LONG);
-    emitByte(((unsigned)idx >> 16) & 0x000000FF);
-    emitByte(((unsigned)idx >> 8) & 0x000000FF);
-    emitByte((unsigned)idx & 0x000000FF);
+    emitByte(((unsigned)idx >> 16) & MASK);
+    emitByte(((unsigned)idx >> 8) & MASK);
+    emitByte((unsigned)idx & MASK);
 }
 
 static void endCompiler(void) {
@@ -327,9 +327,17 @@ void printStatement(void) {
     emitByte(OP_PRINT);
 }
 
+static void expressionStatement() {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expected a ';'.");
+    emitByte(OP_POP);
+}
+
 static void statement(void) {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else {
+        expressionStatement();
     }
 }
 
@@ -364,6 +372,11 @@ bool compile(const char *source, Chunk_t *chunk) {
 //    expression();
 //    consume(TOKEN_EOF, "Expect end or expression.");
     while (!match(TOKEN_EOF)) {
+        /**
+         * Compile Lox script.
+         * - Convert sequence of tokens to sequence of declarations
+         * - Sequence of declarations encoded in bytecode
+         */
         declaration();
     }
     endCompiler();

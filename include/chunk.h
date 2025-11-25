@@ -7,6 +7,7 @@
 
 #define CONSTANT_POOL_LONG_LEN_MAX 0x1000000
 #define CONSTANT_POOL_SHORT_LEN_MAX 256
+#define MASK 0x000000FF
 
 typedef enum {
     OP_CONSTANT,
@@ -30,6 +31,7 @@ typedef enum {
     OP_MULTIPLY,
     OP_DIVIDE,
     OP_PRINT,
+    OP_POP,
     OP_RETURN,
 } OpCode_e;
 

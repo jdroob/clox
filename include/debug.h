@@ -4,6 +4,8 @@
 #include "common.h"
 #include "chunk.h"
 
+extern bool appendNewline;
+
 void disassembleChunk(Chunk_t *chunk, const char *name);
 unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset);
 void printValue(Value_t val);

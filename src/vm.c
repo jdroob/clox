@@ -143,6 +143,7 @@ static InterpResult_t run(void) {
     for (;;) {
         uint8_t instruction;
         #ifdef DEBUG
+        appendNewline = false;
         for (Value_t *slot = vm.stack; slot < vm.stackTop; slot++) {
             printf("[ ");
             printValue(*slot);
@@ -150,6 +151,7 @@ static InterpResult_t run(void) {
         }
         puts("\n");
         disassembleInstruction(vm.chunk, (unsigned)(vm.ip - vm.chunk->code));
+        appendNewline = true;
         #endif
         switch(instruction = READ_BYTE()) {
             case OP_RETURN: {
@@ -264,36 +266,12 @@ static InterpResult_t run(void) {
                 }
             }
             case OP_ENDTERNARY: break;
+            case OP_POP: {
+                pop();
+                break;
+            }
             case OP_PRINT: {
                 printValue(pop());
-                // Value_t value = peek(0);
-                // switch (value.type) {
-                //     case VAL_BOOL: {
-                //         printf("%u\n", AS_BOOL(value));
-                //         break;
-                //     }
-                //     case VAL_NUM: {
-                //         printf("%.02f\n", AS_NUMBER(value));
-                //         break;
-                //     }
-                //     case VAL_OBJ: {
-                //         Obj_t *obj = AS_OBJ(value);
-                //         switch (obj->type) {
-                //             case OBJ_STRING: {
-                //                 printf("%s\n", AS_CSTRING(value));
-                //                 break;
-                //             }
-                //             default: {
-                //                 runtimeError("Unknown object type: %d\n", obj->type);
-                //                 break;
-                //             }
-                //         }
-                //     }
-                //     default: {
-                //         runtimeError("Unknown value type: %d\n", value.type);
-                //         break;
-                //     }
-                // }
                 break;
             }
             default:

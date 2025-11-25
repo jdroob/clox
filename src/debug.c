@@ -25,7 +25,10 @@
      (instruction) == OP_CONSTANT ? "OP_CONSTANT" : \
      (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
      (instruction) == OP_PRINT ? "OP_PRINT" : \
+     (instruction) == OP_POP ? "OP_POP" : \
      "UNKNOWN_INSTRUCTION")
+
+bool appendNewline = true;
 
 static unsigned int simpleInstruction(const char *name, uint8_t offset) {
     printf("%s\n", name);
@@ -83,6 +86,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_NIL:
         case OP_NOT:
         case OP_PRINT:
+        case OP_POP:
             return simpleInstruction(name, offset);
         case OP_CONSTANT:
             return constantInstruction(name, chunk, offset);
@@ -97,7 +101,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
 void printObject(Value_t val) {
     switch (OBJ_TYPE(val)) {
         case OBJ_STRING:
-            printf("\"%s\"\n", AS_CSTRING(val));
+            printf("\"%s\"", AS_CSTRING(val));
+            if (appendNewline) printf("\n");
             break;
     }
 }
@@ -105,13 +110,16 @@ void printObject(Value_t val) {
 void printValue(Value_t val) {
     switch(val.type) {
         case VAL_BOOL:
-            printf(AS_BOOL(val) ? "true\n" : "false\n");
+            printf(AS_BOOL(val) ? "true" : "false");
+            if (appendNewline) printf("\n");
             break;
         case VAL_NIL:
-            printf("nil\n");
+            printf("nil");
+            if (appendNewline) printf("\n");
             break;
         case VAL_NUM:
-            printf("%g\n", AS_NUMBER(val));
+            printf("%g", AS_NUMBER(val));
+            if (appendNewline) printf("\n");
             break;
         case VAL_OBJ: printObject(val);
     }
