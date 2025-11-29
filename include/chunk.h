@@ -32,6 +32,10 @@ typedef enum {
     OP_DIVIDE,
     OP_PRINT,
     OP_POP,
+    OP_DEFINE_GLOBAL,
+    OP_DEFINE_GLOBAL_LONG,
+    OP_ACCESS_GLOBAL,
+    OP_ACCESS_GLOBAL_LONG,
     OP_RETURN,
 } OpCode_e;
 
@@ -46,7 +50,7 @@ typedef struct {
 void initChunk(Chunk_t *chunk);
 void writeChunk(Chunk_t *chunk, uint8_t byte, int line);
 void freeChunk(Chunk_t *chunk);
-void writeConstant(Chunk_t *chunk, Value_t value, int line);
+unsigned writeConstant(Chunk_t *chunk, Value_t value, int line);
 int addConstant(Chunk_t *chunk, Value_t value);
 int getLine(Chunk_t *chunk, unsigned int offset);
 

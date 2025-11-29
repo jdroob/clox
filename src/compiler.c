@@ -172,6 +172,33 @@ static void string(void) {
                                      parser.previous.length - 2)));
 }
 
+static void identifier(void) {
+    int idx = -1;
+    for (unsigned i=0; i<currentChunk()->constants.count; i++) {
+        Value_t current = currentChunk()->constants.values[i];
+        if (IS_STRING(current) &&
+            !memcmp(AS_CSTRING(current), parser.previous.start, parser.previous.length)) {
+            idx = i;
+            break;
+        }
+    }
+
+    if (idx == -1) {
+        fprintf(stderr, "%s is used but never declared.\n", parser.previous.start);
+        exit(EXIT_FAILURE);
+    }
+
+    if (idx < CONSTANT_POOL_SHORT_LEN_MAX) {
+        emitBytes(OP_ACCESS_GLOBAL, (uint8_t)idx);
+    } else {
+        emitByte(OP_ACCESS_GLOBAL_LONG);
+        emitByte((idx >> 16) & MASK);
+        emitByte((idx >> 8) & MASK);
+        emitByte(idx & MASK);
+    }
+
+}
+
 static void grouping(void) {
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
@@ -271,7 +298,7 @@ ParseRule_t rules[] = {
     [TOKEN_BITSHIFT_LEFT]   =  {NULL, binary, PREC_BITSHIFT},
     [TOKEN_BITSHIFT_RIGHT]  =  {NULL, binary, PREC_BITSHIFT},
     [TOKEN_STAR_STAR]       =  {NULL, binary, PREC_EXP},
-    [TOKEN_IDENTIFIER]      =  {NULL, NULL, PREC_NONE},
+    [TOKEN_IDENTIFIER]      =  {identifier, NULL, PREC_NONE},
     [TOKEN_STRING]          =  {string, NULL, PREC_NONE},
     [TOKEN_INTERPOLATION]   =  {NULL, NULL, PREC_NONE},
     [TOKEN_NUMBER]          =  {number, NULL, PREC_NONE},
@@ -321,16 +348,82 @@ static ParseRule_t *getRule(TokenType_e type) {
     return &rules[type];
 }
 
-void printStatement(void) {
+static void synchronize(void) {
+    parser.panicMode = false;
+    while (!match(TOKEN_EOF)) {
+        if (match(TOKEN_SEMICOLON)) return;
+        switch (parser.current.type) {
+            case TOKEN_CLASS:
+            case TOKEN_FOR:
+            case TOKEN_IF:
+            case TOKEN_FUN:
+            case TOKEN_VAR:
+            case TOKEN_WHILE:
+            case TOKEN_PRINT:
+            case TOKEN_RETURN:
+                return;
+            default:
+                ; // do nothing
+        }
+        advance();
+    }
+}
+
+static void printStatement(void) {
     expression();
     consume(TOKEN_SEMICOLON, "Expected a ';'.");
     emitByte(OP_PRINT);
 }
 
-static void expressionStatement() {
+static void expressionStatement(void) {
     expression();
     consume(TOKEN_SEMICOLON, "Expected a ';'.");
     emitByte(OP_POP);
+}
+
+static unsigned makeConstant(Value_t value) {
+    int idx = addConstant(currentChunk(), value);
+    if (idx >= CONSTANT_POOL_LONG_LEN_MAX) {
+        fprintf(stderr, "Constant pool is too large.");
+        exit(EXIT_FAILURE);
+    }
+
+    return (unsigned)idx;
+}
+
+static unsigned identifierConstant(Token_t *identifier) {
+    return makeConstant(
+        OBJ_VAL(makeString(identifier->start, identifier->length))
+    );
+}
+
+static unsigned parseVariableName(const char *errMsg) {
+    consume(TOKEN_IDENTIFIER, "Expect an indentifier");
+    return identifierConstant(&parser.previous);
+}
+
+static void defineVariable(unsigned global) {
+    if (global < CONSTANT_POOL_SHORT_LEN_MAX) {
+        emitBytes(OP_DEFINE_GLOBAL, (uint8_t)global);
+    } else {
+        emitByte(OP_DEFINE_GLOBAL_LONG);
+        emitByte((global >> 16) & MASK);
+        emitByte((global >> 8) & MASK);
+        emitByte(global & MASK);
+    }
+}
+
+static void varDeclaration(void) {
+    unsigned global = parseVariableName("Expect a variable name");
+
+    if (match(TOKEN_EQUAL)) {
+        expression();   // <- a value will be pushed to stack
+    } else {
+        emitByte(OP_NIL);   // <- NULL will be pushed to stack
+    }
+
+    consume(TOKEN_SEMICOLON, "Expect a ';'.");
+    defineVariable(global);
 }
 
 static void statement(void) {
@@ -342,7 +435,13 @@ static void statement(void) {
 }
 
 static void declaration(void) {
-    statement();
+    if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        statement();
+    }
+
+    if (parser.panicMode) synchronize();
 }
 
 bool compile(const char *source, Chunk_t *chunk) {
@@ -369,8 +468,6 @@ bool compile(const char *source, Chunk_t *chunk) {
     #endif
 
     advance();
-//    expression();
-//    consume(TOKEN_EOF, "Expect end or expression.");
     while (!match(TOKEN_EOF)) {
         /**
          * Compile Lox script.

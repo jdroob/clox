@@ -21,7 +21,7 @@ void writeChunk(Chunk_t *chunk, uint8_t byte, int line) {
     writeLineMap(&chunk->lines, line);
 }
 
-void writeConstant(Chunk_t *chunk, Value_t value, int line) {
+unsigned writeConstant(Chunk_t *chunk, Value_t value, int line) {
     if (chunk->constants.capacity >= CONSTANT_POOL_LONG_LEN_MAX) {
         fprintf(stderr, "Constant pool is too large.");
         exit(EXIT_FAILURE);
@@ -30,7 +30,7 @@ void writeConstant(Chunk_t *chunk, Value_t value, int line) {
     if (chunk->constants.count <= CONSTANT_POOL_SHORT_LEN_MAX) {
         writeChunk(chunk, OP_CONSTANT, line);
         writeChunk(chunk, idx, line);
-        return;
+        return (unsigned)idx;
     }
 
     //    3 least significant bytes of idx must be written to bytecode
@@ -42,6 +42,8 @@ void writeConstant(Chunk_t *chunk, Value_t value, int line) {
     writeChunk(chunk, ((unsigned)idx  >> 16) & MASK, line);    // fun fact: this is big endian
     writeChunk(chunk, ((unsigned)idx  >> 8) & MASK, line);
     writeChunk(chunk, (unsigned)idx & MASK, line);
+
+    return (unsigned)idx;
 }
 
 int addConstant(Chunk_t *chunk, Value_t value) {

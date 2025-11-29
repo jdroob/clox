@@ -7,7 +7,9 @@
 //print("1 + 2 = ${1+2}\nSorry :( no escape seqs or interpolations... yet...");
 //print("john" == "john");
 //print("john" + "john" + "bek");
-print(1+1);
-1+1;
+//print(1+1);
+//1+1;
 //print("${"I${"C"}"}");
 //"Nested ${"interpolation?! Are you ${"mad?!"}"}"
+var a = 4;
+print(a + a);

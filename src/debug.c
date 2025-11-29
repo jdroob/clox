@@ -26,6 +26,10 @@
      (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
      (instruction) == OP_PRINT ? "OP_PRINT" : \
      (instruction) == OP_POP ? "OP_POP" : \
+     (instruction) == OP_DEFINE_GLOBAL ? "OP_DEFINE_GLOBAL" : \
+     (instruction) == OP_ACCESS_GLOBAL ? "OP_ACCESS_GLOBAL" : \
+     (instruction) == OP_DEFINE_GLOBAL_LONG ? "OP_DEFINE_GLOBAL_LONG" : \
+     (instruction) == OP_ACCESS_GLOBAL_LONG ? "OP_ACCESS_GLOBAL_LONG" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -89,8 +93,12 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_POP:
             return simpleInstruction(name, offset);
         case OP_CONSTANT:
+        case OP_DEFINE_GLOBAL:
+        case OP_ACCESS_GLOBAL:
             return constantInstruction(name, chunk, offset);
         case OP_CONSTANT_LONG:
+        case OP_DEFINE_GLOBAL_LONG:
+        case OP_ACCESS_GLOBAL_LONG:
             return longConstantInstruction(name, chunk, offset);
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
