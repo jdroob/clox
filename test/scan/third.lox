@@ -11,5 +11,10 @@
 //1+1;
 //print("${"I${"C"}"}");
 //"Nested ${"interpolation?! Are you ${"mad?!"}"}"
-var a = 4;
-print(a + a);
+//var a = 4;
+//print(a + a);
+var beverage = "coffee";
+print(beverage);
+//var breakfast = "eggs";
+//print(" " + "hi");
+//print(breakfast + " and " + beverage); 

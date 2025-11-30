@@ -112,6 +112,17 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
     emitByte(byte2);
 }
 
+static void emitVarLenInstr(unsigned idx, unsigned shortThreshold, uint8_t instr0, uint8_t instr1) {
+    if (idx < shortThreshold) {
+        emitBytes(instr0, (uint8_t)idx);
+    } else {
+        emitByte(instr1);
+        emitByte((idx >> 16) & MASK);
+        emitByte((idx >> 8) & MASK);
+        emitByte(idx & MASK);
+    }
+}
+
 static void emitReturn(void) {
     emitByte(OP_RETURN);
 }
@@ -172,31 +183,14 @@ static void string(void) {
                                      parser.previous.length - 2)));
 }
 
-static void identifier(void) {
-    int idx = -1;
-    for (unsigned i=0; i<currentChunk()->constants.count; i++) {
-        Value_t current = currentChunk()->constants.values[i];
-        if (IS_STRING(current) &&
-            !memcmp(AS_CSTRING(current), parser.previous.start, parser.previous.length)) {
-            idx = i;
-            break;
-        }
-    }
+static unsigned identifierConstant(Token_t *identifier);
+static void namedVariable(Token_t name) {
+    unsigned idx = identifierConstant(&name);   // <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
+    emitVarLenInstr(idx, CONSTANT_POOL_SHORT_LEN_MAX, OP_ACCESS_GLOBAL, OP_ACCESS_GLOBAL_LONG);
+}
 
-    if (idx == -1) {
-        fprintf(stderr, "%s is used but never declared.\n", parser.previous.start);
-        exit(EXIT_FAILURE);
-    }
-
-    if (idx < CONSTANT_POOL_SHORT_LEN_MAX) {
-        emitBytes(OP_ACCESS_GLOBAL, (uint8_t)idx);
-    } else {
-        emitByte(OP_ACCESS_GLOBAL_LONG);
-        emitByte((idx >> 16) & MASK);
-        emitByte((idx >> 8) & MASK);
-        emitByte(idx & MASK);
-    }
-
+static void variable(void) {
+    namedVariable(parser.previous);
 }
 
 static void grouping(void) {
@@ -298,7 +292,7 @@ ParseRule_t rules[] = {
     [TOKEN_BITSHIFT_LEFT]   =  {NULL, binary, PREC_BITSHIFT},
     [TOKEN_BITSHIFT_RIGHT]  =  {NULL, binary, PREC_BITSHIFT},
     [TOKEN_STAR_STAR]       =  {NULL, binary, PREC_EXP},
-    [TOKEN_IDENTIFIER]      =  {identifier, NULL, PREC_NONE},
+    [TOKEN_IDENTIFIER]      =  {variable, NULL, PREC_NONE},
     [TOKEN_STRING]          =  {string, NULL, PREC_NONE},
     [TOKEN_INTERPOLATION]   =  {NULL, NULL, PREC_NONE},
     [TOKEN_NUMBER]          =  {number, NULL, PREC_NONE},
@@ -403,14 +397,7 @@ static unsigned parseVariableName(const char *errMsg) {
 }
 
 static void defineVariable(unsigned global) {
-    if (global < CONSTANT_POOL_SHORT_LEN_MAX) {
-        emitBytes(OP_DEFINE_GLOBAL, (uint8_t)global);
-    } else {
-        emitByte(OP_DEFINE_GLOBAL_LONG);
-        emitByte((global >> 16) & MASK);
-        emitByte((global >> 8) & MASK);
-        emitByte(global & MASK);
-    }
+    emitVarLenInstr(global, CONSTANT_POOL_SHORT_LEN_MAX, OP_DEFINE_GLOBAL, OP_DEFINE_GLOBAL_LONG);
 }
 
 static void varDeclaration(void) {

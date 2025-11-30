@@ -246,3 +246,50 @@
         Donezo
 
     ## Chapter 18: Types of Values 
+
+
+    ## Hash table & Global Variables
+    - tombstone: when we "delete" an entry from a hash table,
+        we set the key to EMPTY and value to 'true' like so:
+
+        ```
+         // Tombstone
+        entry->key = EMPTY_VAL;
+        entry->value = BOOL_VAL(true);
+        ```
+
+        We also DON'T decrement table->count.
+        The reason for this is we want tombstones to count as
+        an a "non-empty" entry during linear probing. 
+        Linear probing stops when a true empty slot is found.
+        If a tombstone was found along the way, we use that instead.
+        (re-using tombstones is efficient! :))
+        This implies that we shouldn't increase the count when a tombstone is found (b/c we never decremented the count when we tombstonified the entry).
+
+        The "con" to not decreementing count is that we need to re-size the array more frequntly. The "pro" is linear probing doesn't break b/c we'll always have empty slots :)
+
+    11/29/2025:
+        BUG:
+            - in table.c::adjustCapacity(), the idea is iterate through ALL
+              entries in ORIGINAL table and copy over non-empty entries to 
+              appropriate index in NEW table
+            - The NUMBER OF TIMES I was iterating was lining up with the new
+              table (bigger) instead of the old table
+            - IOW - an INDEX OUT OF BOUND ERROR!
+
+        NOTE:
+            - Today I learned, the constant pool is a pool for constants :) lol
+            - No but seriously, consider:
+                ```
+                    var a = "john";
+                    print(a);   // john
+                ```
+            - These statements yields the bytecode sequence:
+                OP_CONSTANT  1  ; string "john" stored in const pool at idx 1
+                OP_DEFINE_GLOBAL 0 ; string "a" stored in const pool at idx 0
+                OP_ACCESS_GLOBAL 2 ; duplicate string "a" stored in const pool at idx 2; used as key to push value to stack
+                OP_PRINT
+
+            - A key insight here is: rather than iterating through the constant table to find the index of the constant array with the value "a" (just so we can use that as a key) - we just add another copy of the string "a" to the constant pool and use it as a key when needed. The former approach could really slow down the interpreter (O(N) for each variable usage??). The purpose of the constants in the constant pool are simply to use the values encoded in the source program when it's time to use them. Uniqueness does not matter here - we're not using maps - just a list of values.
+
+            

@@ -307,12 +307,11 @@ static InterpResult_t run(void) {
                     name = READ_STRING_LONG();
                 }
                 Value_t value;
-                bool found = tableGet(&vm.globals, OBJ_VAL(name), &value);
-                if (found) {
-                    push(value);
-                } else {
+                if (!tableGet(&vm.globals, OBJ_VAL(name), &value)) {
                     runtimeError("Variable: %s not found.\n", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
                 }
+                push(value);
                 break;
             }
             default:

@@ -96,7 +96,7 @@ static void adjustCapacity(Table_t *table, int capacity) {
 
     table->count = 0;   // reset count b/c we're not counting tombstones from prev
     if (table->capacity != 0) {
-        for (int i=0; i<capacity; ++i) {
+        for (int i=0; i<table->capacity; ++i) {
             Entry_t *entry = &table->entries[i];
             if (IS_EMPTY(entry->key)) continue;
 
@@ -193,11 +193,11 @@ ObjString_t *tableFindString(Table_t *table, const char *chars, int length, uint
         if (IS_EMPTY(entry->key) && IS_NIL(entry->value)) return NULL;
         
         if (IS_STRING(entry->key)) {    // Avoid collisions b/w different types
-            ObjString_t *string = (ObjString_t *)entry->key.as.obj;
+            ObjString_t *string = AS_STRING(entry->key);
             if (string->length == length &&
                 string->hash == hash &&
                 !memcmp(string->chars, chars, length)) {
-                    ObjString_t *string = AS_STRING(entry->key);
+                    // ObjString_t *string = AS_STRING(entry->key);
                     return string;
                 }
         }
