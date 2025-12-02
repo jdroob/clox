@@ -36,6 +36,8 @@ typedef enum {
     OP_DEFINE_GLOBAL_LONG,
     OP_ACCESS_GLOBAL,
     OP_ACCESS_GLOBAL_LONG,
+    OP_SET_GLOBAL,
+    OP_SET_GLOBAL_LONG,
     OP_RETURN,
 } OpCode_e;
 

@@ -117,7 +117,7 @@ static void adjustCapacity(Table_t *table, int capacity) {
  * (i)   Determine if the key is already present in table. 
  *        If not, increment table's count.
  * (ii)  findEntry returns a pointer to location in table where 
- *        new key-value pair should be stored (i.e. findEntry is where linear probing happens).
+ *        new key-value pair should be stored (findEntry is where linear probing actually happens).
  * (iii) Using the result of findEntry, store the key-value pair.
  * (iv)  Return the boolean result of whether the key is new.
  */

@@ -314,6 +314,39 @@ static InterpResult_t run(void) {
                 push(value);
                 break;
             }
+            case OP_SET_GLOBAL:
+            case OP_SET_GLOBAL_LONG: {
+                ObjString_t *name;
+                if (instruction == OP_SET_GLOBAL) {
+                    name = READ_STRING();
+                } else {
+                    name = READ_STRING_LONG();
+                }
+
+                /**
+                 * Like C, the expression <identifier> = <value>
+                 *  produces the value <value>. Thus, <value> must be
+                 *  at the top of the stack after the assignment is complete.
+                 *  We *could* do the below (pop, add to table, push)... but why?
+                 *  Instead, just peek when you add entry to globals table and leave
+                 *  stack alone (since that's the net effect anyway)
+                 */
+                
+                // Value_t value = pop();
+                // if (tableSet(&vm.globals, OBJ_VAL(name), value)) {
+                //     tableDelete(&vm.globals, OBJ_VAL(name));
+                //     runtimeError("Variable: %s not declared.\n", name->chars);
+                //     return INTERPRET_RUNTIME_ERROR;
+                // }
+                // push(value);
+
+                if (tableSet(&vm.globals, OBJ_VAL(name), peek(0))) {
+                    tableDelete(&vm.globals, OBJ_VAL(name));
+                    runtimeError("Variable: %s not declared.\n", name->chars);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
+            }
             default:
         }
     }

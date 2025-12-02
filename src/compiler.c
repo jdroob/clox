@@ -33,7 +33,7 @@ typedef enum {
     PREC_PRIMARY
 } Precedence_t;
 
-typedef void (* ParseFn_t)(void);
+typedef void (* ParseFn_t)(bool);
 
 typedef struct {
     ParseFn_t prefix;
@@ -48,16 +48,16 @@ static void errorAt(Token_t *token, const char *msg) {
     if (parser.panicMode) return;   // suppress follow-on errors while in panic mode
     parser.panicMode = true;
     fprintf(stderr, "[line %d] Error", token->line);
-
     if (token->type == TOKEN_EOF) {
         fprintf(stderr, " at end.");
     } else if (token->type == TOKEN_ERROR) {
         // Nothing
     } else {
-        fprintf(stderr, " at %*.s", token->length, token->start);
+        fprintf(stderr, " at '%.*s'", token->length, token->start);
     }
 
-    fprintf(stderr, ": %s\n", msg);
+    fprintf(stderr, " : %s\n", msg);
+    fflush(stderr);
     parser.hadError = true;
 }
 
@@ -164,7 +164,7 @@ static void expression(void) {
     parsePrecedence(PREC_COMMA);
 }
 
-static void number(void) {
+static void number(bool canAssign) {
     double value = strtod(parser.previous.start, NULL);
     double tolerance = 1e-10;
     if (fabs(value) <= tolerance) {
@@ -178,27 +178,38 @@ static void number(void) {
     }
 }
 
-static void string(void) {
+static void string(bool canAssign) {
     emitConstant(OBJ_VAL(makeString(parser.previous.start + 1, 
                                      parser.previous.length - 2)));
 }
 
 static unsigned identifierConstant(Token_t *identifier);
-static void namedVariable(Token_t name) {
+static void namedVariable(Token_t name, bool canAssign) {
     unsigned idx = identifierConstant(&name);   // <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
-    emitVarLenInstr(idx, CONSTANT_POOL_SHORT_LEN_MAX, OP_ACCESS_GLOBAL, OP_ACCESS_GLOBAL_LONG);
+    
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression();
+        emitVarLenInstr(idx, CONSTANT_POOL_SHORT_LEN_MAX, OP_SET_GLOBAL, OP_SET_GLOBAL_LONG);
+    } else {
+        emitVarLenInstr(idx, CONSTANT_POOL_SHORT_LEN_MAX, OP_ACCESS_GLOBAL, OP_ACCESS_GLOBAL_LONG);
+    }
 }
 
-static void variable(void) {
-    namedVariable(parser.previous);
+static void variable(bool canAssign) {
+    namedVariable(parser.previous, canAssign);
 }
 
-static void grouping(void) {
+static void grouping(bool canAssign) {
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-static void unary(void) {
+static void comma(bool canAssign) {
+    expression();
+    consume(TOKEN_COMMA, "Expect ',' after expression.");
+}
+
+static void unary(bool canAssign) {
     TokenType_e operatorType = parser.previous.type;
 
     // Compile the operand
@@ -211,7 +222,7 @@ static void unary(void) {
     }
 }
 
-static void binary(void) {
+static void binary(bool canAssign) {
     TokenType_e operatorType = parser.previous.type;
     ParseRule_t *rule = getRule(operatorType);
     parsePrecedence((Precedence_t)rule->precedence + 1);
@@ -236,20 +247,20 @@ static void binary(void) {
     }
 }
 
-static void ternary1(void) {
+static void ternary1(bool canAssign) {
     // we just scanned a question mark...
     emitByte(OP_QMARK);
     expression();   // true branch
 }
 
-static void ternary2(void) {
+static void ternary2(bool canAssign) {
     // we just scanned a colon...
     emitByte(OP_COLON);
     expression();   // false branch;
     emitByte(OP_ENDTERNARY);
 }
 
-static void literal(void) {
+static void literal(bool canAssign) {
     switch (parser.previous.type) {
         case TOKEN_TRUE: emitByte(OP_TRUE); break;
         case TOKEN_FALSE: emitByte(OP_FALSE); break;
@@ -266,7 +277,7 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACK]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
-    [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},
+    [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},
     [TOKEN_QUESTION_MARK]   =  {NULL, NULL, PREC_TERNARY},
     [TOKEN_DOT]             =  {NULL, NULL, PREC_NONE},
@@ -329,13 +340,33 @@ static void parsePrecedence(Precedence_t precedence) {
         return;
     }
 
-    prefixRule();
+    bool canAssign = precedence <= PREC_ASSIGNMENT;
+    prefixRule(canAssign);
 
     while (precedence <= getRule(parser.current.type)->precedence) {
+        // TODO: Remove this and uncomment below
+        //      - need to find way to reach below with
+        //        canAssign == true && match(TOKEN_EQUAL)
+        //       test case: a * b = 3;
+        if (canAssign && match(TOKEN_EQUAL)) {
+            error("Invalid assignment target.");
+            return;
+        }
+        /**
+         * If we're in the middle of parsing an expression and we hit a 
+         * ',' it means we're hitting a sequence point and we're through
+         * parsing this expression
+         */
+        if (check(TOKEN_COMMA)) break;
         advance();
         ParseFn_t infixRule = getRule(parser.previous.type)->infix;
-        infixRule();
+        infixRule(canAssign);
     }
+
+    // if (canAssign && match(TOKEN_EQUAL)) {
+    //     error("Invalid assignment target.");
+    // }
+
 }
 
 static ParseRule_t *getRule(TokenType_e type) {
@@ -365,13 +396,15 @@ static void synchronize(void) {
 
 static void printStatement(void) {
     expression();
-    consume(TOKEN_SEMICOLON, "Expected a ';'.");
+    if (!match(TOKEN_COMMA))
+        consume(TOKEN_SEMICOLON, "Expected a ';'.");
     emitByte(OP_PRINT);
 }
 
 static void expressionStatement(void) {
     expression();
-    consume(TOKEN_SEMICOLON, "Expected a ';'.");
+    if (!match(TOKEN_COMMA))
+        consume(TOKEN_SEMICOLON, "Expected a ';'.");
     emitByte(OP_POP);
 }
 

@@ -13,8 +13,16 @@
 //"Nested ${"interpolation?! Are you ${"mad?!"}"}"
 //var a = 4;
 //print(a + a);
-var beverage = "coffee";
-print(beverage);
+//var beverage = "coffee";
+//print(beverage);
+//beverage = "tea";
+//print(beverage);
+
+// Error: Invalid assignment target
+var a; var b;
+a = 2, b = 1, print(a), print(b);
+//var b;
+//a * b = a;
 //var breakfast = "eggs";
 //print(" " + "hi");
 //print(breakfast + " and " + beverage); 
