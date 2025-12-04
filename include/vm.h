@@ -7,6 +7,7 @@
 #include "table.h"
 
 #define STACK_MAX 256
+#define CACHE_SIZE 16
 
 typedef enum {
     INTERPRET_OK,
@@ -23,6 +24,7 @@ typedef struct {
     Table_t strings;
     Table_t globals;
     Obj_t *objects;
+    Entry_t cache[CACHE_SIZE];
 } VM_t;
 
 extern VM_t vm;

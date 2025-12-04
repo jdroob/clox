@@ -7,6 +7,7 @@
 #include "object.h"
 
 VM_t vm;
+uint8_t nextWrite = 0;
 
 static void resetStack(void) {
     vm.stackTop = vm.stack;
@@ -89,6 +90,32 @@ Value_t pop(void) {
     return *(--vm.stackTop);
 }
 
+static void initCache(Entry_t *cache) {
+    for (uint8_t i=0; i<CACHE_SIZE; ++i) {
+        cache[i].key = EMPTY_VAL;
+        cache[i].value = NIL_VAL;
+    }
+}
+
+static int readCache(Value_t key) {
+    for (uint8_t i=0; i<CACHE_SIZE; ++i) {
+        if (valuesEqual(vm.cache[i].key, key)) return i;
+    }
+    return -1;
+}
+
+static void writeCache(Value_t key, Value_t value) {
+    for (uint8_t i=0; i<CACHE_SIZE; ++i) {
+        if (valuesEqual(vm.cache[i].key, key)) {
+            vm.cache[i].value = value;
+            return;
+        }
+    }
+    vm.cache[nextWrite].key = key;
+    vm.cache[nextWrite].value = value;
+    nextWrite = (nextWrite + 1) % CACHE_SIZE;
+}
+
 void initVM(void) {
     #ifdef JRMALLOC
     init(); // init jrmalloc
@@ -104,6 +131,7 @@ void initVM(void) {
     vm.objects = NULL;
     initTable(&vm.strings);
     initTable(&vm.globals);
+    initCache(&vm.cache);
     resetStack();
 }
 
@@ -296,6 +324,7 @@ static InterpResult_t run(void) {
                 }
                 Value_t value = pop();
                 tableSet(&vm.globals, OBJ_VAL(name), value);
+                writeCache(OBJ_VAL(name), value);
                 break;
             }
             case OP_ACCESS_GLOBAL:
@@ -306,10 +335,16 @@ static InterpResult_t run(void) {
                 } else {
                     name = READ_STRING_LONG();
                 }
+                int idx;
                 Value_t value;
-                if (!tableGet(&vm.globals, OBJ_VAL(name), &value)) {
-                    runtimeError("Variable: %s not found.\n", name->chars);
-                    return INTERPRET_RUNTIME_ERROR;
+                if ((idx = readCache(OBJ_VAL(name))) != -1) {
+                    value = vm.cache[idx].value;
+                    printf("Reading from da cache!\n");
+                } else {
+                    if (!tableGet(&vm.globals, OBJ_VAL(name), &value)) {
+                        runtimeError("Variable: %s not found.\n", name->chars);
+                        return INTERPRET_RUNTIME_ERROR;
+                    }
                 }
                 push(value);
                 break;
@@ -339,7 +374,7 @@ static InterpResult_t run(void) {
                 //     return INTERPRET_RUNTIME_ERROR;
                 // }
                 // push(value);
-
+                writeCache(OBJ_VAL(name), peek(0));
                 if (tableSet(&vm.globals, OBJ_VAL(name), peek(0))) {
                     tableDelete(&vm.globals, OBJ_VAL(name));
                     runtimeError("Variable: %s not declared.\n", name->chars);
