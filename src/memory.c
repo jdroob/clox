@@ -35,11 +35,10 @@ static void freeObject(Obj_t *object) {
 }
 
 void freeObjects(void) {
-    Obj_t *next = NULL;
+    Obj_t *next;
     Obj_t *object = vm.objects;
     while (object) {
-        if (object->next)
-            next = object->next;
+        next = object->next;
         freeObject(object);
         object = next;
     }
