@@ -4,7 +4,7 @@
 #include "common.h"
 
 // Experiment: Try to avoid re-adding same values
-#define MRU_SL 8    // Most Recently Used Search Limit
+#define MRU_SW 8    // Most Recently Used Sliding Window
 
 typedef struct Obj_t Obj_t;
 typedef struct ObjString_t ObjString_t;
