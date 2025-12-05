@@ -292,4 +292,79 @@
 
             - A key insight here is: rather than iterating through the constant table to find the index of the constant array with the value "a" (just so we can use that as a key) - we just add another copy of the string "a" to the constant pool and use it as a key when needed. The former approach could really slow down the interpreter (O(N) for each variable usage??). The purpose of the constants in the constant pool are simply to use the values encoded in the source program when it's time to use them. Uniqueness does not matter here - we're not using maps - just a list of values.
 
+12/5/2025:
+    - Recap of how global vars are stored and retrieved in clox:
+        - Consider the code: `var a = 2; print(a);`
+        - When compiling:
+            - 'a' is added to the constant table (index 0) as part of an OP_DEFINE_GLOBAL instr
+            - 2 is added to the constant table (index 1) as part of an OP_CONSTANT instr
+            - An OP_SET_GLOBAL instr is emitted:
+                - A separate copy of 'a' is added to the constant table (index 2)
+                - Semantically, this instr sets the variable with string 'a' (in globals table)
+                  to value at top of value stack (in this case 2).
+
+        - See an opportunity for optimization? Why are we adding a new copy of 'a' to the value stack
+          for the OP_SET_GLOBAL instr? We already have an 'a' at index 0? Seems wasteful... Particularly,
+          when you imagine Lox programs with MANY MANY reads and writes of the same variable... Think
+          of a for loop with 1000 iterations. Each iteration, 'i' is tested, and 'x' is updated. Using our
+          current approach, this would result in the constant pool containing 1000 copies of 'i' and 1000 copies
+          of 'x' just for that for loop! So wasteful! (Yes, we now have 2^24 slots for constants, but what if there were 1,000,000 iterations? :/ ).
+
+        - Solution? Before adding a new constant to the constant pool, why not check if the same value has been added recently? Yes, this incurs a compile-time cost of reading back through the constant pool (N number of slots). And if the value to be added does not already exist in the constant pool, it's added. Otherwise, the index of the existing value is returned. Seems tedious to do this on each write, but if we keep N small-ish, it's no big deal. Still O(c * 1) - just a slightly bigger c.
+
+        Here's the code from `addConstant` in value.c
+
+        ```
+        ...
+        // Are we just re-writing a value that's recently been written??
+        if (array->count > 0) {
+            for (int idx=array->count - 1; idx >= 0 && idx > idx - MRU_SL; --idx) {
+                Value_t candidate = array->values[idx];
+                if (valuesEqual(candidate, value)) {
+                    // If so... don't do that!
+                    return (unsigned)idx;
+                }
+            }
+        }
+        ...
+        ```
+
+        And here's the bytecode for the Lox code: 
+            `var a; var b; a=2, b=1, print(a), print(b);`
+
+        ```
+        ==code==
+        0000 0022 OP_NIL
+        0001  | OP_DEFINE_GLOBAL    0 '"a"
+        '
+        0003  | OP_NIL
+        0004  | OP_DEFINE_GLOBAL    1 '"b"
+        '
+        0006 0023 OP_CONSTANT         2 '2
+        '
+        0008  | OP_SET_GLOBAL       0 '"a"
+        '
+        0010  | OP_POP
+        0011  | OP_ONE
+        0012  | OP_SET_GLOBAL       1 '"b"
+        '
+        0014  | OP_POP
+        0015  | OP_ACCESS_GLOBAL    0 '"a"
+        '
+        0017  | OP_PRINT
+        0018  | OP_ACCESS_GLOBAL    1 '"b"
+        '
+        0020  | OP_PRINT
+        0021 0028 OP_RETURN
+        ```
+
+    - Notice how 'a' is originally written to constant pool index 0, 'b' to 1.
+      Then, when setting 'a', 'a' is retrieved from index 0 (and 'b' from 1).
+    
+    - Using this approach, we can keep the constant pool small :)
+
+    - Future improvements? Hash-based constant-pool. Probs no big deal to have linear probing at 2 levels (constant pool + globals table). My experience has been that in large code bases, the number of identifiers increases at a rather slow rate (for well-maintained codebases).
+
+       - Idea: we'd take a string: like 'a' or '1'. We'd hash it. Add the value to a ValueArray (constant pool) based off the hash. Before adding, we'd search to see if it's already in there. If so, don't add just return the index. Otherwise, add then return the index.
+
             

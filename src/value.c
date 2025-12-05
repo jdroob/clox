@@ -2,6 +2,7 @@
 #include <string.h>
 
 #include "value.h"
+#include "vm.h"
 #include "object.h"
 #include "memory.h"
 
@@ -11,13 +12,24 @@ void initValueArray(ValueArray_t *array) {
     array->values = NULL;
 }
 
-void writeValueArray(ValueArray_t *array, Value_t value) {
+unsigned writeValueArray(ValueArray_t *array, Value_t value) {
+    // Are we just re-writing a value that's recently been written??
+    if (array->count > 0) {
+        for (int idx=array->count - 1; idx >= 0 && idx > idx - MRU_SL; --idx) {
+            Value_t candidate = array->values[idx];
+            if (valuesEqual(candidate, value)) {
+                // If so... don't do that!
+                return (unsigned)idx;
+            }
+        }
+    }
     if (array->capacity < array->count + 1) {
         size_t oldCapacity = array->capacity;
         array->capacity = GROW_CAPACITY(oldCapacity);
         array->values = GROW_ARRAY(Value_t, array->values, oldCapacity, array->capacity);
     }
     array->values[array->count++] = value;
+    return (unsigned)(array->count - 1);
 }
 
 void freeValueArray(ValueArray_t *array) {

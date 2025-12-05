@@ -3,6 +3,9 @@
 
 #include "common.h"
 
+// Experiment: Try to avoid re-adding same values
+#define MRU_SL 8    // Most Recently Used Search Limit
+
 typedef struct Obj_t Obj_t;
 typedef struct ObjString_t ObjString_t;
 typedef enum {
@@ -45,7 +48,7 @@ typedef struct {
 } ValueArray_t;
 
 void initValueArray(ValueArray_t *array);
-void writeValueArray(ValueArray_t *array, Value_t value);
+unsigned writeValueArray(ValueArray_t *array, Value_t value);
 void freeValueArray(ValueArray_t *array);
 Value_t makeValue(double val, ValueType_e type);
 

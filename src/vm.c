@@ -339,7 +339,6 @@ static InterpResult_t run(void) {
                 Value_t value;
                 if ((idx = readCache(OBJ_VAL(name))) != -1) {
                     value = vm.cache[idx].value;
-                    printf("Reading from da cache!\n");
                 } else {
                     if (!tableGet(&vm.globals, OBJ_VAL(name), &value)) {
                         runtimeError("Variable: %s not found.\n", name->chars);
