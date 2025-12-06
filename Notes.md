@@ -367,4 +367,8 @@
 
        - Idea: we'd take a string: like 'a' or '1'. We'd hash it. Add the value to a ValueArray (constant pool) based off the hash. Before adding, we'd search to see if it's already in there. If so, don't add just return the index. Otherwise, add then return the index.
 
+       TODO 1: Create a stringConstants table used at compile time. keys are var names. Values are indices in the constant pool. Use this to avoid re-adding values to the constant pool.
+
+       TODO 2: Create a globals table that maps var names to indices in a globa ValueArray. At compile-time, add new vars to a globals table, map them to their index in the globals ValueArray. Emit bytecode with each set and get instr having an index operand. At runtime, each set and get will simply write values to a value array where each index is associated with a specific global variable :)
+
             

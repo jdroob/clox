@@ -48,7 +48,7 @@ typedef struct {
 } ValueArray_t;
 
 void initValueArray(ValueArray_t *array);
-unsigned writeValueArray(ValueArray_t *array, Value_t value);
+void writeValueArray(ValueArray_t *array, Value_t value);
 void freeValueArray(ValueArray_t *array);
 Value_t makeValue(double val, ValueType_e type);
 

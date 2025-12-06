@@ -12,17 +12,7 @@ void initValueArray(ValueArray_t *array) {
     array->values = NULL;
 }
 
-unsigned writeValueArray(ValueArray_t *array, Value_t value) {
-    // Are we just re-writing a value that's recently been written??
-    if (array->count > 0) {
-        for (int idx=array->count - 1; idx >= 0 && idx > idx - MRU_SW; --idx) {
-            Value_t candidate = array->values[idx];
-            if (valuesEqual(candidate, value)) {
-                // If so... don't do that!
-                return (unsigned)idx;
-            }
-        }
-    }
+void writeValueArray(ValueArray_t *array, Value_t value) {
     if (array->capacity < array->count + 1) {
         size_t oldCapacity = array->capacity;
         array->capacity = GROW_CAPACITY(oldCapacity);

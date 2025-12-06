@@ -47,7 +47,8 @@ unsigned writeConstant(Chunk_t *chunk, Value_t value, int line) {
 }
 
 int addConstant(Chunk_t *chunk, Value_t value) {
-    return writeValueArray(&chunk->constants, value);
+    writeValueArray(&chunk->constants, value);
+    return chunk->constants.count - 1;
 }
 
 void freeChunk(Chunk_t *chunk) {
