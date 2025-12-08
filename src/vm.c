@@ -97,25 +97,6 @@ static void initCache(Entry_t *cache) {
     }
 }
 
-static int readCache(Value_t key) {
-    for (uint8_t i=0; i<CACHE_SIZE; ++i) {
-        if (valuesEqual(vm.cache[i].key, key)) return i;
-    }
-    return -1;
-}
-
-static void writeCache(Value_t key, Value_t value) {
-    for (uint8_t i=0; i<CACHE_SIZE; ++i) {
-        if (valuesEqual(vm.cache[i].key, key)) {
-            vm.cache[i].value = value;
-            return;
-        }
-    }
-    vm.cache[nextWrite].key = key;
-    vm.cache[nextWrite].value = value;
-    nextWrite = (nextWrite + 1) % CACHE_SIZE;
-}
-
 void initVM(void) {
     #ifdef JRMALLOC
     init(); // init jrmalloc
