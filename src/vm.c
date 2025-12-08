@@ -90,13 +90,6 @@ Value_t pop(void) {
     return *(--vm.stackTop);
 }
 
-static void initCache(Entry_t *cache) {
-    for (uint8_t i=0; i<CACHE_SIZE; ++i) {
-        cache[i].key = EMPTY_VAL;
-        cache[i].value = NIL_VAL;
-    }
-}
-
 void initVM(void) {
     #ifdef JRMALLOC
     init(); // init jrmalloc
@@ -111,7 +104,6 @@ void initVM(void) {
     #endif
     vm.objects = NULL;
     initTable(&vm.strings);
-    initCache(&vm.cache);
     resetStack();
 }
 
