@@ -3,6 +3,8 @@
 #include "compiler.h"
 #include "scanner.h"
 #include "object.h"
+#include "table.h"
+#include "vm.h"
 
 typedef struct {
     Token_t previous;
@@ -43,6 +45,7 @@ typedef struct {
 
 Parser_t parser;
 Chunk_t *compilingChunk;
+Table_t literals;
 
 static void errorAt(Token_t *token, const char *msg) {
     if (parser.panicMode) return;   // suppress follow-on errors while in panic mode
@@ -148,7 +151,20 @@ static void emitConstant(Value_t value) {
         error("Too many constants in one chunk.");
         return;
     }
-    int constantIdx = addConstant(currentChunk(), value);
+
+    /**
+     * Uniquify values that exist in constant pool.
+     * Below logic turns constant pool into a set.
+     */
+    Value_t idxVal;
+    int constantIdx;
+    if (!tableGet(&literals, value, &idxVal)) {
+        constantIdx = addConstant(currentChunk(), value);
+        tableSet(&literals, value, NUMBER_VAL((double)constantIdx));
+    } else {
+        constantIdx = (int)AS_NUMBER(idxVal);
+    }
+    
     if (constantIdx > UINT8_MAX) {
         emitLongConstant(constantIdx);
         return;
@@ -419,9 +435,14 @@ static unsigned makeConstant(Value_t value) {
 }
 
 static unsigned identifierConstant(Token_t *identifier) {
-    return makeConstant(
-        OBJ_VAL(makeString(identifier->start, identifier->length))
-    );
+    Value_t idxVal;
+    Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
+    if (tableGet(&vm.globalNames, key, &idxVal)) {
+        return (unsigned)AS_NUMBER(idxVal);
+    }
+    unsigned idx = makeConstant(key);
+    tableSet(&vm.globalNames, key, NUMBER_VAL((double)idx));
+    return idx;
 }
 
 static unsigned parseVariableName(const char *errMsg) {
@@ -437,7 +458,7 @@ static void varDeclaration(void) {
     unsigned global = parseVariableName("Expect a variable name");
 
     if (match(TOKEN_EQUAL)) {
-        expression();   // <- a value will be pushed to stack
+        expression();       // <- a value will be pushed to stack
     } else {
         emitByte(OP_NIL);   // <- NULL will be pushed to stack
     }
@@ -466,10 +487,11 @@ static void declaration(void) {
 
 bool compile(const char *source, Chunk_t *chunk) {
     initScanner(source);
-
     parser.hadError = false;
     parser.panicMode = false;
     compilingChunk = chunk;
+    initTable(&vm.globalNames);
+    initTable(&literals);
 
     #ifdef DEBUG_SCANNER
     int line = 1;
@@ -496,6 +518,9 @@ bool compile(const char *source, Chunk_t *chunk) {
          */
         declaration();
     }
+
+    freeTable(&vm.globalNames);
+    freeTable(&literals);
     endCompiler();
 
     #ifdef DEBUG_CHUNK

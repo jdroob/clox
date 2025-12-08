@@ -21,6 +21,8 @@
 // Error: Invalid assignment target
 var a; var b;
 a = 2, b = 1, print(a), print(b);
+//var a = "john";
+//var b = "john":
 //var b;
 //a * b = a;
 //var breakfast = "eggs";

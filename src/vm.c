@@ -130,7 +130,6 @@ void initVM(void) {
     #endif
     vm.objects = NULL;
     initTable(&vm.strings);
-    initTable(&vm.globals);
     initCache(&vm.cache);
     resetStack();
 }
@@ -138,7 +137,6 @@ void initVM(void) {
 void freeVM(void) {
     freeObjects();
     freeTable(&vm.strings);
-    freeTable(&vm.globals);
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
 }
 
@@ -156,6 +154,14 @@ void updateObjList(Obj_t *obj) {
 
 static InterpResult_t run(void) {
     #define READ_BYTE() (*vm.ip++)
+    #define READ_BYTES() \
+    ({ \
+        uint8_t byte2 = READ_BYTE(); \
+        uint8_t byte1 = READ_BYTE(); \
+        uint8_t byte0 = READ_BYTE(); \
+        unsigned bytes = (byte2 << 16) | (byte1 << 8) | byte0;  \
+        bytes;  \
+    })
     #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
     /**
      * NOTE: below is a "statement expressions"
@@ -316,69 +322,49 @@ static InterpResult_t run(void) {
             }
             case OP_DEFINE_GLOBAL: 
             case OP_DEFINE_GLOBAL_LONG: {
-                ObjString_t *name;
+                unsigned idx;
                 if (instruction == OP_DEFINE_GLOBAL) {
-                    name = READ_STRING();
+                    idx = READ_BYTE();  // read 1-byte index into vm.globalValues
                 } else {
-                    name = READ_STRING_LONG();
+                    idx = READ_BYTES(); // read 3-byte index into vm.globalValues
                 }
                 Value_t value = pop();
-                tableSet(&vm.globals, OBJ_VAL(name), value);
-                writeCache(OBJ_VAL(name), value);
+                writeValueArrayAt(&vm.globalValues, value, idx);
                 break;
             }
             case OP_ACCESS_GLOBAL:
             case OP_ACCESS_GLOBAL_LONG: {
-                ObjString_t *name;
+                // ObjString_t *name;
+                unsigned idx;
                 if (instruction == OP_ACCESS_GLOBAL) {
-                    name = READ_STRING();
+                    idx = READ_BYTE();
                 } else {
-                    name = READ_STRING_LONG();
+                    idx = READ_BYTES();
                 }
-                int idx;
-                Value_t value;
-                if ((idx = readCache(OBJ_VAL(name))) != -1) {
-                    value = vm.cache[idx].value;
-                } else {
-                    if (!tableGet(&vm.globals, OBJ_VAL(name), &value)) {
-                        runtimeError("Variable: %s not found.\n", name->chars);
-                        return INTERPRET_RUNTIME_ERROR;
-                    }
-                }
+                Value_t value = getValueAt(&vm.globalValues, idx);
                 push(value);
                 break;
             }
             case OP_SET_GLOBAL:
             case OP_SET_GLOBAL_LONG: {
-                ObjString_t *name;
+                // ObjString_t *name;
+                unsigned idx;
                 if (instruction == OP_SET_GLOBAL) {
-                    name = READ_STRING();
+                    idx = READ_BYTE();
                 } else {
-                    name = READ_STRING_LONG();
+                    idx = READ_BYTES();
                 }
 
                 /**
                  * Like C, the expression <identifier> = <value>
                  *  produces the value <value>. Thus, <value> must be
                  *  at the top of the stack after the assignment is complete.
-                 *  We *could* do the below (pop, add to table, push)... but why?
-                 *  Instead, just peek when you add entry to globals table and leave
+                 *  We *could* do something like: pop, add to table, push... but why?
+                 *  Instead, just peek at entry in globals valueArray and be leave the
                  *  stack alone (since that's the net effect anyway)
                  */
                 
-                // Value_t value = pop();
-                // if (tableSet(&vm.globals, OBJ_VAL(name), value)) {
-                //     tableDelete(&vm.globals, OBJ_VAL(name));
-                //     runtimeError("Variable: %s not declared.\n", name->chars);
-                //     return INTERPRET_RUNTIME_ERROR;
-                // }
-                // push(value);
-                writeCache(OBJ_VAL(name), peek(0));
-                if (tableSet(&vm.globals, OBJ_VAL(name), peek(0))) {
-                    tableDelete(&vm.globals, OBJ_VAL(name));
-                    runtimeError("Variable: %s not declared.\n", name->chars);
-                    return INTERPRET_RUNTIME_ERROR;
-                }
+                writeValueArrayAt(&vm.globalValues, peek(0), idx);
                 break;
             }
             default:

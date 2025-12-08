@@ -24,7 +24,8 @@ typedef struct {
     Value_t *stack;
     Value_t *stackTop;
     Table_t strings;
-    Table_t globals;
+    Table_t globalNames;
+    ValueArray_t globalValues;
     Obj_t *objects;
     Entry_t cache[CACHE_SIZE];
 } VM_t;

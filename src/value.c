@@ -19,7 +19,29 @@ void writeValueArray(ValueArray_t *array, Value_t value) {
         array->values = GROW_ARRAY(Value_t, array->values, oldCapacity, array->capacity);
     }
     array->values[array->count++] = value;
-    return (unsigned)(array->count - 1);
+}
+
+static void boundsCheck(ValueArray_t *array, unsigned idx) {
+    if (idx >= array->capacity) {
+        fprintf(stderr, "value.c::writeValueArrayAt: IndexOutOfBounds!\n");
+        fprintf(stderr, "Attempted to write to index %lu of array of size %lu\n", idx, array->capacity);
+        exit(EXIT_FAILURE);
+    }
+}
+
+void writeValueArrayAt(ValueArray_t *array, Value_t value, unsigned idx) {
+    if (array->capacity < array->count + 1) {
+        size_t oldCapacity = array->capacity;
+        array->capacity = GROW_CAPACITY(oldCapacity);
+        array->values = GROW_ARRAY(Value_t, array->values, oldCapacity, array->capacity);
+    }
+    boundsCheck(array, idx);
+    array->values[idx] = value;
+}
+
+Value_t getValueAt(ValueArray_t *array, unsigned idx) {
+    boundsCheck(array, idx);
+    return array->values[idx];
 }
 
 void freeValueArray(ValueArray_t *array) {
