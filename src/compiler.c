@@ -164,7 +164,7 @@ static void emitConstant(Value_t value) {
     } else {
         constantIdx = (int)AS_NUMBER(idxVal);
     }
-    
+
     if (constantIdx > UINT8_MAX) {
         emitLongConstant(constantIdx);
         return;
@@ -436,12 +436,15 @@ static unsigned makeConstant(Value_t value) {
 
 static unsigned identifierConstant(Token_t *identifier) {
     Value_t idxVal;
+    unsigned idx;
     Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
     if (tableGet(&vm.globalNames, key, &idxVal)) {
-        return (unsigned)AS_NUMBER(idxVal);
+        idx = (unsigned)AS_NUMBER(idxVal);
+    } else {
+        idx = (unsigned)vm.globalValues.count;
+        tableSet(&vm.globalNames, key, NUMBER_VAL((double)idx));
+        writeValueArray(&vm.globalValues, UNDEFINED_VAL);
     }
-    unsigned idx = makeConstant(key);
-    tableSet(&vm.globalNames, key, NUMBER_VAL((double)idx));
     return idx;
 }
 

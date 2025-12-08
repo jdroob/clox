@@ -342,6 +342,10 @@ static InterpResult_t run(void) {
                     idx = READ_BYTES();
                 }
                 Value_t value = getValueAt(&vm.globalValues, idx);
+                if (IS_UNDEFINED(value)) {
+                    runtimeError("Undefined variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 push(value);
                 break;
             }
@@ -364,6 +368,11 @@ static InterpResult_t run(void) {
                  *  stack alone (since that's the net effect anyway)
                  */
                 
+                // Should have been set to NIL or defined value by this point
+                if (IS_UNDEFINED(peek(0))) {
+                    runtimeError("Undefined variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 writeValueArrayAt(&vm.globalValues, peek(0), idx);
                 break;
             }

@@ -19,9 +19,11 @@
 //print(beverage);
 
 // Error: Invalid assignment target
-var a; var b;
-a = 2, b = 1, print(a), print(b);
-//var a = "john";
+//var a; var b;
+//a = 2, b = 1, print(a), print(b);
+var a = "a";  // this has 2 separate values in constant pool
+a = 2;
+print(a);
 //var b = "john":
 //var b;
 //a * b = a;
