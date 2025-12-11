@@ -29,10 +29,10 @@ static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32
 }
 
 static uint32_t hashString(const char *key, int length) {
-    uint32_t hash = 2166136261u;
+    uint32_t hash = 2166136261u;    // 0x811C_9DC5
     for (int i=0; i<length; ++i) {
         hash ^= (uint8_t)key[i];
-        hash *= 1677719;
+        hash *= 1677719;    // 0x0000_418B
     }
     return hash;
 }

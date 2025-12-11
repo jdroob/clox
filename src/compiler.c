@@ -439,6 +439,7 @@ static unsigned identifierConstant(Token_t *identifier) {
     unsigned idx;
     Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
     if (tableGet(&vm.globalNames, key, &idxVal)) {
+        // TODO: fix mem leak here... if key already exists in table, it should be freed
         idx = (unsigned)AS_NUMBER(idxVal);
     } else {
         idx = (unsigned)vm.globalValues.count;

@@ -105,6 +105,7 @@ void initVM(void) {
     vm.objects = NULL;
     initTable(&vm.strings);
     initTable(&vm.globalNames);
+    initValueArray(&vm.globalValues);
     resetStack();
 }
 
@@ -112,6 +113,7 @@ void freeVM(void) {
     freeObjects();
     freeTable(&vm.strings);
     freeTable(&vm.globalNames);
+    freeValueArray(&vm.globalValues);
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
 }
 
