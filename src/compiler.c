@@ -201,7 +201,7 @@ static void string(bool canAssign) {
 
 static unsigned identifierConstant(Token_t *identifier);
 static void namedVariable(Token_t name, bool canAssign) {
-    unsigned idx = identifierConstant(&name);   // <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
+    unsigned idx = identifierConstant(&name);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
     
     if (canAssign && match(TOKEN_EQUAL)) {
         expression();
@@ -493,7 +493,7 @@ bool compile(const char *source, Chunk_t *chunk) {
     parser.hadError = false;
     parser.panicMode = false;
     compilingChunk = chunk;
-    initTable(&vm.globalNames);
+    // initTable(&vm.globalNames);
     initTable(&literals);
 
     #ifdef DEBUG_SCANNER
@@ -522,7 +522,7 @@ bool compile(const char *source, Chunk_t *chunk) {
         declaration();
     }
 
-    freeTable(&vm.globalNames);
+    // freeTable(&vm.globalNames);
     freeTable(&literals);
     endCompiler();
 

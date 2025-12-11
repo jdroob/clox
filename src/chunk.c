@@ -8,7 +8,7 @@ void initChunk(Chunk_t *chunk) {
     chunk->capacity = 0;
     chunk->code = NULL;
     initLineMap(&chunk->lines);
-    initValueArray(&chunk->constants);
+    initValueArray(&chunk->constants);  // constant pool is per-chunk
 }
 
 void writeChunk(Chunk_t *chunk, uint8_t byte, int line) {

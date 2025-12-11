@@ -83,7 +83,7 @@ static void runFile(char *path) {
 }
 
 int main(int argc, char *argv[]) {
-    initVM();
+    initVM();   // For structures that should be init'd once at program start (e.g. global vars table)
 
     if (argc == 1) {
         repl();

@@ -25,7 +25,7 @@ static void runtimeError(const char *format, ...) {
     int line = getLine(vm.chunk, instructionOffset);
     fprintf(stderr, "[line %d] in script\n", line);
     resetStack();
-    freeVM();
+    //freeVM(); // freeing here will result in double free in main
 }
 
 static Value_t peek(int distance) {
@@ -104,12 +104,14 @@ void initVM(void) {
     #endif
     vm.objects = NULL;
     initTable(&vm.strings);
+    initTable(&vm.globalNames);
     resetStack();
 }
 
 void freeVM(void) {
     freeObjects();
     freeTable(&vm.strings);
+    freeTable(&vm.globalNames);
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
 }
 
@@ -137,7 +139,7 @@ static InterpResult_t run(void) {
     })
     #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
     /**
-     * NOTE: below is a "statement expressions"
+     * NOTE: below is a "statement expression"
      *  syntax:
      *      { stmt0; stmt1; ...; stmtN; expession; }
      *  The net effect is an "expression" that returns a value and has 0 or more side-effects.
@@ -297,7 +299,7 @@ static InterpResult_t run(void) {
             case OP_DEFINE_GLOBAL_LONG: {
                 unsigned idx;
                 if (instruction == OP_DEFINE_GLOBAL) {
-                    idx = READ_BYTE();  // read 1-byte index into vm.globalValues
+                    idx = (unsigned)READ_BYTE();  // read 1-byte index into vm.globalValues
                 } else {
                     idx = READ_BYTES(); // read 3-byte index into vm.globalValues
                 }
@@ -307,10 +309,9 @@ static InterpResult_t run(void) {
             }
             case OP_ACCESS_GLOBAL:
             case OP_ACCESS_GLOBAL_LONG: {
-                // ObjString_t *name;
                 unsigned idx;
                 if (instruction == OP_ACCESS_GLOBAL) {
-                    idx = READ_BYTE();
+                    idx = (unsigned)READ_BYTE();
                 } else {
                     idx = READ_BYTES();
                 }
@@ -324,10 +325,9 @@ static InterpResult_t run(void) {
             }
             case OP_SET_GLOBAL:
             case OP_SET_GLOBAL_LONG: {
-                // ObjString_t *name;
                 unsigned idx;
                 if (instruction == OP_SET_GLOBAL) {
-                    idx = READ_BYTE();
+                    idx = (unsigned)READ_BYTE();
                 } else {
                     idx = READ_BYTES();
                 }
@@ -342,7 +342,7 @@ static InterpResult_t run(void) {
                  */
                 
                 // Should have been set to NIL or defined value by this point
-                if (IS_UNDEFINED(peek(0))) {
+                if (IS_UNDEFINED(getValueAt(&vm.globalValues, idx))) {
                     runtimeError("Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }

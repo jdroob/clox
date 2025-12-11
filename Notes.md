@@ -371,4 +371,64 @@
 
        TODO 2: Create a globals table that maps var names to indices in a globa ValueArray. At compile-time, add new vars to a globals table, map them to their index in the globals ValueArray. Emit bytecode with each set and get instr having an index operand. At runtime, each set and get will simply write values to a value array where each index is associated with a specific global variable :)
 
-            
+12/10/2025:
+    How we flag writing / reading from undef'd global variables:
+
+    ```
+    case OP_DEFINE_GLOBAL: 
+            case OP_DEFINE_GLOBAL_LONG: {
+                unsigned idx;
+                if (instruction == OP_DEFINE_GLOBAL) {
+                    idx = (unsigned)READ_BYTE();  // read 1-byte index into vm.globalValues
+                } else {
+                    idx = READ_BYTES(); // read 3-byte index into vm.globalValues
+                }
+                Value_t value = pop();
+                writeValueArrayAt(&vm.globalValues, value, idx);
+                break;
+            }
+            case OP_ACCESS_GLOBAL:
+            case OP_ACCESS_GLOBAL_LONG: {
+                unsigned idx;
+                if (instruction == OP_ACCESS_GLOBAL) {
+                    idx = (unsigned)READ_BYTE();
+                } else {
+                    idx = READ_BYTES();
+                }
+                Value_t value = getValueAt(&vm.globalValues, idx);
+                if (IS_UNDEFINED(value)) {
+                    runtimeError("Undefined variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                push(value);
+                break;
+            }
+            case OP_SET_GLOBAL:
+            case OP_SET_GLOBAL_LONG: {
+                unsigned idx;
+                if (instruction == OP_SET_GLOBAL) {
+                    idx = (unsigned)READ_BYTE();
+                } else {
+                    idx = READ_BYTES();
+                }
+
+                /**
+                 * Like C, the expression <identifier> = <value>
+                 *  produces the value <value>. Thus, <value> must be
+                 *  at the top of the stack after the assignment is complete.
+                 *  We *could* do something like: pop, add to table, push... but why?
+                 *  Instead, just peek at entry in globals valueArray and be leave the
+                 *  stack alone (since that's the net effect anyway)
+                 */
+                
+                // Should have been set to NIL or defined value by this point
+                if (IS_UNDEFINED(getValueAt(&vm.globalValues, idx))) {
+                    runtimeError("Undefined variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                writeValueArrayAt(&vm.globalValues, peek(0), idx);
+                break;
+            }
+    ```
+
+    - Note how we check if the value at idx is UNDEFINED before reading from / writing to it (except for in var declaration)
