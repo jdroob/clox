@@ -16,5 +16,6 @@
 #include "jrmalloc.h"
 
 #define MAX_BUFF_LEN 4194304 // 2^22
+#define UINT8_COUNT (UINT8_MAX + 1)
 
 #endif // COMMON_H

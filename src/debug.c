@@ -1,6 +1,7 @@
 #include "debug.h"
 #include "value.h"
 #include "object.h"
+#include "vm.h"
 
 #define OPTOSTR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
@@ -28,7 +29,9 @@
      (instruction) == OP_POP ? "OP_POP" : \
      (instruction) == OP_DEFINE_GLOBAL ? "OP_DEFINE_GLOBAL" : \
      (instruction) == OP_ACCESS_GLOBAL ? "OP_ACCESS_GLOBAL" : \
+     (instruction) == OP_ACCESS_LOCAL ? "OP_ACCESS_LOCAL" : \
      (instruction) == OP_SET_GLOBAL ? "OP_SET_GLOBAL" : \
+     (instruction) == OP_SET_LOCAL ? "OP_SET_LOCAL" : \
      (instruction) == OP_DEFINE_GLOBAL_LONG ? "OP_DEFINE_GLOBAL_LONG" : \
      (instruction) == OP_SET_GLOBAL_LONG ? "OP_SET_GLOBAL_LONG" : \
      "UNKNOWN_INSTRUCTION")
@@ -40,21 +43,23 @@ static unsigned int simpleInstruction(const char *name, uint8_t offset) {
     return offset + 1;
 }
 
-static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_t offset) {
+static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_t offset, bool isGlobal) {
     uint8_t constantIdx = chunk->code[offset + 1];
+    Value_t value = isGlobal ? vm.globalValues.values[constantIdx] : chunk->constants.values[constantIdx];
     printf("%-16s %4d '", name, constantIdx);
-    printValue(chunk->constants.values[constantIdx]);
+    printValue(value);
     printf("'\n");
     return offset + 2;
 }
 
-static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint8_t offset) {
+static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint8_t offset, bool isGlobal) {
     unsigned constantIdx = 0;
     constantIdx |= chunk->code[offset + 1] << 16;
     constantIdx |= chunk->code[offset + 2] << 8;
     constantIdx |= chunk->code[offset + 3];
+    Value_t value = isGlobal ? vm.globalValues.values[constantIdx] : chunk->constants.values[constantIdx];
     printf("%-16s %4d '", name, constantIdx);
-    printValue(chunk->constants.values[constantIdx]);
+    printValue(value);
     printf("'\n");
     return offset + 4;
 }
@@ -94,15 +99,21 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_POP:
             return simpleInstruction(name, offset);
         case OP_CONSTANT:
+        case OP_ACCESS_LOCAL:
+        case OP_SET_LOCAL:
+            return constantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
         case OP_SET_GLOBAL:
-            return constantInstruction(name, chunk, offset);
+            return constantInstruction(name, chunk, offset, true);
         case OP_CONSTANT_LONG:
+        case OP_ACCESS_LOCAL_LONG:
+        case OP_SET_LOCAL_LONG:
+            return longConstantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL_LONG:
         case OP_ACCESS_GLOBAL_LONG:
         case OP_SET_GLOBAL_LONG:
-            return longConstantInstruction(name, chunk, offset);
+            return longConstantInstruction(name, chunk, offset, true);
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
             return offset + 1;

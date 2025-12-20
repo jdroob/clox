@@ -86,6 +86,14 @@ void push(Value_t value) {
     *vm.stackTop++ = value;
 }
 
+static void writeStackAt(unsigned idx, Value_t value) {
+    *(vm.stackTop - 1 - idx) = value;
+}
+
+static Value_t getStackAt(unsigned idx) {
+    return *(vm.stackTop - 1 - idx);
+}
+
 Value_t pop(void) {
     return *(--vm.stackTop);
 }
@@ -178,23 +186,16 @@ static InterpResult_t run(void) {
         #endif
         switch(instruction = READ_BYTE()) {
             case OP_RETURN: {
-                // Value_t value = pop();
-                // printValue(value);
-                // printf("\n");
                 return INTERPRET_OK;
             }
             case OP_CONSTANT: {
                 Value_t constant = READ_CONSTANT();
                 push(constant);
-                // printValue(constant);
-                // printf("\n");
                 break;
             }
             case OP_CONSTANT_LONG: {
                 Value_t constant = READ_CONSTANT_LONG();
                 push(constant);
-                // printValue(constant);
-                // printf("\n");
                 break;
             }
             case OP_TRUE: {
@@ -349,6 +350,30 @@ static InterpResult_t run(void) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 writeValueArrayAt(&vm.globalValues, peek(0), idx);
+                break;
+            }
+            case OP_ACCESS_LOCAL:
+            case OP_ACCESS_LOCAL_LONG: {
+                unsigned idx;
+                if (instruction == OP_ACCESS_LOCAL) {
+                    idx = (unsigned)READ_BYTE();
+                } else {
+                    idx = READ_BYTES();
+                }
+                push(vm.stack[idx]);
+                break;
+            }
+            case OP_SET_LOCAL:
+            case OP_SET_LOCAL_LONG: {
+                unsigned idx;
+                if (instruction == OP_SET_LOCAL) {
+                    idx = (unsigned)READ_BYTE();
+                } else {
+                    idx = READ_BYTES();
+                }
+
+                // writeStackAt(idx, peek(0));
+                vm.stack[idx] = peek(0);
                 break;
             }
             default:

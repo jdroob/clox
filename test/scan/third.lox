@@ -21,11 +21,17 @@
 // Error: Invalid assignment target
 //var a; var b;
 //a = 2, b = 1, print(a), print(b);
-var a = "a";  // this (used to) have 2 separate slots (for var a and "a") in constant pool
-a = 2;
-var b = 4;
-b = 3;
-print(a + b);
+
+//var a = "a";  // this (used to) have 2 separate slots (for var a and "a") in constant pool
+//a = 2;
+//var b = 4;
+//b = 3;
+//print(a + b);
+
+{
+   var a = 2;
+   var b = 3;
+}
 //var b = "john":
 //var b;
 //a * b = a;

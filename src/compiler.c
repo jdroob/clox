@@ -43,7 +43,32 @@ typedef struct {
     Precedence_t precedence;
 } ParseRule_t;
 
+/**
+ * Each local variable has a name and a depth.
+ * The depth is simply its scope depth.
+ * This allows us to know which vars to discard when a scope ends.
+ */
+typedef struct {
+    Token_t name;
+    int depth;
+} Local_t;
+
+/**
+ * Simple, flat array of all locals that are in scope during each point of the compilation process.
+ * Locals are ordered in the array in order their declarations appear in the code.
+ * 
+ * NOTE: At *this* point, we're only allowing 1-byte operand for local-encoding instr.
+ * Therefore, we have a cap of 256 on number of locals we can store in an array.
+ * TODO: Later, I'll modify this to have a long option :)
+ */
+typedef struct {
+    Local_t locals[UINT8_COUNT];
+    int localCount; // number of locals in scope
+    int scopeDepth; // number of scopes enclosing current scope
+} Compiler_t;
+
 Parser_t parser;
+Compiler_t *current;
 Chunk_t *compilingChunk;
 Table_t literals;
 
@@ -115,11 +140,11 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
     emitByte(byte2);
 }
 
-static void emitVarLenInstr(unsigned idx, unsigned shortThreshold, uint8_t instr0, uint8_t instr1) {
-    if (idx < shortThreshold) {
-        emitBytes(instr0, (uint8_t)idx);
+static void emitVarLenInstr(unsigned idx, uint8_t shortOp, uint8_t longOp) {
+    if (idx < CONSTANT_POOL_SHORT_LEN_MAX) {
+        emitBytes(shortOp, (uint8_t)idx);
     } else {
-        emitByte(instr1);
+        emitByte(longOp);
         emitByte((idx >> 16) & MASK);
         emitByte((idx >> 8) & MASK);
         emitByte(idx & MASK);
@@ -172,6 +197,19 @@ static void emitConstant(Value_t value) {
     emitBytes(OP_CONSTANT, (uint8_t)constantIdx);
 }
 
+static void initLocals(void) {
+    for (unsigned i=0; i < UINT8_COUNT; ++i) {
+        current->locals[i].depth = -1;
+    }
+}
+
+static void initCompiler(Compiler_t *compiler) {
+    compiler->localCount = 0;
+    compiler->scopeDepth = 0;
+    current = compiler;
+    initLocals();
+}
+
 static void expression(void);
 static void parsePrecedence(Precedence_t precedence);
 static ParseRule_t *getRule(TokenType_e type);
@@ -199,15 +237,46 @@ static void string(bool canAssign) {
                                      parser.previous.length - 2)));
 }
 
+static bool identifiersEqual(Token_t *a, Token_t *b) {
+    if (a->length != b->length) return false;
+    return memcmp(a->start, b->start, a->length) == 0;
+}
+
+static int resolveLocal(Compiler_t *compiler, Token_t *name) {
+    // Important that we walk back to preserve expected shadowing semantics
+    for (int i=compiler->localCount - 1; i>=0; --i) {
+        Local_t *local = &compiler->locals[i];
+        if (identifiersEqual(name, &local->name)) {
+            if (local->depth == -1) {
+                error("Cannot read local variable in its own initializer");
+                exit(EXIT_FAILURE);
+            }
+            return i;
+        }
+    }
+    return -1;
+}
+
 static unsigned identifierConstant(Token_t *identifier);
 static void namedVariable(Token_t name, bool canAssign) {
-    unsigned idx = identifierConstant(&name);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
-    
+    uint8_t getOp, setOp;
+    int arg;
+    unsigned idx;
+    if ((arg = resolveLocal(current, &name)) != -1) {
+        idx = (unsigned)arg;
+        getOp = OP_ACCESS_LOCAL;
+        setOp = OP_SET_LOCAL;
+    } else {
+        idx = identifierConstant(&name);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
+        getOp = OP_ACCESS_GLOBAL;
+        setOp = OP_SET_GLOBAL;
+    }
+
     if (canAssign && match(TOKEN_EQUAL)) {
         expression();
-        emitVarLenInstr(idx, CONSTANT_POOL_SHORT_LEN_MAX, OP_SET_GLOBAL, OP_SET_GLOBAL_LONG);
+        emitVarLenInstr(idx, setOp, setOp == OP_SET_LOCAL ? OP_SET_LOCAL_LONG : OP_SET_GLOBAL_LONG);
     } else {
-        emitVarLenInstr(idx, CONSTANT_POOL_SHORT_LEN_MAX, OP_ACCESS_GLOBAL, OP_ACCESS_GLOBAL_LONG);
+        emitVarLenInstr(idx, getOp, getOp == OP_ACCESS_LOCAL ? OP_ACCESS_LOCAL_LONG : OP_ACCESS_GLOBAL_LONG);
     }
 }
 
@@ -434,6 +503,10 @@ static unsigned makeConstant(Value_t value) {
     return (unsigned)idx;
 }
 
+static void markInitialized(void) {
+    current->locals[current->localCount - 1].depth = current->scopeDepth;
+}
+
 static unsigned identifierConstant(Token_t *identifier) {
     Value_t idxVal;
     unsigned idx;
@@ -449,13 +522,79 @@ static unsigned identifierConstant(Token_t *identifier) {
     return idx;
 }
 
+static void addLocal(Token_t *name) {
+    if (current->localCount == UINT8_COUNT) {
+        error("Too many local variables in a function.");
+        return;
+    }
+
+    Local_t *local = &current->locals[current->localCount++];
+    local->name = *name;
+
+    // NOTE: below is necessary! ...but already handled in initLocals :)
+    // local->depth = -1;   // sentinel value indicating var is declared but not yet *defined*
+}
+
+static void declareVariable(void) {
+    // REMINDER: global vars are late bound
+    //           local vars are bound at compile time
+    if (current->scopeDepth == 0) return;
+    Token_t *name = &parser.previous;
+
+    /**
+     * Check:
+     *      Avoid the following:
+     *          {
+     *              var a = 2;
+     *              var a = 3;
+     *          }
+     * 
+     *      I'm worried that we'll still run into the following false positive:
+     *          {
+     *              {
+     *                  var a = 2;
+     *              }
+     *              {
+     *                  var a = 3;
+     *              }
+     *          }
+     * 
+     *      aha! but here's something to ALWAYS keep in mind...
+     *      current->locals contains an array of locals that *must*
+     *      always be monotonically increasing in depth.
+     *      
+     *      why? because as soon a var goes out of scope (endScope is called)
+     *      it's popped off the stack and removed from locals :)
+     */
+    for (int i=current->localCount - 1; i >= 0; --i) {
+        Local_t *local = &current->locals[i];
+        if (local->depth != -1 &&
+            local->depth < current->scopeDepth) {
+                break;
+        }
+
+        if (identifiersEqual(name, &local->name)) {
+            error("Cannot re-declare var in same scope.");
+            return;
+        }
+    }
+
+    addLocal(name);
+}
+
 static unsigned parseVariableName(const char *errMsg) {
     consume(TOKEN_IDENTIFIER, "Expect an indentifier");
+    declareVariable();
+    if (current->scopeDepth > 0) return 0;
     return identifierConstant(&parser.previous);
 }
 
 static void defineVariable(unsigned global) {
-    emitVarLenInstr(global, CONSTANT_POOL_SHORT_LEN_MAX, OP_DEFINE_GLOBAL, OP_DEFINE_GLOBAL_LONG);
+    if (current->scopeDepth > 0) {
+        markInitialized();
+        return;
+    }
+    emitVarLenInstr(global, OP_DEFINE_GLOBAL, OP_DEFINE_GLOBAL_LONG);
 }
 
 static void varDeclaration(void) {
@@ -471,9 +610,54 @@ static void varDeclaration(void) {
     defineVariable(global);
 }
 
+static void beginScope(void) {
+    current->scopeDepth++;
+}
+
+static void endScope(void) {
+    current->scopeDepth--;
+
+    // TODO: replace with OP_POPN
+    while (current->localCount > 0 &&
+           current->locals[current->localCount - 1].depth > current->scopeDepth) {
+        emitByte(OP_POP);
+        current->localCount--;
+    }
+}
+
+static void declaration(void);
+static void block(void) {
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+        declaration();
+    }
+    consume(TOKEN_RIGHT_BRACE, "Expect a '}' at end of block.");
+}
+
+/**
+ * LOX GRAMMAR RULES:
+ *  **NOTE:** This is a little more bare-bones than the jlox grammar doc comment.
+ *            The clox and jlox grammars are still identical - I'm just adding 
+ *            grammar rules here to align more closely with the code you're reading.
+ *            It's easier to write the rules next to the code in a recursive descent
+ *            parser (jlox) than it is here with a Pratt Parser (clox).
+ * 
+ *  declaration  ->  varDecl | stmt ;
+ *  varDecl      ->  "var" IDENTIFIER ("=" expression)? ";" ;
+ *  stmt         ->  printStmt | exprStmt | block ;
+ *  printStmt    ->  "print" "(" expression ")" ";" ;
+ *  exprStmt     ->  expression ";" ;
+ *  block        ->  "{" declaration* "}"
+ * 
+ *  expression   -> ... TODO: Complete me :)
+ */
+
 static void statement(void) {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else if (match(TOKEN_LEFT_BRACE)) {
+        beginScope();
+        block();
+        endScope();
     } else {
         expressionStatement();
     }
@@ -494,6 +678,8 @@ bool compile(const char *source, Chunk_t *chunk) {
     parser.hadError = false;
     parser.panicMode = false;
     compilingChunk = chunk;
+    Compiler_t compiler = {0};
+    initCompiler(&compiler);
     // initTable(&vm.globalNames);
     initTable(&literals);
 
