@@ -3,7 +3,7 @@
 #include "object.h"
 #include "vm.h"
 
-#define OPTOSTR(instruction) \
+#define OP2STR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
      (instruction) == OP_NEGATE ? "OP_NEGATE" : \
      (instruction) == OP_QMARK ? "OP_QMARK" : \
@@ -30,8 +30,10 @@
      (instruction) == OP_DEFINE_GLOBAL ? "OP_DEFINE_GLOBAL" : \
      (instruction) == OP_ACCESS_GLOBAL ? "OP_ACCESS_GLOBAL" : \
      (instruction) == OP_ACCESS_LOCAL ? "OP_ACCESS_LOCAL" : \
+     (instruction) == OP_ACCESS_LOCAL_LONG ? "OP_ACCESS_LOCAL_LONG" : \
      (instruction) == OP_SET_GLOBAL ? "OP_SET_GLOBAL" : \
      (instruction) == OP_SET_LOCAL ? "OP_SET_LOCAL" : \
+     (instruction) == OP_SET_LOCAL_LONG ? "OP_SET_LOCAL_LONG" : \
      (instruction) == OP_DEFINE_GLOBAL_LONG ? "OP_DEFINE_GLOBAL_LONG" : \
      (instruction) == OP_SET_GLOBAL_LONG ? "OP_SET_GLOBAL_LONG" : \
      "UNKNOWN_INSTRUCTION")
@@ -45,9 +47,24 @@ static unsigned int simpleInstruction(const char *name, uint8_t offset) {
 
 static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_t offset, bool isGlobal) {
     uint8_t constantIdx = chunk->code[offset + 1];
-    Value_t value = isGlobal ? vm.globalValues.values[constantIdx] : chunk->constants.values[constantIdx];
     printf("%-16s %4d '", name, constantIdx);
-    printValue(value);
+    /**
+     * At this point, each local has its own slot in the VM stack. Each global has its own slot in globalValues.
+     * At compile time, equal-valued constants have the same slot in constant pool. This leads to confusion when
+     * situations like the below arise:
+     *  var a = 2 (const pool idx 0, stack idx 0); var b = 2 (const pool idx 0, stack idx 1);
+     * 
+     * The original goal was to have a unique index in the const pool for each unique instance of a constant.
+     * Now, to save space, we've de-duplicated. This is nice for saving space but tough for debugging.
+     * For now, I'm just going to refrain from printing constant pool values as the conflation between constant pool indices,
+     * stack slots, and globalValues slots is becoming a little unwieldy...
+     * 
+     * At least we get to see how the stack evolves over time ? :)
+     * 
+     * TODO: Add better debugability to be able to see correct constant regardless of de-duplication.
+     *       Might just need to add back original duplication code when DEBUG_CHUNK is on...
+     */
+    // printValue(value);
     printf("'\n");
     return offset + 2;
 }
@@ -57,9 +74,9 @@ static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, ui
     constantIdx |= chunk->code[offset + 1] << 16;
     constantIdx |= chunk->code[offset + 2] << 8;
     constantIdx |= chunk->code[offset + 3];
-    Value_t value = isGlobal ? vm.globalValues.values[constantIdx] : chunk->constants.values[constantIdx];
+    // Value_t value = isGlobal ? vm.globalValues.values[constantIdx] : chunk->constants.values[constantIdx];
     printf("%-16s %4d '", name, constantIdx);
-    printValue(value);
+    // printValue(value);
     printf("'\n");
     return offset + 4;
 }
@@ -74,7 +91,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     }
 
     uint8_t instruction = chunk->code[offset];
-    char *name = OPTOSTR(instruction);
+    char *name = OP2STR(instruction);
     switch (instruction) {
         case OP_RETURN:
         case OP_NEGATE:

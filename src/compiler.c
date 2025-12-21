@@ -2,6 +2,7 @@
 #include "chunk.h"
 #include "compiler.h"
 #include "scanner.h"
+#include "memory.h"
 #include "object.h"
 #include "table.h"
 #include "vm.h"
@@ -56,15 +57,12 @@ typedef struct {
 /**
  * Simple, flat array of all locals that are in scope during each point of the compilation process.
  * Locals are ordered in the array in order their declarations appear in the code.
- * 
- * NOTE: At *this* point, we're only allowing 1-byte operand for local-encoding instr.
- * Therefore, we have a cap of 256 on number of locals we can store in an array.
- * TODO: Later, I'll modify this to have a long option :)
  */
 typedef struct {
-    Local_t locals[UINT8_COUNT];
+    Local_t *locals;
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
+    size_t capacity;
 } Compiler_t;
 
 Parser_t parser;
@@ -141,7 +139,7 @@ static void emitBytes(uint8_t byte1, uint8_t byte2) {
 }
 
 static void emitVarLenInstr(unsigned idx, uint8_t shortOp, uint8_t longOp) {
-    if (idx < CONSTANT_POOL_SHORT_LEN_MAX) {
+    if (idx < OP_SHORT_MAX) {
         emitBytes(shortOp, (uint8_t)idx);
     } else {
         emitByte(longOp);
@@ -172,7 +170,7 @@ static void endCompiler(void) {
 }
 
 static void emitConstant(Value_t value) {
-    if (currentChunk()->constants.capacity > CONSTANT_POOL_LONG_LEN_MAX) {
+    if (currentChunk()->constants.capacity > OP_LONG_MAX) {
         error("Too many constants in one chunk.");
         return;
     }
@@ -198,7 +196,10 @@ static void emitConstant(Value_t value) {
 }
 
 static void initLocals(void) {
-    for (unsigned i=0; i < UINT8_COUNT; ++i) {
+    size_t oldCapacity = current->capacity;
+    current->capacity = GROW_CAPACITY(oldCapacity);
+    current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
+    for (unsigned i=0; i < current->capacity; ++i) {
         current->locals[i].depth = -1;
     }
 }
@@ -495,7 +496,7 @@ static void expressionStatement(void) {
 
 static unsigned makeConstant(Value_t value) {
     int idx = addConstant(currentChunk(), value);
-    if (idx >= CONSTANT_POOL_LONG_LEN_MAX) {
+    if (idx >= OP_LONG_MAX) {
         fprintf(stderr, "Constant pool is too large.");
         exit(EXIT_FAILURE);
     }
@@ -523,9 +524,19 @@ static unsigned identifierConstant(Token_t *identifier) {
 }
 
 static void addLocal(Token_t *name) {
-    if (current->localCount == UINT8_COUNT) {
+    if (current->localCount == OP_LONG_MAX) {
         error("Too many local variables in a function.");
         return;
+    }
+    if (current->capacity < current->localCount + 1) {
+        size_t oldCapacity = current->capacity;
+        current->capacity = GROW_CAPACITY(oldCapacity);
+        current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
+
+        // Initialize 'unused' locals to depth -1
+        for (unsigned i=oldCapacity; i<current->capacity; ++i) {
+            current->locals[i].depth = -1;
+        }
     }
 
     Local_t *local = &current->locals[current->localCount++];

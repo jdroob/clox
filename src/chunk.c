@@ -22,12 +22,12 @@ void writeChunk(Chunk_t *chunk, uint8_t byte, int line) {
 }
 
 unsigned writeConstant(Chunk_t *chunk, Value_t value, int line) {
-    if (chunk->constants.capacity >= CONSTANT_POOL_LONG_LEN_MAX) {
+    if (chunk->constants.capacity >= OP_LONG_MAX) {
         fprintf(stderr, "Constant pool is too large.");
         exit(EXIT_FAILURE);
     }
     int idx = addConstant(chunk, value);
-    if (chunk->constants.count <= CONSTANT_POOL_SHORT_LEN_MAX) {
+    if (chunk->constants.count <= OP_SHORT_MAX) {
         writeChunk(chunk, OP_CONSTANT, line);
         writeChunk(chunk, idx, line);
         return (unsigned)idx;

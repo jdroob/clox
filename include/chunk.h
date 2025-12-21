@@ -5,8 +5,8 @@
 #include "value.h"
 #include "line.h"
 
-#define CONSTANT_POOL_LONG_LEN_MAX 0x1000000
-#define CONSTANT_POOL_SHORT_LEN_MAX 256
+#define OP_LONG_MAX 0x1000000
+#define OP_SHORT_MAX 256
 #define MASK 0x000000FF
 
 typedef enum {
