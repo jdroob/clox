@@ -63,12 +63,15 @@ typedef struct {
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
     size_t capacity;
+    MutableTable_t localIsFinals;
 } Compiler_t;
 
+// GLOBALS (uh-oh!!)
 Parser_t parser;
 Compiler_t *current;
 Chunk_t *compilingChunk;
 Table_t literals;
+bool isFinal = false;
 
 static void errorAt(Token_t *token, const char *msg) {
     if (parser.panicMode) return;   // suppress follow-on errors while in panic mode
@@ -166,6 +169,8 @@ static void emitLongConstant(int idx) {
 }
 
 static void endCompiler(void) {
+    FREE_ARRAY(Local_t, current->locals, current->capacity);
+    freeIsFinalsArray(&current->localIsFinals);
     emitReturn();
 }
 
@@ -202,6 +207,7 @@ static void initLocals(void) {
     for (unsigned i=0; i < current->capacity; ++i) {
         current->locals[i].depth = -1;
     }
+    initIsFinalsArray(&current->localIsFinals);
 }
 
 static void initCompiler(Compiler_t *compiler) {
@@ -250,7 +256,7 @@ static int resolveLocal(Compiler_t *compiler, Token_t *name) {
         if (identifiersEqual(name, &local->name)) {
             if (local->depth == -1) {
                 error("Cannot read local variable in its own initializer");
-                exit(EXIT_FAILURE);
+                return -1;
             }
             return i;
         }
@@ -258,22 +264,27 @@ static int resolveLocal(Compiler_t *compiler, Token_t *name) {
     return -1;
 }
 
-static unsigned identifierConstant(Token_t *identifier);
+static unsigned identifierConstant(Token_t *identifier, bool isFinal);
 static void namedVariable(Token_t name, bool canAssign) {
     uint8_t getOp, setOp;
     int arg;
     unsigned idx;
-    if ((arg = resolveLocal(current, &name)) != -1) {
+    bool isLocal = (arg = resolveLocal(current, &name)) != -1; 
+    if (isLocal) {
         idx = (unsigned)arg;
         getOp = OP_ACCESS_LOCAL;
         setOp = OP_SET_LOCAL;
     } else {
-        idx = identifierConstant(&name);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
+        idx = identifierConstant(&name, false);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
         getOp = OP_ACCESS_GLOBAL;
         setOp = OP_SET_GLOBAL;
     }
 
     if (canAssign && match(TOKEN_EQUAL)) {
+        if (isLocal && isLocalFinal(&current->localIsFinals, idx)) { 
+            error("Cannot assign to 'final' variable.");
+            return;
+        }
         expression();
         emitVarLenInstr(idx, setOp, setOp == OP_SET_LOCAL ? OP_SET_LOCAL_LONG : OP_SET_GLOBAL_LONG);
     } else {
@@ -508,7 +519,7 @@ static void markInitialized(void) {
     current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
-static unsigned identifierConstant(Token_t *identifier) {
+static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
     Value_t idxVal;
     unsigned idx;
     Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
@@ -519,6 +530,7 @@ static unsigned identifierConstant(Token_t *identifier) {
         idx = (unsigned)vm.globalValues.count;
         tableSet(&vm.globalNames, key, NUMBER_VAL((double)idx));
         writeValueArray(&vm.globalValues, UNDEFINED_VAL);
+        writeIsFinalsArray(&vm.globalIsFinals, isFinal);
     }
     return idx;
 }
@@ -541,6 +553,7 @@ static void addLocal(Token_t *name) {
 
     Local_t *local = &current->locals[current->localCount++];
     local->name = *name;
+    writeIsFinalsArray(&current->localIsFinals, isFinal);
 
     // NOTE: below is necessary! ...but already handled in initLocals :)
     // local->depth = -1;   // sentinel value indicating var is declared but not yet *defined*
@@ -597,7 +610,7 @@ static unsigned parseVariableName(const char *errMsg) {
     consume(TOKEN_IDENTIFIER, "Expect an indentifier");
     declareVariable();
     if (current->scopeDepth > 0) return 0;
-    return identifierConstant(&parser.previous);
+    return identifierConstant(&parser.previous, isFinal);
 }
 
 static void defineVariable(unsigned global) {
@@ -610,6 +623,12 @@ static void defineVariable(unsigned global) {
 
 static void varDeclaration(void) {
     unsigned global = parseVariableName("Expect a variable name");
+    // TODO: Add flag to avoid going here twice (i.e. for *new* globals, this is unnecessary)
+    if (current->scopeDepth == 0) {
+        // Update isFinal for globals
+        // Necessary for re-declaration of globals
+        writeIsFinalsArrayAt(&vm.globalIsFinals, isFinal, global);
+    }
 
     if (match(TOKEN_EQUAL)) {
         expression();       // <- a value will be pushed to stack
@@ -633,6 +652,7 @@ static void endScope(void) {
            current->locals[current->localCount - 1].depth > current->scopeDepth) {
         emitByte(OP_POP);
         current->localCount--;
+        popLocalIsFinalFlag(&current->localIsFinals);
     }
 }
 
@@ -675,7 +695,12 @@ static void statement(void) {
 }
 
 static void declaration(void) {
-    if (match(TOKEN_VAR)) {
+    if (match(TOKEN_FINAL)) {
+        isFinal = true;
+        consume(TOKEN_VAR, "Expected 'var'.");
+        varDeclaration();
+        isFinal = false;
+    } else if (match(TOKEN_VAR)) {
         varDeclaration();
     } else {
         statement();

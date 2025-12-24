@@ -28,6 +28,46 @@ static void runtimeError(const char *format, ...) {
     //freeVM(); // freeing here will result in double free in main
 }
 
+void initIsFinalsArray(MutableTable_t *array) {
+    array->capacity = 0;
+    array->count = 0;
+    array->isFinalFlags = NULL;
+}
+
+void freeIsFinalsArray(MutableTable_t *array) {
+    array->capacity = 0;
+    array->count = 0;
+    #ifdef JRMALLOC
+    jrfree(array->isFinalFlags);
+    #else
+    free(array->isFinalFlags);
+    #endif
+    array->isFinalFlags = NULL;
+}
+
+void writeIsFinalsArray(MutableTable_t *array, bool flag) {
+    if (array->capacity < array->count + 1) {
+        size_t oldCapacity = array->capacity;
+        array->capacity = GROW_CAPACITY(oldCapacity);
+        array->isFinalFlags = GROW_ARRAY(bool, array->isFinalFlags, oldCapacity, array->capacity);
+    }
+    array->isFinalFlags[array->count++] = flag;
+}
+
+void writeIsFinalsArrayAt(MutableTable_t *array, bool flag, unsigned idx) {
+    // PRECONDITION: idx < array->count
+    //   This function should only ever be called to update an existing isFinals flag
+    array->isFinalFlags[idx] = flag;
+}
+
+bool isLocalFinal(MutableTable_t *array, unsigned idx) {
+    return array->isFinalFlags[idx];
+}
+
+void popLocalIsFinalFlag(MutableTable_t *array) {
+    if (array->count) array->count--;
+}
+
 static Value_t peek(int distance) {
     return vm.stackTop[-1 - distance];
 }
@@ -114,6 +154,7 @@ void initVM(void) {
     initTable(&vm.strings);
     initTable(&vm.globalNames);
     initValueArray(&vm.globalValues);
+    initIsFinalsArray(&vm.globalIsFinals);
     resetStack();
 }
 
@@ -122,6 +163,7 @@ void freeVM(void) {
     freeTable(&vm.strings);
     freeTable(&vm.globalNames);
     freeValueArray(&vm.globalValues);
+    freeIsFinalsArray(&vm.globalIsFinals);
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
 }
 
@@ -170,6 +212,7 @@ static InterpResult_t run(void) {
         Value_t a = pop(); \
         push(type##_VAL((AS_##type(a) op AS_##type(b)))); \
     } while(false)
+    #define IS_FINAL(idx) (vm.globalIsFinals.isFinalFlags[idx])
 
     for (;;) {
         uint8_t instruction;
@@ -349,6 +392,10 @@ static InterpResult_t run(void) {
                     runtimeError("Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                if (IS_FINAL(idx)) {
+                    runtimeError("Cannot assign to 'final' variable.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 writeValueArrayAt(&vm.globalValues, peek(0), idx);
                 break;
             }
@@ -385,6 +432,7 @@ static InterpResult_t run(void) {
     #undef READ_STRING_LONG
     #undef READ_STRING
     #undef READ_BYTE
+    #undef IS_FINAL
 
     return INTERPRET_OK;
 }

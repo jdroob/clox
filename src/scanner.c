@@ -169,13 +169,14 @@ static TokenType_e identifierType(void) {
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
                     case 'a': return checkKeyword(1, 4, "alse", TOKEN_FALSE);
+                    case 'i': return checkKeyword(1, 4, "inal", TOKEN_FINAL);
+                    case 'u': return checkKeyword(1, 2, "un", TOKEN_FUN);
                     case 'o':
                         if (scanner.current - scanner.start > 3) {
                             return checkKeyword(1, 6, "oreach", TOKEN_FOREACH);
                         } else {
                             return checkKeyword(1, 2, "or", TOKEN_FOR);
                         }
-                    case 'u': return checkKeyword(1, 2, "un", TOKEN_FUN);
                 }
             }
             break;

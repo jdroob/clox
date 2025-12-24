@@ -613,3 +613,181 @@ Your understanding has evolved from "late binding means runtime lookup" to "late
 The fact that you can trace through both the compile-time symbol table management AND the runtime execution semantics shows you're thinking at the right level of abstraction. 🚀
 
 Aw shucks ;) thanks Claude
+
+12/23/2025:
+   - Added support for 'final' keyword :)
+   - How does this work?
+
+   ## Global Case
+   ```
+   final var a = 4;
+   a = 4;   // ERROR
+   // OR
+   var a = 2;
+   final var a = 4;
+   a = 2;   // ERROR
+   // OR
+   final var a = 4;
+   var a = 2;
+   a = 4;   // NO ERROR
+   ```
+   - For the global case, added a `globalIsFinal` tracker to the VM
+
+   ```
+   typedef struct {
+    Chunk_t         *chunk;
+    uint8_t         *ip;
+    uint32_t        capacity;
+    Value_t         *stack;
+    Value_t         *stackTop;
+    Table_t         strings;
+    Table_t         globalNames;
+    ValueArray_t    globalValues;
+    MutableTable_t  globalIsFinals;  // <-
+    Obj_t           *objects;
+  } VM_t;
+  ```
+
+  - Each time a var declaration is scanned, an `isFinal` flag is set
+  ```
+  static void declaration(void) {
+    if (match(TOKEN_FINAL)) {
+        isFinal = true;    // <-
+        consume(TOKEN_VAR, "Expected 'var'.");
+        varDeclaration();
+        isFinal = false;
+    } else if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        statement();
+    }
+
+    if (parser.panicMode) synchronize();
+  }
+   ```
+   
+
+- In compiler.c::identifierConstant(), set flag accordingly
+```
+static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
+    Value_t idxVal;
+    unsigned idx;
+    Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
+    if (tableGet(&vm.globalNames, key, &idxVal)) {
+        // TODO: fix mem leak here... if key already exists in table, it should be freed
+        idx = (unsigned)AS_NUMBER(idxVal);
+    } else {
+        idx = (unsigned)vm.globalValues.count;
+        tableSet(&vm.globalNames, key, NUMBER_VAL((double)idx));
+        writeValueArray(&vm.globalValues, UNDEFINED_VAL);
+        writeIsFinalsArray(&vm.globalIsFinals, isFinal);   <-
+    }
+    return idx;
+}
+```
+
+- GOTCHA: since globals can be re-declared, need to be able to unset / reset a global's isFinal flag
+- Taken care of in compiler.c::varDeclaration()
+
+```
+static void varDeclaration(void) {
+    unsigned global = parseVariableName("Expect a variable name");
+    // TODO: Add flag to avoid going here twice (i.e. for *new* globals, this is unnecessary)
+    if (current->scopeDepth == 0) {   // <-
+        // Update isFinal for globals
+        // Necessary for re-declaration of globals
+        writeIsFinalsArrayAt(&vm.globalIsFinals, isFinal, global);
+    }
+
+    if (match(TOKEN_EQUAL)) {
+        expression();       // <- a value will be pushed to stack
+    } else {
+        emitByte(OP_NIL);   // <- NULL will be pushed to stack
+    }
+
+    consume(TOKEN_SEMICOLON, "Expect a ';'.");
+    defineVariable(global);
+}
+```
+
+## Local Case
+
+- Added another MutabilityTable_t struct to the Compiler_t struct that lives during parsing / code generation
+
+```
+typedef struct {
+    Local_t *locals;
+    int localCount; // number of locals in scope
+    int scopeDepth; // number of scopes enclosing current scope
+    size_t capacity;
+    MutableTable_t localIsFinals;
+} Compiler_t;
+```
+
+- When adding a new local, add a flag to localIsFinals
+```
+static void addLocal(Token_t *name) {
+    if (current->localCount == OP_LONG_MAX) {
+        error("Too many local variables in a function.");
+        return;
+    }
+    if (current->capacity < current->localCount + 1) {
+        size_t oldCapacity = current->capacity;
+        current->capacity = GROW_CAPACITY(oldCapacity);
+        current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
+
+        // Initialize 'unused' locals to depth -1
+        for (unsigned i=oldCapacity; i<current->capacity; ++i) {
+            current->locals[i].depth = -1;
+        }
+    }
+
+    Local_t *local = &current->locals[current->localCount++];
+    local->name = *name;
+    writeIsFinalsArray(&current->localIsFinals, isFinal);  // <-
+
+    // NOTE: below is necessary! ...but already handled in initLocals :)
+    // local->depth = -1;   // sentinel value indicating var is declared but not yet *defined*
+}
+```
+
+- And when we pop locals, we "pop" those flags too :)
+
+- In compiler.c::endScope()
+```
+static void endScope(void) {
+    current->scopeDepth--;
+
+    // TODO: replace with OP_POPN
+    while (current->localCount > 0 &&
+           current->locals[current->localCount - 1].depth > current->scopeDepth) {
+        emitByte(OP_POP);
+        current->localCount--;
+        popLocalIsFinalFlag(&current->localIsFinals);  // <-
+    }
+}
+```
+- And in vm.c::popLocalIsFinalFlag
+```
+void popLocalIsFinalFlag(MutableTable_t *array) {
+    if (array->count) array->count--;
+}
+```
+- And voila! That's all there is to it :)
+
+```
+$ bin/lox
+> final var a = 4;
+> a = 2;    
+Cannot assign to 'final' variable.
+[line 1] in script
+> var a = 2;
+> a = 4;
+> final var a = 2;
+> a = 4;
+Cannot assign to 'final' variable.
+[line 1] in script
+> { final var a = 2; a = 4; }
+[line 1] Error at '=' : Cannot assign to 'final' variable.
+> 
+```
