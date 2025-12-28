@@ -168,6 +168,25 @@ static void emitLongConstant(int idx) {
     emitByte((unsigned)idx & MASK);
 }
 
+static int emitJump(uint8_t instruction) {
+    emitByte(instruction);
+    // Placeholder
+    emitByte(0xFF);
+    emitByte(0xFF);
+    return currentChunk()->count - 2;    // index of first byte of placeholder
+}
+
+static void patchJump(int offset) {
+    // -2 to adjust bytecode for the jump offset itself.
+    int jump = currentChunk()->count - offset - 2;
+    
+    if (jump > UINT16_MAX) {
+        error("Too much code to jump over :(.");
+    }
+    currentChunk()->code[offset] = (jump >> 8) & 0xFF;  // write high byte of jump
+    currentChunk()->code[offset + 1] = jump & 0xFF;     // write low byte of jump
+}
+
 static void endCompiler(void) {
     FREE_ARRAY(Local_t, current->locals, current->capacity);
     freeIsFinalsArray(&current->localIsFinals);
@@ -319,6 +338,77 @@ static void unary(bool canAssign) {
     }
 }
 
+static void and_(bool canAssign) {
+    /**
+     * Why don't we add an 'OP_AND' instruction?
+     * 
+     * We could - but that'd defeat the purpose of short-circuiting.
+     * Here's how the below works:
+     *  case 0: false AND dontcare
+     *      there's a false currently at top of stack
+     *      OP_JUMP_IF_FALSE will see LHS produced false value and jump past RHS expression
+     *  case 1: true AND false
+     *      OP_JUMP_IF_FALSE will see LHS produced true and fallthrough
+     *      OP_POP will pop 'true' from top of stack
+     *      RHS will be evaluated:
+     *          RHS evals to false; therefore, result of AND operation is false - so false at top of stack from RHS eval is accurate
+     *  case 2: true AND true
+     *      OP_JUMP_IF_FALSE will see LHS produced true and fallthrough
+     *      OP_POP will pop 'true' from top of stack
+     *      RHS will be evaluated:
+     *          RHS evals to true; therefore, result of AND operation is true - so true at top of stack from RHS eval is accurate
+     */
+
+    // LHS has already been compiled (result at top of stack)
+    int lhsFalse = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    parsePrecedence(PREC_AND);  // evaluate RHS
+    patchJump(lhsFalse);
+}
+
+static void or_(bool canAssign) {
+    /**
+     * Why don't we add an 'OP_OR' instruction?
+     * 
+     * We could - but that'd defeat the purpose of short-circuiting.
+     * Here's how the below works:
+     *  case 0: true OR dontcare
+     *      there's a true currently at top of stack
+     *      OP_JUMP_IF_TRUE will see LHS produced true value and jump past RHS expression
+     *  case 1: false OR false
+     *      OP_JUMP_IF_TRUE will see LHS produced false and fallthrough
+     *      OP_POP will pop 'false' from top of stack
+     *      RHS will be evaluated:
+     *          RHS evals to false; therefore, result of OR operation is false - so false at top of stack from RHS eval is accurate
+     *  case 2: false OR true
+     *      OP_JUMP_IF_TRUE will see LHS produced false and fallthrough
+     *      OP_POP will pop 'false' from top of stack
+     *      RHS will be evaluated:
+     *          RHS evals to true; therefore, result of OR operation is true - so true at top of stack from RHS eval is accurate
+     */
+
+    // LHS has already been compiled (result at top of stack)
+    int lhsTrue = emitJump(OP_JUMP_IF_TRUE);
+    emitByte(OP_POP);
+    parsePrecedence(PREC_OR);  // evaluate RHS
+    patchJump(lhsTrue);
+
+    /**
+     * ^I did the above like this for future me's readability, but the "efficient" approach
+     *  would be to implement short-circuiting for both OR and AND using the same OP_JUMP_IF_FALSE op.
+     *  This is what that'd look like
+     * 
+     *  int lhsFalse = emitJump(OP_JUMP_IF_FALSE);
+     *  int lhsTrue = emitJump(OP_JUMP);    // can only get here when LHS is true
+     * 
+     *  patchJump(lhsFalse);    // if LHS was false, short jump over here
+     *  emitByte(OP_POP);   // pop false from stack
+     *  parsePrecedence(PREC_OR);   // evaluate RHS
+     * 
+     *  patchJump(lhsTrue); // if LHS was true, no need to eval RHS
+     */
+}
+
 static void binary(bool canAssign) {
     TokenType_e operatorType = parser.previous.type;
     ParseRule_t *rule = getRule(operatorType);
@@ -404,8 +494,8 @@ ParseRule_t rules[] = {
     [TOKEN_STRING]          =  {string, NULL, PREC_NONE},
     [TOKEN_INTERPOLATION]   =  {NULL, NULL, PREC_NONE},
     [TOKEN_NUMBER]          =  {number, NULL, PREC_NONE},
-    [TOKEN_AND]             =  {NULL, binary, PREC_AND},
-    [TOKEN_OR]              =  {NULL, binary, PREC_OR},
+    [TOKEN_AND]             =  {NULL, and_, PREC_AND},
+    [TOKEN_OR]              =  {NULL, or_, PREC_OR},
     [TOKEN_BREAK]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_CLASS]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_ELSE]            =  {NULL, NULL, PREC_NONE},
@@ -492,7 +582,7 @@ static void synchronize(void) {
 }
 
 static void printStatement(void) {
-    expression();
+    expression();   // allows for print(a) or print a b/c () in print(a) are a grouping
     if (!match(TOKEN_COMMA))
         consume(TOKEN_SEMICOLON, "Expected a ';'.");
     emitByte(OP_PRINT);
@@ -664,6 +754,24 @@ static void block(void) {
     consume(TOKEN_RIGHT_BRACE, "Expect a '}' at end of block.");
 }
 
+static void statement(void);
+static void ifStatement(void) {
+    consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'if'.");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expected a ')' after condition.");
+    
+    int thenJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);   // pop result of condition in "consition is true" case
+    statement();
+    int elseJump = emitJump(OP_JUMP);
+
+    patchJump(thenJump);
+    emitByte(OP_POP);   // if condition is false, control jumps here - time to clean up the stack
+
+    if (match(TOKEN_ELSE)) statement();
+    patchJump(elseJump);
+}
+
 /**
  * LOX GRAMMAR RULES:
  *  **NOTE:** This is a little more bare-bones than the jlox grammar doc comment.
@@ -672,8 +780,9 @@ static void block(void) {
  *            It's easier to write the rules next to the code in a recursive descent
  *            parser (jlox) than it is here with a Pratt Parser (clox).
  * 
- *  declaration  ->  varDecl | stmt ;
+ *  declaration  ->  varDecl | ifStmt | stmt ;
  *  varDecl      ->  "var" IDENTIFIER ("=" expression)? ";" ;
+ *  ifStmt       ->  "if" "(" condition ")" block ";" ;
  *  stmt         ->  printStmt | exprStmt | block ;
  *  printStmt    ->  "print" "(" expression ")" ";" ;
  *  exprStmt     ->  expression ";" ;
@@ -702,6 +811,8 @@ static void declaration(void) {
         isFinal = false;
     } else if (match(TOKEN_VAR)) {
         varDeclaration();
+    } else if (match(TOKEN_IF)) {
+        ifStatement();
     } else {
         statement();
     }

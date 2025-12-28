@@ -36,6 +36,9 @@
      (instruction) == OP_SET_LOCAL_LONG ? "OP_SET_LOCAL_LONG" : \
      (instruction) == OP_DEFINE_GLOBAL_LONG ? "OP_DEFINE_GLOBAL_LONG" : \
      (instruction) == OP_SET_GLOBAL_LONG ? "OP_SET_GLOBAL_LONG" : \
+     (instruction) == OP_JUMP_IF_FALSE ? "OP_JUMP_IF_FALSE" : \
+     (instruction) == OP_JUMP_IF_TRUE ? "OP_JUMP_IF_TRUE" : \
+     (instruction) == OP_JUMP ? "OP_JUMP" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -67,6 +70,14 @@ static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_
     // printValue(value);
     printf("'\n");
     return offset + 2;
+}
+
+static unsigned jumpInstruction(const char *name, int sign, Chunk_t *chunk, uint8_t offset) {
+    uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
+    jump |= chunk->code[offset + 2];
+
+    printf("%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
+    return offset + 3;
 }
 
 static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint8_t offset, bool isGlobal) {
@@ -131,6 +142,10 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_ACCESS_GLOBAL_LONG:
         case OP_SET_GLOBAL_LONG:
             return longConstantInstruction(name, chunk, offset, true);
+        case OP_JUMP_IF_FALSE:
+        case OP_JUMP_IF_TRUE:
+        case OP_JUMP:
+            return jumpInstruction(name, 1, chunk, offset);
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
             return offset + 1;

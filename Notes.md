@@ -622,16 +622,16 @@ Aw shucks ;) thanks Claude
    ```
    final var a = 4;
    a = 4;   // ERROR
-   // OR
+   
    var a = 2;
    final var a = 4;
    a = 2;   // ERROR
-   // OR
+   
    final var a = 4;
    var a = 2;
    a = 4;   // NO ERROR
    ```
-   - For the global case, added a `globalIsFinal` tracker to the VM
+   - For the global case, added a `globalIsFinals` tracker to the VM
 
    ```
    typedef struct {
@@ -655,7 +655,7 @@ Aw shucks ;) thanks Claude
         isFinal = true;    // <-
         consume(TOKEN_VAR, "Expected 'var'.");
         varDeclaration();
-        isFinal = false;
+        isFinal = false;   // <- set back to default state (false)
     } else if (match(TOKEN_VAR)) {
         varDeclaration();
     } else {
@@ -782,7 +782,7 @@ $ bin/lox
 Cannot assign to 'final' variable.
 [line 1] in script
 > var a = 2;
-> a = 4;
+> a = 4;    // No error
 > final var a = 2;
 > a = 4;
 Cannot assign to 'final' variable.
@@ -791,3 +791,152 @@ Cannot assign to 'final' variable.
 [line 1] Error at '=' : Cannot assign to 'final' variable.
 > 
 ```
+
+# Chapter 23: Jumping back and forth
+
+## If-Else + `and` and `or
+- **The big idea:** We're going to add support for conditional statements to clox. To do this, we'll need bytecode-level instructions that : pops a boolean value off the stack and evaluate it's truthiness. If true, fall through to the true statement. If false, jump to the false block. Note that this implies that the end of the truth block must contain a jump to the instruction after the false block.
+
+```
+# clox bytecode pseudocode
+OP_POP_JUMP_IF_FALSE   <offset-to-false-block>
+
+# true block
+OP_JUMP_PAST_FALSE_BLICK <offset-to-after-false-block>
+
+-> # false block
+# just after false block
+```
+
+- The above is what we'll need to implement. A quick observation - note how in Lox, programs are *structured*. Structured is relative but according to [this definition](https://en.wikipedia.org/wiki/Structured_programming), it's a language with explicit scoping rules, functions, and high-level constructs such as classes, loops, and conditional statements. It's important to remember that these constructs are just useful abstractions that boil away once we lower to bytecode (or assembly in the case of true compilers :) ). The only "real" construct that persists across both high-level languages and bytecode / assembly-level languages are goto's (i.e. jumps).
+
+12/28/2025:
+    - Here's a quick blurb about how if, else, and, or were implemented :)
+    - As discussed above, with 'if', we want to check if condition is false. If so, jump past then. Otherwise, fall through to then. An implementation detail here is that, we need to pop off the result of the condition, regardless of its truthiness. With that said, here's how if-else is impl'd:
+
+
+```
+    // From compiler.c
+    static void ifStatement(void) {
+        consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'if'.");
+        expression();
+        consume(TOKEN_RIGHT_PAREN, "Expected a ')' after condition.");
+        
+        int thenJump = emitJump(OP_JUMP_IF_FALSE);
+        emitByte(OP_POP);   // pop result of condition in "consition is true" case
+        statement();
+        int elseJump = emitJump(OP_JUMP);
+
+        patchJump(thenJump);
+        emitByte(OP_POP);   // if condition is false, control jumps here - time to clean up the stack
+
+        if (match(TOKEN_ELSE)) statement();
+        patchJump(elseJump);
+    }
+```
+- We do the normal syntax checks (e.g. make sure the condition is in parens)
+- Then, we emit a jump instruction
+- The intent of this jump instruction is to jump past the then block if the condition evals to false
+- The question here is: we don't know know how far to jump yet.. so what should the offset be
+- The trick here is **backpatching**, we emit the bytecode for the then block. We also emit the bytecode   for the "jump past the else" jump. Now, we're at the bytecode location we want to jump to when the if condition is false. Notice that we stored the int 'thenJump'. This is the bytecode index of a placeholder. This placeholder will later be overwritten with the jump offset. Using this, and the current location of the bytecode being written by the code generator, we can do some math to figure out how far to jump *then* we can go back and **patch** the original jump instruction. Here's how we accomplish those two tasks:
+
+```
+    static int emitJump(uint8_t instruction) {
+        emitByte(instruction);
+        // Placeholder
+        emitByte(0xFF);
+        emitByte(0xFF);
+        return currentChunk()->count - 2;    // index of first byte of placeholder
+    }
+
+    static void patchJump(int offset) {
+        // -2 to adjust bytecode for the jump offset itself.
+        int jump = currentChunk()->count - offset - 2;
+        
+        if (jump > UINT16_MAX) {
+            error("Too much code to jump over :(.");
+        }
+        currentChunk()->code[offset] = (jump >> 8) & 0xFF;  // write high byte of jump
+        currentChunk()->code[offset + 1] = jump & 0xFF;     // write low byte of jump
+    }
+```
+- And voila! We now have if and else :)
+- What about 'or' and 'and'? We'll use the same `OP_JUMP*` instructions to implement short-circuiting. I had to do a lot of thinking (and re-reading) while implementing these so hopefully the comments are sufficient. If not, I'm sorry future me :( Guess ya have to go back and re-read that part of the book (page 685)
+
+```
+    static void and_(bool canAssign) {
+        /**
+        * Why don't we add an 'OP_AND' instruction?
+        * 
+        * We could - but that'd defeat the purpose of short-circuiting.
+        * Here's how the below works:
+        *  case 0: false AND dontcare
+        *      there's a false currently at top of stack
+        *      OP_JUMP_IF_FALSE will see LHS produced false value and jump past RHS expression
+        *  case 1: true AND false
+        *      OP_JUMP_IF_FALSE will see LHS produced true and fallthrough
+        *      OP_POP will pop 'true' from top of stack
+        *      RHS will be evaluated:
+        *          RHS evals to false; therefore, result of AND operation is false - so false at top of stack from RHS eval is accurate
+        *  case 2: true AND true
+        *      OP_JUMP_IF_FALSE will see LHS produced true and fallthrough
+        *      OP_POP will pop 'true' from top of stack
+        *      RHS will be evaluated:
+        *          RHS evals to true; therefore, result of AND operation is true - so true at top of stack from RHS eval is accurate
+        */
+
+        // LHS has already been compiled (result at top of stack)
+        int lhsFalse = emitJump(OP_JUMP_IF_FALSE);
+        emitByte(OP_POP);
+        parsePrecedence(PREC_AND);  // evaluate RHS
+        patchJump(lhsFalse);
+    }
+
+    static void or_(bool canAssign) {
+        /**
+        * Why don't we add an 'OP_OR' instruction?
+        * 
+        * We could - but that'd defeat the purpose of short-circuiting.
+        * Here's how the below works:
+        *  case 0: true OR dontcare
+        *      there's a true currently at top of stack
+        *      OP_JUMP_IF_TRUE will see LHS produced true value and jump past RHS expression
+        *  case 1: false OR false
+        *      OP_JUMP_IF_TRUE will see LHS produced false and fallthrough
+        *      OP_POP will pop 'false' from top of stack
+        *      RHS will be evaluated:
+        *          RHS evals to false; therefore, result of OR operation is false - so false at top of stack from RHS eval is accurate
+        *  case 2: false OR true
+        *      OP_JUMP_IF_TRUE will see LHS produced false and fallthrough
+        *      OP_POP will pop 'false' from top of stack
+        *      RHS will be evaluated:
+        *          RHS evals to true; therefore, result of OR operation is true - so true at top of stack from RHS eval is accurate
+        */
+
+        // LHS has already been compiled (result at top of stack)
+        int lhsTrue = emitJump(OP_JUMP_IF_TRUE);
+        emitByte(OP_POP);
+        parsePrecedence(PREC_OR);  // evaluate RHS
+        patchJump(lhsTrue);
+
+        /**
+        * ^I did the above like this for future me's readability, but the "efficient" approach
+        *  would be to implement short-circuiting for both OR and AND using the same OP_JUMP_IF_FALSE op.
+        *  This is what that'd look like
+        * 
+        *  int lhsFalse = emitJump(OP_JUMP_IF_FALSE);
+        *  int lhsTrue = emitJump(OP_JUMP);    // can only get here when LHS is true
+        * 
+        *  patchJump(lhsFalse);    // if LHS was false, short jump over here
+        *  emitByte(OP_POP);   // pop false from stack
+        *  parsePrecedence(PREC_OR);   // evaluate RHS
+        * 
+        *  patchJump(lhsTrue); // if LHS was true, no need to eval RHS
+        */
+    }
+```
+
+Both of these functions were added to the `ParseRule_t rules[]` array so when 'and' and 'or' are encountered, the above functions are called and corresponding bytecode is written
+
+
+## Loops

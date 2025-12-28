@@ -72,12 +72,27 @@ static Value_t peek(int distance) {
     return vm.stackTop[-1 - distance];
 }
 
-static bool isFalsey(Value_t value) {
-    return (IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value)));
-}
+// static bool isFalsey(Value_t value) {
+//     return (IS_NIL(value) || (IS_BOOL(value) && !AS_BOOL(value)));
+// }
 
 static bool isTruthy(Value_t value) {
     return (IS_NUMBER(value) ? value.as.num != 0 : IS_BOOL(value) ? AS_BOOL(value) : false);
+}
+
+static bool isFalsey(Value_t value) {
+    switch (value.type) {
+        case VAL_BOOL: return !AS_BOOL(value);
+        case VAL_NUM: return AS_NUMBER(value) == 0;
+        case VAL_NIL: return true;
+        case VAL_OBJ: {
+            switch(OBJ_TYPE(value)) {
+                case OBJ_STRING:
+                    return AS_STRING(value)->length == 0;
+            }
+        }
+        default: return false;
+    }
 }
 
 bool valuesEqual(Value_t a, Value_t b) {
@@ -188,6 +203,13 @@ static InterpResult_t run(void) {
         uint8_t byte0 = READ_BYTE(); \
         unsigned bytes = (byte2 << 16) | (byte1 << 8) | byte0;  \
         bytes;  \
+    })
+    #define READ_SHORT() \
+    ({ \
+        uint8_t byte1 = READ_BYTE(); \
+        uint8_t byte0 = READ_BYTE(); \
+        uint16_t bytes = (byte1 << 8) | byte0; \
+        bytes; \
     })
     #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
     /**
@@ -423,6 +445,39 @@ static InterpResult_t run(void) {
                 vm.stack[idx] = peek(0);
                 break;
             }
+            case OP_JUMP_IF_TRUE: {
+                uint16_t offset = READ_SHORT();
+                if (!isFalsey(peek(0))) {
+                    vm.ip += offset;
+                    break;
+                }
+                break;
+            }
+            case OP_JUMP_IF_FALSE: {
+                uint16_t offset = READ_SHORT();
+                if (isFalsey(peek(0))) {
+                    vm.ip += offset;
+                    break;
+                }
+
+                break;
+
+                // Value_t value = peek(0);
+                // if (falsey(value)) {
+                //     uint16_t offset = 0;
+                //     offset = (offset | *vm.ip) << 8;
+                //     offset = offset | *(vm.ip + 1);
+                //     vm.ip += offset;
+                //     break;
+                // }
+                // vm.ip += 2; // Skip offset
+                // break;
+            }
+            case OP_JUMP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip += offset;
+                break;
+            }
             default:
         }
     }
@@ -432,6 +487,7 @@ static InterpResult_t run(void) {
     #undef READ_STRING_LONG
     #undef READ_STRING
     #undef READ_BYTE
+    #undef READ_SHORT
     #undef IS_FINAL
 
     return INTERPRET_OK;
