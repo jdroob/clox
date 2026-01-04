@@ -39,6 +39,7 @@
      (instruction) == OP_JUMP_IF_FALSE ? "OP_JUMP_IF_FALSE" : \
      (instruction) == OP_JUMP_IF_TRUE ? "OP_JUMP_IF_TRUE" : \
      (instruction) == OP_JUMP ? "OP_JUMP" : \
+     (instruction) == OP_LOOP ? "OP_LOOP" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -146,6 +147,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_JUMP_IF_TRUE:
         case OP_JUMP:
             return jumpInstruction(name, 1, chunk, offset);
+        case OP_LOOP:
+            return jumpInstruction(name, -1, chunk, offset);
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
             return offset + 1;

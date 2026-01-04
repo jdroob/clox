@@ -130,6 +130,55 @@ static void concatenate(void) {
     push(OBJ_VAL(string));
 }
 
+static void concatenateNum(void) {
+    Value_t b = pop();
+    Value_t a = pop();
+
+    ObjString_t *str;
+    double num;
+    bool bIsString;
+    str = IS_STRING(b) ? (bIsString = true, num = AS_NUMBER(a), AS_STRING(b)) : \ 
+        (bIsString = false, num = AS_NUMBER(b), AS_STRING(a));
+
+    char *result = NULL;
+    size_t len = str->length;
+    #include <math.h>
+    bool hasDecimalPart = fmod(num, 1.0) != 0.0;
+    int truncated = (int)num;
+
+    // Calculate total length
+    if (hasDecimalPart) {
+        len += snprintf(NULL, 0, "%g", num) + 1;
+    } else {
+        len += snprintf(NULL, 0, "%d", truncated) + 1;
+    }
+
+    result = (char *)malloc(len);
+    if (!result) {
+        runtimeError("Memory allocation failed for concatenation.\n");
+        return;
+    }
+
+    if (hasDecimalPart) {
+        // No decimal part
+        if (bIsString) {
+            snprintf(result, len, "%g%s", num, str->chars);
+        } else {
+            snprintf(result, len, "%s%g", str->chars, num);
+        }
+    } else {
+        if (bIsString) {
+            snprintf(result, len, "%d%s", truncated, str->chars);
+        } else {
+            snprintf(result, len, "%s%d", str->chars, truncated);
+        }
+    }
+
+    // TODO: Confirm no memory leak
+    push(OBJ_VAL(makeString(result, len - 1)));
+    free(result);
+}
+
 void push(Value_t value) {
     if (vm.capacity < vm.stackTop - vm.stack + 1) {
         uint32_t oldCapacity = vm.capacity;
@@ -229,10 +278,10 @@ static InterpResult_t run(void) {
     })
     #define READ_STRING() (AS_STRING(READ_CONSTANT()))
     #define READ_STRING_LONG() (AS_STRING(READ_CONSTANT_LONG()))
-    #define BINARY_OP(type, op) do { \
+    #define BINARY_OP(resType, operandType, op) do { \
         Value_t b = pop(); \
         Value_t a = pop(); \
-        push(type##_VAL((AS_##type(a) op AS_##type(b)))); \
+        push(resType##_VAL((AS_##operandType(a) op AS_##operandType(b)))); \
     } while(false)
     #define IS_FINAL(idx) (vm.globalIsFinals.isFinalFlags[idx])
 
@@ -304,18 +353,20 @@ static InterpResult_t run(void) {
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
                     concatenate();
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
-                    BINARY_OP(NUMBER, +); 
+                    BINARY_OP(NUMBER, NUMBER, +); 
+                } else if (IS_NUMSTR(peek(0), peek(1))) {
+                    concatenateNum();
                 } else {
                     runtimeError("Operands must be two numbers or two strings.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 break;
             }
-            case OP_SUBTRACT:   BINARY_OP(NUMBER, -); break;
-            case OP_MULTIPLY:   BINARY_OP(NUMBER, *); break;
-            case OP_DIVIDE:     BINARY_OP(NUMBER, /); break;
-            case OP_GT:         BINARY_OP(BOOL, >); break;
-            case OP_LT:         BINARY_OP(BOOL, <); break;
+            case OP_SUBTRACT:   BINARY_OP(NUMBER, NUMBER, -); break;
+            case OP_MULTIPLY:   BINARY_OP(NUMBER, NUMBER, *); break;
+            case OP_DIVIDE:     BINARY_OP(NUMBER, NUMBER, /); break;
+            case OP_GT:         BINARY_OP(BOOL, NUMBER, >); break;
+            case OP_LT:         BINARY_OP(BOOL, NUMBER, <); break;
             case OP_EQ: {
                 Value_t b = pop();
                 Value_t a = pop();
@@ -476,6 +527,16 @@ static InterpResult_t run(void) {
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
                 vm.ip += offset;
+                break;
+            }
+            // case OP_JUMP_BACK: {
+            //     uint16_t offset = READ_SHORT();
+            //     vm.ip = vm.chunk->code + offset;
+            //     break;
+            // }
+            case OP_LOOP: {
+                uint16_t offset = READ_SHORT();
+                vm.ip -= offset;
                 break;
             }
             default:

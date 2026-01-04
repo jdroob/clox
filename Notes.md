@@ -939,4 +939,36 @@ OP_JUMP_PAST_FALSE_BLICK <offset-to-after-false-block>
 Both of these functions were added to the `ParseRule_t rules[]` array so when 'and' and 'or' are encountered, the above functions are called and corresponding bytecode is written
 
 
+## Questions to answer at conclusion of clox:
+1) How are local variables mapped? Are local variables early or late bound?
+2) Answer the same question for global variables
+3) The program below produces an error. Walk through the the sequence of bytecode ops emitted (and global tables written) at compile time. Walk through what happens at runtime.
+
+```
+fun f() {
+    a = 4;  // ERROR
+}
+
+fun main() {
+    f();
+}
+
+main();
+```
+
 ## Loops
+
+TODO: Document how you implemented while loops
+TODO: Document how you implemented for loops
+
+TODO: Check if we're currently supporting nested ifs and loops without braces
+    (rn if has statement instead of declaration or block - same with while)
+
+TODO: Add string + number concatenation - it's getting too annoying to add debug output to Lox
+
+TODO: Keep an eye on whether your for loop implementation continues to work - you did something different from the book
+
+TODO: Talk about how you did str + num concat
+TODO: Talk about how you supported
+    `if (true) if (true) print "ifif";`
+    `while (true) while (true) if (true) print "whilewhileif";`

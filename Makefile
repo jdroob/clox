@@ -4,6 +4,7 @@ INCLUDES = include
 SRC = src
 OBJ = obj
 BIN = bin
+LIBS = -lm
 ARGS =
 CFLAGS = -Wall -g -Wno-sequence-point
 DEBUG_CFLAGS = -DDEBUG
@@ -19,10 +20,10 @@ OBJECTS = $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SOURCES))
 default: $(EXE)
 
 $(EXE): $(OBJECTS)
-	$(CC) $(OBJECTS) -I$(INCLUDES) -o $(BIN)/$(EXE)
+	$(CC) $(OBJECTS) -I$(INCLUDES) $(LIBS) -o $(BIN)/$(EXE)
 
 $(OBJ)/%.o: $(SRC)/%.c | setup
-	$(CC) -c $< -I$(INCLUDES) $(CFLAGS) -o $@
+	$(CC) -c $< -I$(INCLUDES) $(LIBS) $(CFLAGS) -o $@
 
 setup:
 	mkdir -p $(OBJ)
@@ -42,7 +43,7 @@ debug_chunk_jrmalloc: default
 
 debug_jrmalloc: CFLAGS+=$(DEBUG_JRMALLOC_CFLAGS) -DJRMALLOC
 debug_jrmalloc: jrmalloc
-	$(CC) $(SRC)/jrmalloc.c -I$(INCLUDES) $(CFLAGS) -o $(BIN)/jrm
+	$(CC) $(SRC)/jrmalloc.c -I$(INCLUDES) $(LIBS) $(CFLAGS) -o $(BIN)/jrm
 
 jrmalloc: CFLAGS+=$(JRMALLOC_CFLAGS)
 jrmalloc: default

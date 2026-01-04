@@ -35,11 +35,20 @@
 //   a = 4;
 //}
 
-if (false) print "then";
-print("else");
+//if (false) print "then";
+//print("else");
 //var b = "john":
 //var b;
 //a * b = a;
 //var breakfast = "eggs";
 //print(" " + "hi");
 //print(breakfast + " and " + beverage); 
+
+for (var i=0; i<2; i = i + 1) {
+   for (var j = 0; j<2; j = j + 1) {
+      print i;
+      print j;
+   }
+}
+
+1.1519248 + "john";

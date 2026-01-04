@@ -37,12 +37,14 @@ typedef struct {
 #define AS_NUMBER(value) ((value).as.num)
 #define AS_OBJ(value)    ((value).as.obj)
 
-#define IS_BOOL(value)       ((value).type == VAL_BOOL)
-#define IS_NUMBER(value)     ((value).type == VAL_NUM)
-#define IS_OBJ(value)        ((value).type == VAL_OBJ)
-#define IS_NIL(value)        ((value).type == VAL_NIL)
-#define IS_EMPTY(value)      ((value).type == VAL_EMPTY)
-#define IS_UNDEFINED(value)  ((value).type == VAL_UNDEFINED)
+#define IS_BOOL(value)              ((value).type == VAL_BOOL)
+#define IS_NUMBER(value)            ((value).type == VAL_NUM)
+#define IS_NUMSTR(value0, value1)   (((value0).type == VAL_NUM) && (IS_STRING(value1))) || \
+                                    ((IS_STRING(value0)) && ((value1).type == VAL_NUM))
+#define IS_OBJ(value)               ((value).type == VAL_OBJ)
+#define IS_NIL(value)               ((value).type == VAL_NIL)
+#define IS_EMPTY(value)             ((value).type == VAL_EMPTY)
+#define IS_UNDEFINED(value)         ((value).type == VAL_UNDEFINED)
 
 typedef struct {
     size_t capacity;

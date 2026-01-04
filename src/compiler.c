@@ -614,7 +614,7 @@ static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
     unsigned idx;
     Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
     if (tableGet(&vm.globalNames, key, &idxVal)) {
-        // TODO: fix mem leak here... if key already exists in table, it should be freed
+        // TODO: fix memory leak here... if key already exists in table, it should be freed
         idx = (unsigned)AS_NUMBER(idxVal);
     } else {
         idx = (unsigned)vm.globalValues.count;
@@ -754,7 +754,7 @@ static void block(void) {
     consume(TOKEN_RIGHT_BRACE, "Expect a '}' at end of block.");
 }
 
-static void statement(void);
+static void declaration(void);
 static void ifStatement(void) {
     consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'if'.");
     expression();
@@ -762,14 +762,113 @@ static void ifStatement(void) {
     
     int thenJump = emitJump(OP_JUMP_IF_FALSE);
     emitByte(OP_POP);   // pop result of condition in "consition is true" case
-    statement();
+    declaration();
     int elseJump = emitJump(OP_JUMP);
 
     patchJump(thenJump);
     emitByte(OP_POP);   // if condition is false, control jumps here - time to clean up the stack
 
-    if (match(TOKEN_ELSE)) statement();
+    if (match(TOKEN_ELSE)) declaration();
     patchJump(elseJump);
+}
+
+// static int emitLabel(uint8_t label) {
+//     emitByte(label);
+//     return currentChunk()->count - 1;
+// }
+
+// static void emitBackJump(int dest) {
+//     uint16_t dst = (uint16_t)dest;
+//     emitByte(OP_JUMP_BACK);
+//     emitBytes((dest >> 8) & 0xFF, dest & 0xFF);
+// }
+
+static void emitLoop(int loopStart) {
+    emitByte(OP_LOOP);
+
+    // Emit offset indicating how far to jump back
+    //  +2 for to account for operand bytes emitted below
+    int offset = currentChunk()->count - loopStart + 2;
+    if (offset > UINT16_MAX) {
+        error("Loop body too large.");
+    }
+
+    emitByte((offset >> 8) & 0xFF);
+    emitByte(offset & 0xFF);
+}
+
+static void whileStatement(void) {
+    // Book solution
+    consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'while'.");
+    int loopStart = currentChunk()->count;
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expected a ')' after condition.");
+    int exitJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    declaration();
+    emitLoop(loopStart);
+
+    patchJump(exitJump);
+    emitByte(OP_POP);
+
+    // BELOW IS FIRST ATTEMPT
+    // consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'while'.");
+    // int label = emitLabel(OP_LOOP);
+    // expression();
+    // consume(TOKEN_RIGHT_PAREN, "Expected a ')' after condition.");
+
+    // int bodyJump = emitJump(OP_JUMP_IF_FALSE);
+    // emitByte(OP_POP);
+    // statement();
+    // emitBackJump(label);   // TODO: jump backwards
+    // patchJump(bodyJump);
+    // emitByte(OP_POP);
+}
+
+static void forStatement(void) {
+    beginScope();   // for statements initiate a new scope
+    consume(TOKEN_LEFT_PAREN, "Expect a '(' after 'for'.");
+    if (!match(TOKEN_SEMICOLON)) {
+        // Initializations may be empty
+        if (match(TOKEN_VAR)) {
+            varDeclaration();
+        } else {
+            // expression();
+            // emitByte(OP_POP);
+            // consume(TOKEN_SEMICOLON, "Expect a ';' after initialization.");
+            expressionStatement();
+        }
+    }
+
+    int condStart = currentChunk()->count;
+    if (!match(TOKEN_SEMICOLON)) {
+        // Conditions may be empty
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect a ';' after condition.");
+    } else {
+        /**
+         * for (;;) { ... } <- should be an infinite loop
+         */
+        emitByte(OP_TRUE);
+    }
+    int exitJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);   // Condition is true
+    int bodyJump = emitJump(OP_JUMP);
+
+    int updateStart = currentChunk()->count;
+    if (!match(TOKEN_RIGHT_PAREN)) {
+        expression();
+        emitByte(OP_POP);   // Update
+        consume(TOKEN_RIGHT_PAREN, "Expect a ')' after update.");
+    }
+    emitLoop(condStart);  // update  ->  condition
+
+    patchJump(bodyJump);
+    declaration();
+    emitLoop(updateStart);  // body  ->  update
+    patchJump(exitJump);
+    emitByte(OP_POP);  // Condition is false
+    endScope();
 }
 
 /**
@@ -780,15 +879,20 @@ static void ifStatement(void) {
  *            It's easier to write the rules next to the code in a recursive descent
  *            parser (jlox) than it is here with a Pratt Parser (clox).
  * 
- *  declaration  ->  varDecl | ifStmt | stmt ;
- *  varDecl      ->  "var" IDENTIFIER ("=" expression)? ";" ;
- *  ifStmt       ->  "if" "(" condition ")" block ";" ;
- *  stmt         ->  printStmt | exprStmt | block ;
- *  printStmt    ->  "print" "(" expression ")" ";" ;
- *  exprStmt     ->  expression ";" ;
- *  block        ->  "{" declaration* "}"
- * 
- *  expression   -> ... TODO: Complete me :)
+ *  declaration      ->  varDecl | ifStmt | whileStmt | stmt ;
+ *  varDecl          ->  "var" IDENTIFIER ("=" expression)? ";" ;
+ *  ifStmt           ->  "if" "(" condition ")" block ";" ;
+ *  whileStmt        ->  "while" "(" condition ")" statement ;
+ *  forStmt          ->  "for"   "(" initialization ";" condition ";" update ")" statement ;
+ *  initialization   ->  expression ;
+ *  condition        ->  expression ;
+ *  update           ->  expression ;
+ *  stmt             ->  printStmt | exprStmt | block ;
+ *  printStmt        ->  "print" "(" expression ")" ";" ;
+ *  exprStmt         ->  expression ";" ;
+ *  block            ->  "{" declaration* "}"
+ *     
+ *  expression       -> ... TODO: Complete me :)
  */
 
 static void statement(void) {
@@ -813,6 +917,10 @@ static void declaration(void) {
         varDeclaration();
     } else if (match(TOKEN_IF)) {
         ifStatement();
+    } else if (match(TOKEN_WHILE)) {
+        whileStatement();
+    } else if (match(TOKEN_FOR)) {
+        forStatement();
     } else {
         statement();
     }
