@@ -7,9 +7,6 @@
 #define OP2STR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
      (instruction) == OP_NEGATE ? "OP_NEGATE" : \
-     (instruction) == OP_QMARK ? "OP_QMARK" : \
-     (instruction) == OP_COLON ? "OP_COLON" : \
-     (instruction) == OP_ENDTERNARY ? "OP_ENDTERNARY" : \
      (instruction) == OP_ADD ? "OP_ADD" : \
      (instruction) == OP_GT ? "OP_GT" : \
      (instruction) == OP_LT ? "OP_LT" : \
@@ -109,9 +106,6 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     switch (instruction) {
         case OP_RETURN:
         case OP_NEGATE:
-        case OP_QMARK:
-        case OP_COLON:
-        case OP_ENDTERNARY:
         case OP_ADD:
         case OP_GT:
         case OP_LT:

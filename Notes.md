@@ -991,4 +991,4 @@ TODO: Implement (then discuss here how you did it) break and continue for 'for'
 
 TODO: Explain how you added the 'breakall' control flow construct to clox :)
 
-TODO: Add 
+TODO: Add ternary (the right way)

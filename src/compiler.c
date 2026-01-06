@@ -444,17 +444,17 @@ static void binary(bool canAssign) {
     }
 }
 
-static void ternary1(bool canAssign) {
-    // we just scanned a question mark...
-    emitByte(OP_QMARK);
+static void ternary(bool canAssign) {
+    // expression was just evaluated - result at top of stack
+    int falseJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);   // pop true
     expression();   // true branch
-}
-
-static void ternary2(bool canAssign) {
-    // we just scanned a colon...
-    emitByte(OP_COLON);
-    expression();   // false branch;
-    emitByte(OP_ENDTERNARY);
+    int exitJump = emitJump(OP_JUMP);
+    consume(TOKEN_COLON, "Expected a ':'.");
+    patchJump(falseJump);
+    emitByte(OP_POP);  // pop false
+    expression();   // false branch
+    patchJump(exitJump);
 }
 
 static void literal(bool canAssign) {
@@ -476,7 +476,6 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},
-    [TOKEN_QUESTION_MARK]   =  {NULL, NULL, PREC_TERNARY},
     [TOKEN_DOT]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_MINUS]           =  {unary, binary, PREC_TERM},
     [TOKEN_PLUS]            =  {NULL, binary, PREC_TERM},
@@ -484,8 +483,7 @@ ParseRule_t rules[] = {
     [TOKEN_SLASH]           =  {NULL, binary, PREC_FACTOR},
     [TOKEN_STAR]            =  {NULL, binary, PREC_FACTOR},
     [TOKEN_MODULO]          =  {NULL, binary, PREC_FACTOR},
-    [TOKEN_QUESTION_MARK]   =  {NULL, ternary1, PREC_TERNARY},
-    [TOKEN_COLON]           =  {NULL, ternary2, PREC_TERNARY},
+    [TOKEN_QUESTION_MARK]   =  {NULL, ternary, PREC_TERNARY},
     [TOKEN_BITWISE_AND]     =  {NULL, binary, PREC_BITWISE},
     [TOKEN_BITWISE_OR]      =  {NULL, binary, PREC_BITWISE},
     [TOKEN_BITWISE_XOR]     =  {NULL, binary, PREC_BITWISE},

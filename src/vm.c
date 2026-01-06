@@ -380,39 +380,6 @@ static InterpResult_t run(void) {
                 push(BOOL_VAL(valuesEqual(a, b)));
                 break;
             }
-            case OP_QMARK: {
-                Value_t condition = pop();
-                if (!isTruthy(condition)) {
-                    unsigned char depth = 1;
-                    while (depth) {
-                        uint8_t op = READ_BYTE();
-                        if (op == OP_CONSTANT) {
-                            READ_BYTE();    // discard const pool idx
-                        }
-                        if (op == OP_CONSTANT_LONG) {
-                            READ_BYTE(); // discard byte2
-                            READ_BYTE(); // discard byte1
-                            READ_BYTE(); // discard byte0
-                        }
-                        if (op == OP_QMARK) depth++;
-                        if (op == OP_COLON) depth--;
-                    }
-                }
-                break;
-            }
-            case OP_COLON: {  // whenever we're here, we've already executed the true branch... so skip false branch
-                while ((instruction = READ_BYTE()) != OP_ENDTERNARY) {
-                    if (instruction == OP_CONSTANT) {
-                        READ_BYTE();    // discard const pool idx
-                    }
-                    if (instruction == OP_CONSTANT_LONG) {
-                        READ_BYTE(); // discard byte2
-                        READ_BYTE(); // discard byte1
-                        READ_BYTE(); // discard byte0
-                    }
-                }
-            }
-            case OP_ENDTERNARY: break;
             case OP_POP: {
                 pop();
                 break;
@@ -536,11 +503,6 @@ static InterpResult_t run(void) {
                 vm.ip += offset;
                 break;
             }
-            // case OP_JUMP_BACK: {
-            //     uint16_t offset = READ_SHORT();
-            //     vm.ip = vm.chunk->code + offset;
-            //     break;
-            // }
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
                 vm.ip -= offset;
