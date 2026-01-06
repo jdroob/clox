@@ -991,4 +991,20 @@ TODO: Implement (then discuss here how you did it) break and continue for 'for'
 
 TODO: Explain how you added the 'breakall' control flow construct to clox :)
 
-TODO: Add ternary (the right way)
+1/5/2026: 
+- Added support for ternary expressions (the right way)
+- Donezo:
+```
+static void ternary(bool canAssign) {
+    // expression was just evaluated - result at top of stack
+    int falseJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);   // pop true
+    expression();   // true branch
+    int exitJump = emitJump(OP_JUMP);
+    consume(TOKEN_COLON, "Expected a ':'.");
+    patchJump(falseJump);
+    emitByte(OP_POP);  // pop false
+    expression();   // false branch
+    patchJump(exitJump);
+}
+```
