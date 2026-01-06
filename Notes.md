@@ -476,18 +476,18 @@
     - Convo w/ Claude to better understand globals being late bound vs locals being early bound :)
 
 ```
-In the Lox compiler, I've specified that when a global var is declared, it's name is added to a table in theVM: vm.globalNames. In vm.globalNames, the name is the key and it's index in an array: vm.globalValues isthe value. So at compile time, when we declare a new global, we'd add the name to the table and the nextavailable slot in globalValues as its value. We'd emit an instruction like:
+In the Lox compiler, I've specified that when a global var is declared, it's name is added to a table in the VM: vm.globalNames (happens at compile time). In vm.globalNames, the name is the key and it's index in an array: vm.globalValues is the value. So at compile time, when we declare a new global, we'd add the name to the table and the next available slot in globalValues as its value. We'd emit an instruction like:
 
 OP_DEFINE_GLOBAL <idx>
 
 At runtime, the value at the top of the stack would be added to globalValues table. Thus, the global var would be initialized (defined).
 
 
-For locals, when we declare a var, at compile time we add the var name and depth to an array: current->locals. This array stores Local_t objects. A Local_t object is a Token_t name, int depth tuple. current tracks the number of locals at any given time during compilation + its current depth.
+For locals, when we declare a var, at compile time we add the var name and depth to an array: current->locals. This array stores Local_t objects. A Local_t object is a (Token_t name, int depth) tuple. `current` tracks the number of locals at any given time during compilation + its current depth.
 
-When a new local var is declared, it's name is added to current->locals. It's depth is initially set to -1. This is a trick to ensure the var isn't used in its own initializer. Once the compiler determines that a valid initializer is provided for the local (this can be NIL in the case of 'var a;'), no instruction is emitted. This is because it's implied that the local's initial value is the value in the stack slot index matching the value at it's index in current->locals (run through a sample program to see why :) ).
+When a new local var is declared, it's name is added to current->locals. It's depth is initially set to -1. This is a trick to ensure the var isn't used in its own initializer (e.g. { var a = a; }). Once the compiler determines that a valid initializer is provided for the local (this can be NIL in the case of 'var a;'), **no instruction is emitted**. This is because it's implied that the local's initial value is the value in the stack slot index matching the value at it's index in current->locals (run through a sample program to see why :) ).
 
-If we want to read from the local, an OP_ACCESS_LOCAL instruction is emitted with the index of the local as its operand. At runtime, this index is used to index into the stack and grab the value at that index. This slot location *is* the value of that local. The same idea applies for updating the value of a local :)
+If we want to read from a local, an OP_ACCESS_LOCAL instruction is emitted with the index of the local as its operand. At runtime, this index is used to index into the stack and grab the value at that index. This slot location *is* the value of that local. The same idea applies for updating the value of a local :)
 
 Given all this, I think I can explain why it makes sense to say "In Lox, global vars are late bound and local vars are early bound".
 
@@ -495,7 +495,7 @@ Global vars are late bound because although we know the index in globalValues as
 
 Contrast this with locals. When we declare a local, at compile time the compiler adds the local name & depth to a locals array. Assuming the declaration is valid, we instantly know where the value of that local can be found at runtime: the index in the stack matching the index in the locals array. Therefore, the local var is bound at compile time (early binding).
 
-The key question is: "At what point in time do I know both WHERE to find a variable's value AND WHAT that location will contain?" In the case of globals, we know WHERE in the globalValues array we'll find a global's value but we don't know WHAT the global should contain until runtime (when it's written with stack[top]). In the case of locals, we know the index in the stack where we can read from / write to the local throughout its life time *at compile time*. We also know WHAT will be stored in the stack at that location at compile time (by examining bytecode), o we say the local is early bound.
+The key question is: "At what point in time do I know both WHERE to find a variable's value AND WHAT that location will contain?" In the case of globals, we know WHERE in the globalValues array we'll find a global's value but we don't know WHAT the global should contain until runtime (when it's written with stack[top]). In the case of locals, we know the index in the stack where we can read from / write to the local throughout its lifetime *at compile time*. We also know WHAT will be stored in the stack at that location at compile time (by examining bytecode), so we say the local is early bound.
 ```
 
 This is an excellent explanation! You've really grasped the core concept. Your understanding is spot-on, and you've articulated it very clearly. Let me affirm what you got right and add a small clarification:
@@ -510,6 +510,8 @@ Local Variables (Early Bound):
 ✅ Key insight: "We know exactly where to find/store the value throughout its entire lifetime"
 Your Core Insight is Perfect 🎯
 "The key question is: when do we know where to find the variable's runtime value?"
+(a better question might be "when do we have access to a var's runtime value?" in the case of globals, that's after the OP_DEFINE_GLOBAL instr is executed)
+
 This is the exact right way to think about binding! You've identified the fundamental difference:
 Globals: Location known at compile time, but content determined at runtime
 Locals: Both location AND access pattern known at compile time
@@ -634,6 +636,14 @@ Aw shucks ;) thanks Claude
    - For the global case, added a `globalIsFinals` tracker to the VM
 
    ```
+  typedef struct {
+    size_t count;
+    size_t capacity;
+    bool   *isFinalFlags;
+  } MutableTable_t;
+
+   //...
+
    typedef struct {
     Chunk_t         *chunk;
     uint8_t         *ip;
@@ -646,6 +656,8 @@ Aw shucks ;) thanks Claude
     MutableTable_t  globalIsFinals;  // <-
     Obj_t           *objects;
   } VM_t;
+
+  
   ```
 
   - Each time a var declaration is scanned, an `isFinal` flag is set
@@ -712,7 +724,7 @@ static void varDeclaration(void) {
 
 ## Local Case
 
-- Added another MutabilityTable_t struct to the Compiler_t struct that lives during parsing / code generation
+- Added another MutabileTable_t struct to the Compiler_t struct that lives during parsing / code generation
 
 ```
 typedef struct {
@@ -972,3 +984,11 @@ TODO: Talk about how you did str + num concat
 TODO: Talk about how you supported
     `if (true) if (true) print "ifif";`
     `while (true) while (true) if (true) print "whilewhileif";`
+
+TODO: Discuss how you implemented 'break' and 'continue' for 'while'
+
+TODO: Implement (then discuss here how you did it) break and continue for 'for'
+
+TODO: Explain how you added the 'breakall' control flow construct to clox :)
+
+TODO: Add 

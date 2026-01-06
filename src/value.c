@@ -1,10 +1,10 @@
 #include <stdlib.h>
 #include <string.h>
-
 #include "value.h"
 #include "vm.h"
 #include "object.h"
 #include "memory.h"
+
 
 void initValueArray(ValueArray_t *array) {
     array->capacity = 0;

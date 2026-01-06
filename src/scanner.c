@@ -1,6 +1,7 @@
 #include "common.h"
 #include "scanner.h"
 
+
 Scanner_t scanner;
 
 void initScanner(const char *source) {
@@ -154,7 +155,14 @@ static TokenType_e checkKeyword(unsigned short startIdx, size_t substrLen,
 static TokenType_e identifierType(void) {
     switch (scanner.start[0]) {
         case 'a': return checkKeyword(1, 2, "nd", TOKEN_AND);
-        case 'b': return checkKeyword(1, 4, "reak", TOKEN_BREAK);
+        case 'b': {
+            TokenType_e type;
+            type = checkKeyword(1, 4, "reak", TOKEN_BREAK);
+            if (type == TOKEN_IDENTIFIER) {
+                return checkKeyword(1, 7, "reakall", TOKEN_BREAKALL);
+            }
+            return type;
+        }
         case 'c': 
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {

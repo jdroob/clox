@@ -44,11 +44,47 @@
 //print(" " + "hi");
 //print(breakfast + " and " + beverage); 
 
-for (var i=0; i<2; i = i + 1) {
-   for (var j = 0; j<2; j = j + 1) {
-      print i;
-      print j;
-   }
-}
+//for (var i=0; i<2; i = i + 1) {
+//   for (var j = 0; j<2; j = j + 1) {
+//      print i;
+//      print j;
+//   }
+//}
+//
+//1.1519248 + "john";
 
-1.1519248 + "john";
+
+// break test
+//var i = 0;
+//while (i < 4) {
+//   print "i: " + i;
+//   i = i + 1;
+//   var j = 0;
+//   while (j < 2) {
+//      print "j: " + j;
+//      j = j + 1;
+//      break;
+//   }
+//   print "";
+//   break;
+//   //break;
+//}
+
+
+// continue test
+var i = 0;
+while (i < 4) {
+   var j = 0;
+   while (j < 2) {
+      //if (j % 2 == 0) {
+      //   print "j % 2 = " + (j % 2);
+      //   j = j +1;
+      //   continue;
+      //}
+      print "j: " + j;
+      j = j + 1;
+      breakall;
+   }
+   print "i: " + i;
+   i = i + 1;
+}

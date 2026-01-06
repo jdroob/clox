@@ -7,6 +7,7 @@
 #include "table.h"
 #include "vm.h"
 
+
 typedef struct {
     Token_t previous;
     Token_t current;
@@ -62,6 +63,10 @@ typedef struct {
     Local_t *locals;
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
+    int continueTarget;
+    int breakTarget;
+    int breakallTarget;
+    int loopDepth;
     size_t capacity;
     MutableTable_t localIsFinals;
 } Compiler_t;
@@ -232,6 +237,10 @@ static void initLocals(void) {
 static void initCompiler(Compiler_t *compiler) {
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
+    compiler->continueTarget = -1;
+    compiler->breakTarget = -1;
+    compiler->breakallTarget = -1;
+    compiler->loopDepth = 0;
     current = compiler;
     initLocals();
 }
@@ -422,6 +431,7 @@ static void binary(bool canAssign) {
         case TOKEN_GREATER:         emitByte(OP_GT); break;
         case TOKEN_LESS:            emitByte(OP_LT); break;
         case TOKEN_EQUAL_EQUAL:     emitByte(OP_EQ); break;
+        case TOKEN_MODULO:          emitByte(OP_MODULO); break;
         /**
          * a >= b same as !(a < b)
          * a <= b same as !(a > b)
@@ -730,6 +740,14 @@ static void varDeclaration(void) {
     defineVariable(global);
 }
 
+static void beginLoop(void) {
+    current->loopDepth++;
+}
+
+static void endLoop(void) {
+    current->loopDepth--;
+}
+
 static void beginScope(void) {
     current->scopeDepth++;
 }
@@ -797,10 +815,45 @@ static void emitLoop(int loopStart) {
     emitByte(offset & 0xFF);
 }
 
+static void continueStatement(void) {
+    consume(TOKEN_SEMICOLON, "Expect a ';'.");
+    if (current->loopDepth <= 0) {
+        error("Cannot use 'continue' outside of a loop.");
+        return;
+    }
+    emitLoop(current->continueTarget);
+}
+
+static void breakStatement(void) {
+    consume(TOKEN_SEMICOLON, "Expect a ';'.");
+    if (current->loopDepth <= 0) {
+        // TODO: Modify when switch is added
+        error("Cannot use 'break' outside of loop.");
+        return;
+    }
+    // endLoop();  // decrement loop depth
+    // endScope(); // decrement scope depth
+    current->breakTarget = emitJump(OP_JUMP);
+}
+
+static void breakAllStatement(void) {
+    consume(TOKEN_SEMICOLON,"Expect a ';'.");
+    if (current->loopDepth <= 0) {
+        error("Cannot use 'breakall' outside of loop.");
+        return;
+    }
+    current->breakallTarget = emitJump(OP_JUMP);
+}
+
 static void whileStatement(void) {
     // Book solution
+    int breakTarget = current->breakTarget;
+    int continueTarget = current->continueTarget;
+    beginLoop();
+    beginScope();
     consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'while'.");
     int loopStart = currentChunk()->count;
+    current->continueTarget = loopStart;
     expression();
     consume(TOKEN_RIGHT_PAREN, "Expected a ')' after condition.");
     int exitJump = emitJump(OP_JUMP_IF_FALSE);
@@ -809,7 +862,16 @@ static void whileStatement(void) {
     emitLoop(loopStart);
 
     patchJump(exitJump);
-    emitByte(OP_POP);
+    emitByte(OP_POP);   // pop result of condition evaluation
+    if (current->breakTarget != -1) patchJump(current->breakTarget);
+    if (current->breakallTarget != -1 && current->loopDepth == 1) {
+        patchJump(current->breakallTarget);
+        current->breakallTarget = -1;   // reset 'breakall' flag
+    }
+    endScope();
+    endLoop();
+    current->breakTarget = breakTarget;
+    current->continueTarget = continueTarget;
 
     // BELOW IS FIRST ATTEMPT
     // consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'while'.");
@@ -826,6 +888,7 @@ static void whileStatement(void) {
 }
 
 static void forStatement(void) {
+    beginLoop();
     beginScope();   // for statements initiate a new scope
     consume(TOKEN_LEFT_PAREN, "Expect a '(' after 'for'.");
     if (!match(TOKEN_SEMICOLON)) {
@@ -856,6 +919,7 @@ static void forStatement(void) {
     int bodyJump = emitJump(OP_JUMP);
 
     int updateStart = currentChunk()->count;
+    current->continueTarget = updateStart;
     if (!match(TOKEN_RIGHT_PAREN)) {
         expression();
         emitByte(OP_POP);   // Update
@@ -867,8 +931,10 @@ static void forStatement(void) {
     declaration();
     emitLoop(updateStart);  // body  ->  update
     patchJump(exitJump);
+    current->breakTarget = currentChunk()->count;
     emitByte(OP_POP);  // Condition is false
     endScope();
+    endLoop();
 }
 
 /**
@@ -902,6 +968,12 @@ static void statement(void) {
         beginScope();
         block();
         endScope();
+    } else if (match(TOKEN_BREAK)) {
+        breakStatement();
+    } else if (match(TOKEN_BREAKALL)) {
+        breakAllStatement();
+    }else if (match(TOKEN_CONTINUE)) {
+        continueStatement();
     } else {
         expressionStatement();
     }
@@ -933,7 +1005,7 @@ bool compile(const char *source, Chunk_t *chunk) {
     parser.hadError = false;
     parser.panicMode = false;
     compilingChunk = chunk;
-    Compiler_t compiler = {0};
+    Compiler_t compiler = { 0 };
     initCompiler(&compiler);
     // initTable(&vm.globalNames);
     initTable(&literals);

@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <string.h>
-
 #include "memory.h"
 #include "object.h"
 #include "value.h"
 #include "vm.h"
+
 
 #define ALLOCATE_OBJ(type, length, objectType) \
         (type *)allocateObject(length, objectType)

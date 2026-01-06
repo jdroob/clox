@@ -6,8 +6,8 @@
 #include "value.h"
 #include "object.h"
 
+
 VM_t vm;
-uint8_t nextWrite = 0;
 
 static void resetStack(void) {
     vm.stackTop = vm.stack;
@@ -367,6 +367,13 @@ static InterpResult_t run(void) {
             case OP_DIVIDE:     BINARY_OP(NUMBER, NUMBER, /); break;
             case OP_GT:         BINARY_OP(BOOL, NUMBER, >); break;
             case OP_LT:         BINARY_OP(BOOL, NUMBER, <); break;
+            case OP_MODULO: {
+                Value_t b = pop();
+                Value_t a = pop();
+                double res = (double)((int)AS_NUMBER(a) % (int)AS_NUMBER(b));
+                push(NUMBER_VAL(res));
+                break;
+            }
             case OP_EQ: {
                 Value_t b = pop();
                 Value_t a = pop();

@@ -3,6 +3,7 @@
 #include "object.h"
 #include "vm.h"
 
+
 #define OP2STR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
      (instruction) == OP_NEGATE ? "OP_NEGATE" : \
@@ -17,6 +18,7 @@
      (instruction) == OP_SUBTRACT ? "OP_SUBTRACT" : \
      (instruction) == OP_MULTIPLY ? "OP_MULTIPLY" : \
      (instruction) == OP_DIVIDE ? "OP_DIVIDE" : \
+     (instruction) == OP_MODULO ? "OP_MODULO" : \
      (instruction) == OP_TRUE ? "OP_TRUE" : \
      (instruction) == OP_FALSE ? "OP_FALSE" : \
      (instruction) == OP_ZERO ? "OP_ZERO" : \
@@ -117,6 +119,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SUBTRACT:
         case OP_MULTIPLY:
         case OP_DIVIDE:
+        case OP_MODULO:
         case OP_TRUE:
         case OP_FALSE:
         case OP_ZERO:

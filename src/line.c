@@ -1,6 +1,7 @@
 #include "line.h"
 #include "memory.h"
 
+
 void initLineMap(LineMap_t *lines) {
     lines->capacity = 0;
     lines->count = 0;
