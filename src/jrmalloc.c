@@ -31,8 +31,8 @@ size_t nAllocatedChunks = 0;
  * jrchunk format:
  *  byte0-7: previous free chunk (0xXXXXXXXX_XXXXXXXX)
  *  byte8-15: next free chunk    (0xXXXXXXXX_XXXXXXXX)
- *  byte 16-20: size 
- *  byte 21-24: padding
+ *  byte 16-19: size 
+ *  byte 20-23: padding
  */
 
 
@@ -75,6 +75,7 @@ static void update(jrchunk_t *chunk) {
         chunk->next->prev = chunk->prev;
     }
     if (chunk == head) {
+        // good-bye :(
         head = chunk->next;
     }
 }

@@ -1,4 +1,4 @@
-CC = gcc
+CC = cc
 MAKE = make
 INCLUDES = include
 SRC = src
@@ -6,7 +6,7 @@ OBJ = obj
 BIN = bin
 LIBS = -lm
 ARGS =
-CFLAGS = -Wall -g -Wno-sequence-point
+CFLAGS = -Wall -Wconversion -g -Wno-sequence-point
 DEBUG_CFLAGS = -DDEBUG
 DEBUG_JRMALLOC_CFLAGS = -DDEBUG_JRMALLOC
 JRMALLOC_CFLAGS = -DJRMALLOC

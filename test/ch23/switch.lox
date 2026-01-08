@@ -1,0 +1,57 @@
+
+var a = 3;
+
+switch (a) {
+    case true  : { print "true"; break; }
+    case false : { print "false"; break; }
+    case 3     : { print a; break; } 
+    default: print "default";
+}
+
+// Test 2: case scope test
+switch (a) {
+    case 0: var i = 0;
+    case 3: { var i = 4; print(i); }
+}
+
+// Test 3: empty switch
+switch (a) {
+
+}
+
+// Test 4: nested switch
+// expect nothing printed
+var f = false;
+switch (f) {
+    case false: {
+        switch (!!f) {
+            case true:  print "true";
+            case false: print "here :)";
+        }
+    }
+}
+
+// Test 5: default ony
+switch(f) {
+    default: print f;
+}
+
+// Test 6: from Crafting Interpreter solution
+switch (2) {
+    case 1: {
+        print("one");
+        break;
+    }
+    case 2: {
+        print("two");
+        break;
+    }
+    case 3: {
+        print("three");
+        break;
+    }
+    default: {
+        print("default");
+    }
+}
+print("after");

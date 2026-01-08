@@ -64,9 +64,17 @@ typedef struct {
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
     int continueTarget;
-    int breakTarget;
-    int breakallTarget;
+    bool continueFlag;
+    bool inFor;
+    bool forBlock;
+    // int breakTarget;
+    // int breakAllTarget;
+    BreakJump_t breakJumps;
+    int b_localCount_SnapShot;
+    BreakJump_t breakAllJumps;
+    int ba_localCount_SnapShot;
     int loopDepth;
+    uint8_t switchDepth;
     size_t capacity;
     MutableTable_t localIsFinals;
 } Compiler_t;
@@ -195,6 +203,8 @@ static void patchJump(int offset) {
 static void endCompiler(void) {
     FREE_ARRAY(Local_t, current->locals, current->capacity);
     freeIsFinalsArray(&current->localIsFinals);
+    freeBreakJumpArray(&current->breakJumps);
+    freeBreakJumpArray(&current->breakAllJumps);
     emitReturn();
 }
 
@@ -238,9 +248,17 @@ static void initCompiler(Compiler_t *compiler) {
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
     compiler->continueTarget = -1;
-    compiler->breakTarget = -1;
-    compiler->breakallTarget = -1;
+    compiler->continueFlag = false;
+    compiler->inFor = false;
+    compiler->forBlock = false;
+    // compiler->breakTarget = -1;
+    // compiler->breakAllTarget = -1;
+    initBreakJumpArray(&compiler->breakJumps);
+    compiler->b_localCount_SnapShot = -1;
+    initBreakJumpArray(&compiler->breakAllJumps);
+    compiler->ba_localCount_SnapShot = -1;
     compiler->loopDepth = 0;
+    compiler->switchDepth = 0;
     current = compiler;
     initLocals();
 }
@@ -748,22 +766,34 @@ static void endLoop(void) {
 
 static void beginScope(void) {
     current->scopeDepth++;
+   //printf("Scope depth is %d\n", current->scopeDepth);
 }
 
 static void endScope(void) {
     current->scopeDepth--;
+    //printf("Scope depth is %d\n", current->scopeDepth);
 
     // TODO: replace with OP_POPN
     while (current->localCount > 0 &&
            current->locals[current->localCount - 1].depth > current->scopeDepth) {
         emitByte(OP_POP);
         current->localCount--;
-        popLocalIsFinalFlag(&current->localIsFinals);
+
+        // Assumption: # finalPops == # finals in scope
+        int idx = resolveLocal(current, &current->locals[current->localCount - 1].name);
+        if (idx != -1 && isLocalFinal(&current->localIsFinals, idx)) {
+            popLocalIsFinalFlag(&current->localIsFinals);
+        }
     }
+}
+
+static void endLoopBodyScope(void) {
+    if (current->scopeDepth > 1) endScope();
 }
 
 static void declaration(void);
 static void block(void) {
+    if (current->inFor) current->forBlock = true;
     while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
         declaration();
     }
@@ -819,19 +849,53 @@ static void continueStatement(void) {
         error("Cannot use 'continue' outside of a loop.");
         return;
     }
+    endScope(); // Leaving loop body scope
     emitLoop(current->continueTarget);
+    current->continueFlag = true;
+}
+
+static bool inScope(unsigned idx) {
+    if (current->inFor) {
+        //printf("current->locals[idx].depth: %d\n", current->locals[idx].depth);
+        //printf("current->scopeDepth: %d\n", current->scopeDepth);
+        /**
+         * for loop scoping is a little weird...
+         * in the case of:
+         *  for (...) {
+         *      ...
+         * }
+         * 
+         * - there's a scope for the 'for' params (e.g. var i=0; i < 2; i = i + 1)
+         * - there's a scope for the loop body
+         * - and in this case, there's a scope for the block
+         */
+        uint8_t maxDiff = current->forBlock ? 3 : 2;
+        return abs(current->locals[idx].depth - current->scopeDepth) <= maxDiff;
+    }
+    return current->locals[idx].depth == current->scopeDepth;
 }
 
 static void breakStatement(void) {
     consume(TOKEN_SEMICOLON, "Expect a ';'.");
-    if (current->loopDepth <= 0) {
+    if (current->loopDepth <= 0 && current->switchDepth == 0) {
         // TODO: Modify when switch is added
-        error("Cannot use 'break' outside of loop.");
+        error("Cannot use 'break' outside of loop or switch.");
         return;
     }
     // endLoop();  // decrement loop depth
     // endScope(); // decrement scope depth
-    current->breakTarget = emitJump(OP_JUMP);
+    int localsInScope = 0;
+    int i = current->localCount - 1;
+    while (i >= 0 && inScope(i)) { localsInScope++; i--; }
+    //printf("localsInScope: %d\ncurrent->localCount: %d\n", localsInScope, current->localCount);
+    current->b_localCount_SnapShot = localsInScope;
+
+    emitByte(OP_BREAK);
+    emitByte((uint8_t)(current->b_localCount_SnapShot >> 16) & 0xFF);    // byte 2;
+    emitByte((uint8_t)(current->b_localCount_SnapShot >> 8) & 0xFF);     // byte 1;
+    emitByte((uint8_t)(current->b_localCount_SnapShot) & 0xFF);          // byte 0;
+    writeBreakJumpArray(&current->breakJumps, emitJump(OP_JUMP));
+    // current->breakTarget = emitJump(OP_JUMP);
 }
 
 static void breakAllStatement(void) {
@@ -840,15 +904,76 @@ static void breakAllStatement(void) {
         error("Cannot use 'breakall' outside of loop.");
         return;
     }
-    current->breakallTarget = emitJump(OP_JUMP);
+
+    // for (int i=0; i<current->localCount; ++i) {
+    //     emitByte(OP_POP);
+    //     current->localCount--;
+    //     popLocalIsFinalFlag(&current->localIsFinals);
+    // }
+    current->ba_localCount_SnapShot = current->localCount;
+    /**
+     * Doing it like this because:
+     *  We don't want to overwrite any of the Compiler_t info (remember we're still parsing)
+     *  But we do want to pop all locals off...
+     *  But if we pop all locals off here, we'll still hit endScope and overpop
+     *  I'm deciding to be lazy and move this to runtime :) 
+     */
+    emitByte(OP_BREAKALL);
+    emitByte((uint8_t)(current->ba_localCount_SnapShot >> 16) & 0xFF);    // byte 2;
+    emitByte((uint8_t)(current->ba_localCount_SnapShot >> 8) & 0xFF);     // byte 1;
+    emitByte((uint8_t)(current->ba_localCount_SnapShot) & 0xFF);          // byte 0;
+    writeBreakJumpArray(&current->breakAllJumps, emitJump(OP_JUMP));
+    // current->breakAllTarget = emitJump(OP_JUMP);
+}
+
+static void patchBreaks(BreakJump_t *array) {
+    for (size_t i=0; i<array->count; ++i) {
+        patchJump(array->breakJumps[i]);
+    }
+    resetBreakJumpArray(array);
+}
+
+static void breakCleanUp(void) {
+    if (current->breakJumps.count) {
+        patchBreaks(&current->breakJumps);
+        // while (current->b_localCount_SnapShot--) {
+        //     emitByte(OP_POP);
+
+        //     // Assumption: # final pops == # finals left in scope
+        //     int idx = resolveLocal(current, &current->locals[current->localCount - 1].name);
+        //     if (idx != -1 && isLocalFinal(&current->localIsFinals, idx)) {
+        //         popLocalIsFinalFlag(&current->localIsFinals);
+        //     }
+        // }
+    }
+    // if (current->breakTarget != -1) patchJump(current->breakTarget);
+    if (current->loopDepth == 1) {
+        if (current->breakAllJumps.count) {
+            patchBreaks(&current->breakAllJumps);
+            // while (current->ba_localCount_SnapShot--) {
+            //     emitByte(OP_POP);
+
+            //     // Assumption: # final pops == # finals left in scope
+            //     int idx = resolveLocal(current, &current->locals[current->localCount - 1].name);
+            //     if (idx != -1 && isLocalFinal(&current->localIsFinals, idx)) {
+            //         popLocalIsFinalFlag(&current->localIsFinals);
+            //     }
+            // }
+        }
+        // patchJump(current->breakAllTarget);
+        // current->breakAllTarget = -1;   // reset 'breakall' flag
+    }
 }
 
 static void whileStatement(void) {
     // Book solution
-    int breakTarget = current->breakTarget;
-    int continueTarget = current->continueTarget;
+    // auto reset targets to -1 upon outer loop exit
+    // int breakTarget = current->breakTarget;
+    bool prevContinueFlag = current->continueFlag;
+    int  prevContinueTarget = current->continueTarget;
+    current->continueFlag = false;
     beginLoop();
-    beginScope();
+    // beginScope();
     consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'while'.");
     int loopStart = currentChunk()->count;
     current->continueTarget = loopStart;
@@ -856,20 +981,54 @@ static void whileStatement(void) {
     consume(TOKEN_RIGHT_PAREN, "Expected a ')' after condition.");
     int exitJump = emitJump(OP_JUMP_IF_FALSE);
     emitByte(OP_POP);
+
+    beginScope();   // loop body scope
     declaration();
+    if (!current->continueFlag) {
+        endScope(); // end loop body scope
+    }
+
     emitLoop(loopStart);
 
     patchJump(exitJump);
     emitByte(OP_POP);   // pop result of condition evaluation
-    if (current->breakTarget != -1) patchJump(current->breakTarget);
-    if (current->breakallTarget != -1 && current->loopDepth == 1) {
-        patchJump(current->breakallTarget);
-        current->breakallTarget = -1;   // reset 'breakall' flag
-    }
-    endScope();
+    breakCleanUp();
+    // if (current->breakJumps.count) {
+    //     patchBreaks(&current->breakJumps);
+    //     while (current->b_localCount_SnapShot--) {
+    //         emitByte(OP_POP);
+
+    //         // Assumption: # final pops == # finals left in scope
+    //         int idx = resolveLocal(current, &current->locals[current->localCount - 1].name);
+    //         if (idx != -1 && isLocalFinal(&current->localIsFinals, idx)) {
+    //             popLocalIsFinalFlag(&current->localIsFinals);
+    //         }
+    //     }
+    // }
+    // // if (current->breakTarget != -1) patchJump(current->breakTarget);
+    // if (current->loopDepth == 1) {
+    //     if (current->breakAllJumps.count) {
+    //         patchBreaks(&current->breakAllJumps);
+    //         while (current->ba_localCount_SnapShot--) {
+    //             emitByte(OP_POP);
+
+    //             // Assumption: # final pops == # finals left in scope
+    //             int idx = resolveLocal(current, &current->locals[current->localCount - 1].name);
+    //             if (idx != -1 && isLocalFinal(&current->localIsFinals, idx)) {
+    //                 popLocalIsFinalFlag(&current->localIsFinals);
+    //             }
+    //         }
+    //     }
+    //     // patchJump(current->breakAllTarget);
+    //     // current->breakAllTarget = -1;   // reset 'breakall' flag
+    // }
+
+    // endScope();
+    // printf("current->localCount: %d\n", current->localCount);
     endLoop();
-    current->breakTarget = breakTarget;
-    current->continueTarget = continueTarget;
+    // current->breakTarget = breakTarget;
+    current->continueFlag = prevContinueFlag;
+    current->continueTarget = prevContinueTarget;
 
     // BELOW IS FIRST ATTEMPT
     // consume(TOKEN_LEFT_PAREN, "Expected a '(' after 'while'.");
@@ -886,6 +1045,12 @@ static void whileStatement(void) {
 }
 
 static void forStatement(void) {
+    bool prevContinueFlag = current->continueFlag;
+    bool prevInForFlag = current->inFor;
+    bool prevForBlockFlag = current->forBlock;
+    int  prevContinueTarget = current->continueTarget;
+    current->continueFlag = false;
+    current->inFor = true;
     beginLoop();
     beginScope();   // for statements initiate a new scope
     consume(TOKEN_LEFT_PAREN, "Expect a '(' after 'for'.");
@@ -918,6 +1083,9 @@ static void forStatement(void) {
 
     int updateStart = currentChunk()->count;
     current->continueTarget = updateStart;
+
+    // endLoopBodyScope(); // REMOVE 'LOOP BODY' SCOPE
+
     if (!match(TOKEN_RIGHT_PAREN)) {
         expression();
         emitByte(OP_POP);   // Update
@@ -926,13 +1094,111 @@ static void forStatement(void) {
     emitLoop(condStart);  // update  ->  condition
 
     patchJump(bodyJump);
+
+    beginScope();   // NEW SCOPE FOR BODY
+
     declaration();
+
+    if (!current->continueFlag) {
+        endScope();     // LOOP BODY SCOPE
+    }
+
     emitLoop(updateStart);  // body  ->  update
     patchJump(exitJump);
-    current->breakTarget = currentChunk()->count;
+    // current->breakTarget = currentChunk()->count;
     emitByte(OP_POP);  // Condition is false
     endScope();
+    breakCleanUp();
+    // patchBreaks(&current->breakJumps);
+    // if (current->loopDepth == 1) {
+    //     if (current->breakAllJumps.count) {
+    //         patchBreaks(&current->breakAllJumps);
+    //         while (current->localCount) {
+    //             emitByte(OP_POP);
+    //             current->localCount--;
+
+    //             // Assumption: # final pops == # finals left in scope
+    //             int idx = resolveLocal(current, &current->locals[current->localCount - 1].name);
+    //             if (idx != -1 && isLocalFinal(&current->localIsFinals, idx)) {
+    //                 popLocalIsFinalFlag(&current->localIsFinals);
+    //             }
+    //         }
+    //     }
+    //     // patchJump(current->breakAllTarget);
+    //     // current->breakAllTarget = -1;   // reset 'breakall' flag
+    // }
     endLoop();
+    current->continueFlag = prevContinueFlag;
+    current->inFor = prevInForFlag;
+    current->forBlock = prevForBlockFlag;
+    current->continueTarget = prevContinueTarget;
+}
+
+static void switchStatement(void) {
+    uint8_t prevSwitchDepth = current->switchDepth++;
+    // int breakTarget = current->breakTarget;
+    int caseOrDefaultJump = -1;
+    bool hasDefault = false;
+    emitByte(OP_SWITCH);    // HACK - set switchCounter to 2
+    consume(TOKEN_LEFT_PAREN, "Expect a '('.");
+    expression();   // switch expression - value at top of stack
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')'.");
+    consume(TOKEN_LEFT_BRACE, "Expect a '{'.");
+    while (!match(TOKEN_RIGHT_BRACE) && !match(TOKEN_EOF)) {
+        if (match(TOKEN_CASE)) {
+            if (caseOrDefaultJump != -1) patchJump(caseOrDefaultJump);
+            emitByte(OP_CASE);
+            expression();
+            consume(TOKEN_COLON, "Expect a ':' after 'case'.");
+            // This op cannot remove the switch expression if there is no match
+            // If there is a match must remove switch & case expressions
+            // If there is no match, op must remove the case expression
+            caseOrDefaultJump = emitJump(OP_JUMP_IF_NOT_MATCH);
+            beginScope();
+            declaration();
+            endScope();
+        } else if (match(TOKEN_DEFAULT)) {
+            hasDefault = true;
+            if (caseOrDefaultJump != -1) patchJump(caseOrDefaultJump);
+            // emitByte(OP_DEFAULTCASE);
+            consume(TOKEN_COLON, "Expect a ':' after 'default'.");
+            // TODO: Decide on the following:
+            /**
+             * If we hit a case, switch expr and case expr are popped
+             * If we don't hit a case, switch expr still at top
+             * how can we tell which happened?
+             */
+            // FOLLOW-UP: Ended up doing the following:
+            /**
+             * use a counter (vm.switchCounter)
+             * at start of switch: increment by 1   (+switch expr)
+             *      *increment (rather than init to 1) to account for nested switch :) *
+             * for each case miss, decrement by 1   (-case expr)
+             * for each new case, increment by 1    (+case expr)
+             * for a case hit, decrement by 2       (-switch expr -case expr)
+             * at end of switch, decrement to 0     (SHOULD BE UNNECESSARY)
+             * 
+             * Each increment corresponds to an expression's val that's been pushed to top of stack
+             * Each decrement corresponds to an expression's val being popped from stack
+             */
+            beginScope();
+            declaration();
+            endScope();
+        } else {
+            error("Only case and default statements allowed in switch.");
+        }
+    }
+
+    if (parser.previous.type == TOKEN_EOF) {
+        error("Missing '}' to terminate switch.");
+    }
+
+    if (!hasDefault && caseOrDefaultJump != -1) patchJump(caseOrDefaultJump);  // jump target for final case (when no default)
+    // if (current->breakTarget != -1) patchJump(current->breakTarget);
+    patchBreaks(&current->breakJumps);
+    emitBytes(OP_ENDSWITCH, prevSwitchDepth); // HACK - ensure stack is restored to proper state
+    current->switchDepth = prevSwitchDepth;
+    // current->breakTarget = breakTarget;
 }
 
 /**
@@ -948,6 +1214,9 @@ static void forStatement(void) {
  *  ifStmt           ->  "if" "(" condition ")" block ";" ;
  *  whileStmt        ->  "while" "(" condition ")" statement ;
  *  forStmt          ->  "for"   "(" initialization ";" condition ";" update ")" statement ;
+ *  switchStmt       ->  "switch" "(" expression ")" "{" caseStmt* defaultStmt? "}" ;
+ *  caseStmt         ->  "case" expression ":" statement* ;
+ *  defaultStmt      ->  "default" ":" statement*;
  *  initialization   ->  expression ;
  *  condition        ->  expression ;
  *  update           ->  expression ;
@@ -991,6 +1260,8 @@ static void declaration(void) {
         whileStatement();
     } else if (match(TOKEN_FOR)) {
         forStatement();
+    } else if (match(TOKEN_SWITCH)) {
+        switchStatement();
     } else {
         statement();
     }

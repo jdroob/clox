@@ -68,6 +68,36 @@ void popLocalIsFinalFlag(MutableTable_t *array) {
     if (array->count) array->count--;
 }
 
+void initBreakJumpArray(BreakJump_t *array) {
+    array->count = 0;
+    array->capacity = 0;
+    array->breakJumps = NULL;
+}
+
+void writeBreakJumpArray(BreakJump_t *array, int breakJump) {
+    if (array->capacity < array->count + 1) {
+        size_t oldCapacity = array->capacity;
+        array->capacity = GROW_CAPACITY(oldCapacity);
+        array->breakJumps = GROW_ARRAY(int, array->breakJumps, oldCapacity, array->capacity);
+    }
+    array->breakJumps[array->count++] = breakJump;
+}
+
+void freeBreakJumpArray(BreakJump_t *array) {
+    array->capacity = 0;
+    array->count = 0;
+    #ifdef JRMALLOC
+    jrfree(array->breakJumps);
+    #else
+    free(array->breakJumps);
+    #endif
+    array->breakJumps = NULL;
+}
+
+void resetBreakJumpArray(BreakJump_t *array) {
+    array->count = 0;
+}
+
 static Value_t peek(int distance) {
     return vm.stackTop[-1 - distance];
 }
@@ -199,6 +229,7 @@ static Value_t getStackAt(unsigned idx) {
 }
 
 Value_t pop(void) {
+    if (vm.stackTop == vm.stack) return;
     return *(--vm.stackTop);
 }
 
@@ -209,6 +240,7 @@ void initVM(void) {
     vm.chunk = NULL;
     vm.ip = 0;
     vm.capacity = STACK_MAX;
+    vm.switchCounter = 0;
     #ifdef JRMALLOC
     vm.stack = jrmalloc(STACK_MAX * sizeof(Value_t));
     #else
@@ -497,6 +529,64 @@ static InterpResult_t run(void) {
                 // }
                 // vm.ip += 2; // Skip offset
                 // break;
+            }
+            // There need not be 2 ops for this
+            case OP_BREAK:
+            case OP_BREAKALL: {
+                unsigned popCount = READ_BYTES();
+                while (popCount--) pop();
+                break;
+            }
+            case OP_SWITCH: {
+                vm.switchCounter++;   // account for switch expression
+                // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                break;
+            }
+            case OP_CASE: {
+                // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                vm.switchCounter++; // to account for case expression
+                // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                break;
+            }
+            // case OP_DEFAULTCASE: {
+            //     printf("vm.switchCounter: %d\n", vm.switchCounter);
+            //     break;
+            // }
+            case OP_ENDSWITCH: {
+                // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                if (vm.switchCounter < 0) runtimeError("Stack in invalid state post-switch.");
+                
+                /**
+                 * precondition: vm.switchCounter >= prevSwitchDepth
+                 * 
+                 * For each 'switch', vm.switchCounter was incremented
+                 * Thus, when exiting a 'switch', we only want to decrement
+                 * to the previous switch depth (not necessarily 0).
+                 */
+                uint8_t prevSwitchDepth = READ_BYTE();
+                while (vm.switchCounter > prevSwitchDepth) {
+                    pop();
+                    vm.switchCounter--;
+                }
+                // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                break;
+            }
+            case OP_JUMP_IF_NOT_MATCH: {
+                uint16_t offset = READ_SHORT();
+                if (valuesEqual(peek(0), peek(1))) {
+                    pop();  // pop case expression
+                    pop();  // pop switch expression
+                    // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                    vm.switchCounter -= 2;
+                    // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                } else {
+                    pop();  // pop case expression
+                    // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                    vm.switchCounter--;
+                    // printf("vm.switchCounter: %d\n", vm.switchCounter);
+                    vm.ip += offset;  // jump to next case or default
+                }
+                break;
             }
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();

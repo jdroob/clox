@@ -1008,3 +1008,42 @@ static void ternary(bool canAssign) {
     patchJump(exitJump);
 }
 ```
+
+TODO:
+    Add break, breakall, continue to for
+    Add break to switch
+
+    TODO:
+    *corner-case*
+        - since the dest of 'break' and 'breakall' is **after** the loop or switch, we need to go back and patch *each instance* of a break or breakall in a loop or switch. This requires a dynamic array of breaks / breakalls that have yet to be patched.
+
+        - why 'continue' is different: 'continue' is different b/c the destination is parsed before the instance - therefore, for each 'continue' instance, we know its destination already.
+
+    FOLLOW-UP:
+        resolved this by adding dynamic arrays to store break jumps and breakall jumps. At proper location, all breaks and breakalls are patched
+
+    TODO: debug while+breakall followed by for bug
+
+    ^Resolution:
+        - Needed to add *a lot* of state to ensure that breaks, breakalls properly restored the stack to its proper state on exit
+
+        [ADD BREAK, BREAKALL STACK RESTORE LOGIC HERE]
+
+    TODO: resolve issue
+    New interesting issue - stuck in infinite loop in DEBUG_CHUNK mode due to too many ops in bytecode! Suspect this is due to using uint8_t type idx / offset
+
+    SOLUTION: ^had to update uint8_t offsets in debug.c to uint32_t
+        (there was unsigned int overflow 255 -> 0 in disassembleChunk)
+
+
+1/7/2026:
+    phew! what a day! A bunch of debugging but now break, breakall, continue, nested loops, fors, whiles, switches all work (knock on wood)
+
+- blurb about switch:
+    - for switches, I made the following design decisions:
+        - used a counter (vm.switchCounter) to do the book keeping to ensure proper stack state at conclusion of switch. A little extra runtime overhead which isn't great. Possible improvement: move the book-keeping logic to compile time (see Nystrom's solution) :)
+        - Empty switch statements are fine (ehh why not? let people have fun)
+        - A declaration is allowed in a case statement. Therefore, we also have case scope.
+        - case(s) without default is fine
+        - default without case(s) are fine
+        - I added 'break' so now we're not just doing the case-match then exit. We're allowing for fall-throughs and all that good stuff in C :)

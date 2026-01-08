@@ -6,7 +6,7 @@
 #include "object.h"
 #include "table.h"
 
-#define STACK_MAX 256
+#define STACK_MAX 1073741824
 
 typedef enum {
     INTERPRET_OK,
@@ -21,6 +21,12 @@ typedef struct {
 } MutableTable_t;
 
 typedef struct {
+    size_t count;
+    size_t capacity;
+    int    *breakJumps;
+} BreakJump_t;
+
+typedef struct {
     Chunk_t         *chunk;
     uint8_t         *ip;
     uint32_t        capacity;
@@ -31,6 +37,7 @@ typedef struct {
     ValueArray_t    globalValues;
     MutableTable_t  globalIsFinals;
     Obj_t           *objects;
+    int             switchCounter;  // HACK - ensure stack is in proper state after switch
 } VM_t;
 
 extern VM_t vm;
@@ -46,5 +53,9 @@ void freeIsFinalsArray(MutableTable_t *array);
 void writeIsFinalsArray(MutableTable_t *array, bool flag);
 void writeIsFinalsArrayAt(MutableTable_t *array, bool flag, unsigned idx);
 void popLocalIsFinalFlag(MutableTable_t *array);
+void initBreakJumpArray(BreakJump_t *array);
+void writeBreakJumpArray(BreakJump_t *array, int breakJump);
+void freeBreakJumpArray(BreakJump_t *array);
+void resetBreakJumpArray(BreakJump_t *array);
 
 #endif // CLOX_VM_H

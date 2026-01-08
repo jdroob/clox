@@ -1,0 +1,3 @@
+// expect truefalse
+var a = true ? false ? "truetrue" : "truefalse" : "false";
+print a;

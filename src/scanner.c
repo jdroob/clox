@@ -163,15 +163,18 @@ static TokenType_e identifierType(void) {
             }
             return type;
         }
-        case 'c': 
+        case 'c':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
+                    case 'a':
+                        return checkKeyword(1, 3, "ase", TOKEN_CASE);
                     case 'l':
                         return checkKeyword(1, 4, "lass", TOKEN_CLASS);
                     case 'o':
                         return checkKeyword(1, 7, "ontinue", TOKEN_CONTINUE);
                 }
             }
+        case 'd': return checkKeyword(1, 6, "efault", TOKEN_DEFAULT);
         case 'e': return checkKeyword(1, 3, "lse", TOKEN_ELSE);
         case 'f':
             if (scanner.current - scanner.start > 1) {
@@ -187,13 +190,19 @@ static TokenType_e identifierType(void) {
                         }
                 }
             }
-            break;
+            // break;
         case 'i': return checkKeyword(1, 1, "f", TOKEN_IF);
         case 'n': return checkKeyword(1, 2, "il", TOKEN_NIL);
         case 'o': return checkKeyword(1, 1, "r", TOKEN_OR);
         case 'p': return checkKeyword(1, 4, "rint", TOKEN_PRINT);
         case 'r': return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
-        case 's': return checkKeyword(1, 4, "uper", TOKEN_SUPER);
+        case 's': 
+            if (scanner.current - scanner.start > 1) {
+                switch (scanner.start[1]) {
+                    case 'u': return checkKeyword(1, 4, "uper", TOKEN_SUPER);
+                    case 'w': return checkKeyword(1, 5, "witch", TOKEN_SWITCH);
+                }
+            }
         case 't':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {

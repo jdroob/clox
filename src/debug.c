@@ -35,20 +35,27 @@
      (instruction) == OP_SET_LOCAL_LONG ? "OP_SET_LOCAL_LONG" : \
      (instruction) == OP_DEFINE_GLOBAL_LONG ? "OP_DEFINE_GLOBAL_LONG" : \
      (instruction) == OP_SET_GLOBAL_LONG ? "OP_SET_GLOBAL_LONG" : \
-     (instruction) == OP_JUMP_IF_FALSE ? "OP_JUMP_IF_FALSE" : \
+     (instruction) == OP_JUMP_IF_NOT_MATCH ? "OP_JUMP_IF_NOT_MATCH" : \
      (instruction) == OP_JUMP_IF_TRUE ? "OP_JUMP_IF_TRUE" : \
+     (instruction) == OP_JUMP_IF_FALSE ? "OP_JUMP_IF_FALSE" : \
      (instruction) == OP_JUMP ? "OP_JUMP" : \
      (instruction) == OP_LOOP ? "OP_LOOP" : \
+     (instruction) == OP_SWITCH ? "OP_SWITCH" : \
+     (instruction) == OP_CASE ? "OP_CASE" : \
+     (instruction) == OP_BREAK ? "OP_BREAK" : \
+     (instruction) == OP_BREAKALL ? "OP_BREAKALL" : \
+     (instruction) == OP_DEFAULTCASE ? "OP_DEFAULTCASE" : \
+     (instruction) == OP_ENDSWITCH ? "OP_ENDSWITCH" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
 
-static unsigned int simpleInstruction(const char *name, uint8_t offset) {
+static unsigned int simpleInstruction(const char *name, uint32_t offset) {
     printf("%s\n", name);
     return offset + 1;
 }
 
-static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_t offset, bool isGlobal) {
+static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint32_t offset, bool isGlobal) {
     uint8_t constantIdx = chunk->code[offset + 1];
     printf("%-16s %4d '", name, constantIdx);
     /**
@@ -72,7 +79,7 @@ static unsigned int constantInstruction(const char *name, Chunk_t *chunk, uint8_
     return offset + 2;
 }
 
-static unsigned jumpInstruction(const char *name, int sign, Chunk_t *chunk, uint8_t offset) {
+static unsigned jumpInstruction(const char *name, int sign, Chunk_t *chunk, uint32_t offset) {
     uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
     jump |= chunk->code[offset + 2];
 
@@ -80,7 +87,7 @@ static unsigned jumpInstruction(const char *name, int sign, Chunk_t *chunk, uint
     return offset + 3;
 }
 
-static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint8_t offset, bool isGlobal) {
+static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, uint32_t offset, bool isGlobal) {
     unsigned constantIdx = 0;
     constantIdx |= chunk->code[offset + 1] << 16;
     constantIdx |= chunk->code[offset + 2] << 8;
@@ -123,10 +130,14 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_NOT:
         case OP_PRINT:
         case OP_POP:
-            return simpleInstruction(name, offset);
+        case OP_SWITCH:
+        case OP_CASE:
+        case OP_DEFAULTCASE:
+        return simpleInstruction(name, offset);
         case OP_CONSTANT:
         case OP_ACCESS_LOCAL:
         case OP_SET_LOCAL:
+        case OP_ENDSWITCH:
             return constantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
@@ -135,11 +146,14 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_CONSTANT_LONG:
         case OP_ACCESS_LOCAL_LONG:
         case OP_SET_LOCAL_LONG:
+        case OP_BREAK:
+        case OP_BREAKALL:
             return longConstantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL_LONG:
         case OP_ACCESS_GLOBAL_LONG:
         case OP_SET_GLOBAL_LONG:
             return longConstantInstruction(name, chunk, offset, true);
+        case OP_JUMP_IF_NOT_MATCH:
         case OP_JUMP_IF_FALSE:
         case OP_JUMP_IF_TRUE:
         case OP_JUMP:
