@@ -1,40 +1,38 @@
 // break out from innermost loop
 
 // Test 1
-//var i = 0;
-//var N_OUTER = 2;
-//while (i < N_OUTER) {
-//    var j = 0;
-//    var N_INNER = 2;
-//    print("outer");
-//    print("i: " + i);
-//    //continue;
-//    while (j < N_INNER) {
-//        print("inner");
-//        print("j: " + j);
-//        breakall;  // SHOULD EXIT HERE
-//        j = j + 1;  // UNREACHABLE
-//    }
-//    i = i + 1;  // UNREACHABLE
-//}
-
+var i = 0;
+var N_OUTER = 2;
+while (i < N_OUTER) {
+    var j = 0;
+    var N_INNER = 2;
+    print("outer");
+    print("i: " + i);
+    //continue;
+    while (j < N_INNER) {
+        print("inner");
+        print("j: " + j);
+        breakall;  // SHOULD EXIT HERE
+        j = j + 1;  // UNREACHABLE
+    }
+    i = i + 1;  // UNREACHABLE
+}
 
 // Test 2
-//print("");
-//print("NEW LOOP");
-//print("");
-//for (var i=0; i<2; i = i + 1) {
-//    var N_INNER = 2;
-//    print("outer");
-//    print("i: " + i);
-//    //continue;
-//    for (var j=0; j<2; j = j + 1) {
-//        print("inner");
-//        print("j: " + j);
-//        break; 
-//    }
-//}
-
+print("");
+print("NEW LOOP");
+print("");
+for (var i=0; i<2; i = i + 1) {
+    var N_INNER = 2;
+    print("outer");
+    print("i: " + i);
+    //continue;
+    for (var j=0; j<2; j = j + 1) {
+        print("inner");
+        print("j: " + j);
+        break; 
+    }
+}
 
 // Test 3
 print("");
@@ -51,7 +49,6 @@ for (var i=0; i<2; i = i + 1) {
           breakall;
     }
 }
-
 
 // Test 4
 var i = 0;

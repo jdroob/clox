@@ -1,10 +1,11 @@
 #include "common.h"
 #include "chunk.h"
+#include "object.h"
 #include "compiler.h"
 #include "scanner.h"
 #include "memory.h"
-#include "object.h"
 #include "table.h"
+#include "debug.h"
 #include "vm.h"
 
 
@@ -55,11 +56,18 @@ typedef struct {
     int depth;
 } Local_t;
 
+typedef enum {
+    TYPE_SCRIPT,    // Account for globals at top-level, outside of implicit top-level function
+    TYPE_FUNCTION
+} FunctionType_e;
+
 /**
  * Simple, flat array of all locals that are in scope during each point of the compilation process.
  * Locals are ordered in the array in order their declarations appear in the code.
  */
 typedef struct {
+    ObjFunction_t *function;
+    FunctionType_e type;
     Local_t *locals;
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
@@ -82,7 +90,7 @@ typedef struct {
 // GLOBALS (uh-oh!!)
 Parser_t parser;
 Compiler_t *current;
-Chunk_t *compilingChunk;
+// Chunk_t *compilingChunk;
 Table_t literals;
 bool isFinal = false;
 
@@ -142,7 +150,7 @@ static void consume(TokenType_e type, const char *msg) {
 }
 
 static Chunk_t *currentChunk(void) {
-    return compilingChunk;
+    return &current->function->chunk;
 }
 
 static void emitByte(uint8_t byte) {
@@ -200,12 +208,22 @@ static void patchJump(int offset) {
     currentChunk()->code[offset + 1] = jump & 0xFF;     // write low byte of jump
 }
 
-static void endCompiler(void) {
+static ObjFunction_t *endCompiler(void) {
     FREE_ARRAY(Local_t, current->locals, current->capacity);
     freeIsFinalsArray(&current->localIsFinals);
     freeBreakJumpArray(&current->breakJumps);
     freeBreakJumpArray(&current->breakAllJumps);
     emitReturn();
+
+    ObjFunction_t *function = current->function;
+    #ifdef DEBUG_CHUNK
+    if (!parser.hadError) {
+        disassembleChunk(currentChunk(), function->name != NULL 
+        ? function->name->chars : "<script>");
+    }
+    #endif
+    
+    return function;
 }
 
 static void emitConstant(Value_t value) {
@@ -244,7 +262,10 @@ static void initLocals(void) {
     initIsFinalsArray(&current->localIsFinals);
 }
 
-static void initCompiler(Compiler_t *compiler) {
+static void addLocal(Token_t *);
+static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
+    compiler->function = NULL;
+    compiler->type = type;
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
     compiler->continueTarget = -1;
@@ -259,8 +280,23 @@ static void initCompiler(Compiler_t *compiler) {
     compiler->ba_localCount_SnapShot = -1;
     compiler->loopDepth = 0;
     compiler->switchDepth = 0;
+    compiler->function = newFunction();
     current = compiler;
+
+    // A bit mysterious for now but reserving local slot 0 for VM's own internal use
+    // addLocal(
+    //     &(Token_t ){
+    //         .type = TOKEN_VM_RESERVED,
+    //         .start = "",
+    //         .length = 0,
+    //         .line = -1
+    //     }
+    // );
     initLocals();
+    Local_t *local = &current->locals[current->localCount++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
 }
 
 static void expression(void);
@@ -1136,6 +1172,10 @@ static void forStatement(void) {
 
 static void switchStatement(void) {
     uint8_t prevSwitchDepth = current->switchDepth++;
+    if (current->switchDepth > UINT8_MAX) {
+        error("Too many nested switch statements.");
+        return;
+    }
     // int breakTarget = current->breakTarget;
     int caseOrDefaultJump = -1;
     bool hasDefault = false;
@@ -1269,13 +1309,13 @@ static void declaration(void) {
     if (parser.panicMode) synchronize();
 }
 
-bool compile(const char *source, Chunk_t *chunk) {
+ObjFunction_t *compile(const char *source) {
     initScanner(source);
     parser.hadError = false;
     parser.panicMode = false;
-    compilingChunk = chunk;
+    // compilingChunk = chunk;
     Compiler_t compiler = { 0 };
-    initCompiler(&compiler);
+    initCompiler(&compiler, TYPE_SCRIPT);
     // initTable(&vm.globalNames);
     initTable(&literals);
 
@@ -1307,12 +1347,12 @@ bool compile(const char *source, Chunk_t *chunk) {
 
     // freeTable(&vm.globalNames);
     freeTable(&literals);
-    endCompiler();
+    ObjFunction_t *function = endCompiler();
 
     #ifdef DEBUG_CHUNK
     #include "debug.h"
     disassembleChunk(currentChunk(), "code");
     #endif
 
-    return !parser.hadError;
+    return parser.hadError ? NULL : function;
 }

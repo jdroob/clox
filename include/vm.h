@@ -27,7 +27,8 @@ typedef struct {
 } BreakJump_t;
 
 typedef struct {
-    Chunk_t         *chunk;
+    // Chunk_t         *chunk;
+    ObjFunction_t   *topLevel;
     uint8_t         *ip;
     uint32_t        capacity;
     Value_t         *stack;

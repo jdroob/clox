@@ -20,11 +20,10 @@ switch (a) {
 }
 
 // Test 4: nested switch
-// expect nothing printed
 var f = false;
 switch (f) {
     case false: {
-        switch (!!f) {
+        switch (!!!f) {
             case true:  print "true";
             case false: print "here :)";
         }

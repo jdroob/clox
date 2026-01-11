@@ -32,6 +32,13 @@ static void freeObject(Obj_t *object) {
             FREE(ObjString_t, object);
             break;
         }
+        case OBJ_FUNCTION: {
+            ObjFunction_t *function = (ObjFunction_t *)object;
+            // freeObject(function->name);  <- GARBAGE COLLECTOR SHOULD TAKE CARE OF THIS LATER
+            freeChunk(&function->chunk);
+            FREE(ObjFunction_t, object);
+            break;
+        }
     }
 }
 

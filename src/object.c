@@ -3,6 +3,7 @@
 #include "memory.h"
 #include "object.h"
 #include "value.h"
+#include "debug.h"
 #include "vm.h"
 
 
@@ -32,9 +33,17 @@ static uint32_t hashString(const char *key, int length) {
     uint32_t hash = 2166136261u;    // 0x811C_9DC5
     for (int i=0; i<length; ++i) {
         hash ^= (uint8_t)key[i];
-        hash *= 1677719;    // 0x0000_418B
+        hash *= 1677719;            // 0x0000_418B
     }
     return hash;
+}
+
+ObjFunction_t *newFunction(void) {
+    ObjFunction_t *function = ALLOCATE_OBJ(ObjFunction_t, sizeof(ObjFunction_t), OBJ_FUNCTION);
+    function->arity = 0;
+    function->name = NULL;
+    initChunk(&function->chunk);
+    return function;
 }
 
 ObjString_t *makeString(char *chars, int length) {
@@ -42,6 +51,29 @@ ObjString_t *makeString(char *chars, int length) {
     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
     if (interned != NULL) return interned;
     return allocateString(chars, length, false, hash);
+}
+
+static void printFunction(ObjFunction_t *function) {
+    if (function->name == NULL) {
+    printf("<script>");
+        return;
+    }
+    printf("<fn %s>", function->name->chars);
+}
+
+void printObject(Value_t val) {
+    switch (OBJ_TYPE(val)) {
+        case OBJ_STRING: {
+            printf("\"%s\"", AS_CSTRING(val));
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_FUNCTION: {
+            printFunction(AS_FUNCTION(val));
+            if (appendNewline) printf("\n");
+            break;
+        }
+    }
 }
 
 // ObjString_t *takeString(char *chars, int length) {

@@ -3,9 +3,11 @@
 
 #include "common.h"
 #include "value.h"
+#include "chunk.h"
 
 typedef enum {
-    OBJ_STRING
+    OBJ_STRING,
+    OBJ_FUNCTION
 } Obj_e;
 
 struct Obj_t {
@@ -21,16 +23,27 @@ struct ObjString_t {
     char chars[];
 };
 
-#define OBJ_TYPE(value)   (AS_OBJ(value)->type)
-#define IS_STRING(value)  isObjType(value, OBJ_STRING)
-#define AS_STRING(value)  ((ObjString_t *)AS_OBJ(value))
-#define AS_CSTRING(value) (((ObjString_t *)AS_OBJ(value))->chars)
+typedef struct {
+    Obj_t obj;
+    int arity;
+    Chunk_t chunk;
+    ObjString_t *name;
+} ObjFunction_t;
+
+#define OBJ_TYPE(value)     (AS_OBJ(value)->type)
+#define IS_STRING(value)    isObjType(value, OBJ_STRING)
+#define AS_STRING(value)    ((ObjString_t *)AS_OBJ(value))
+#define AS_CSTRING(value)   (((ObjString_t *)AS_OBJ(value))->chars)
+#define IS_FUNCTION(value)  isObjType(value, OBJ_FUNCTION)
+#define AS_FUNCTION(value)  ((ObjFunction_t *)AS_OBJ(value))
 
 static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
 }
 
+ObjFunction_t *newFunction(void);
 ObjString_t *makeString(char *chars, int length);
+void printObject(Value_t val);
 // ObjString_t *takeString(char *chars, int length);   // create dynamic string
 // ObjString_t *copyString(const char *chars, int length); // copy string from source
 

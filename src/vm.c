@@ -21,8 +21,8 @@ static void runtimeError(const char *format, ...) {
     va_end(args);
     fputs("\n", stderr);
 
-    size_t instructionOffset = vm.ip - vm.chunk->code - 1;
-    int line = getLine(vm.chunk, instructionOffset);
+    size_t instructionOffset = vm.ip - vm.topLevel->chunk.code - 1;
+    int line = getLine(&vm.topLevel->chunk, instructionOffset);
     fprintf(stderr, "[line %d] in script\n", line);
     resetStack();
     //freeVM(); // freeing here will result in double free in main
@@ -237,7 +237,7 @@ void initVM(void) {
     #ifdef JRMALLOC
     init(); // init jrmalloc
     #endif
-    vm.chunk = NULL;
+    vm.topLevel = NULL;
     vm.ip = 0;
     vm.capacity = STACK_MAX;
     vm.switchCounter = 0;
@@ -292,7 +292,7 @@ static InterpResult_t run(void) {
         uint16_t bytes = (byte1 << 8) | byte0; \
         bytes; \
     })
-    #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+    #define READ_CONSTANT() (vm.topLevel->chunk.constants.values[READ_BYTE()])
     /**
      * NOTE: below is a "statement expression"
      *  syntax:
@@ -306,7 +306,7 @@ static InterpResult_t run(void) {
         uint8_t byte2 = READ_BYTE(); \
         uint8_t byte1 = READ_BYTE(); \
         uint8_t byte0 = READ_BYTE(); \
-        vm.chunk->constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
+        vm.topLevel->chunk.constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
     #define READ_STRING() (AS_STRING(READ_CONSTANT()))
     #define READ_STRING_LONG() (AS_STRING(READ_CONSTANT_LONG()))
@@ -327,7 +327,7 @@ static InterpResult_t run(void) {
             printf(" ] ");
         }
         puts("\n");
-        disassembleInstruction(vm.chunk, (unsigned)(vm.ip - vm.chunk->code));
+        disassembleInstruction(&vm.topLevel->chunk, (unsigned)(vm.ip - vm.topLevel->chunk.code));
         appendNewline = true;
         #endif
         switch(instruction = READ_BYTE()) {
@@ -614,19 +614,21 @@ static InterpResult_t run(void) {
 }
 
 InterpResult_t interpret(const char *source) {
-    Chunk_t chunk;
-    initChunk(&chunk);
+    // Chunk_t chunk;
+    // initChunk(&chunk);
     
-    if (!compile(source, &chunk)) {
-        freeChunk(&chunk);
+    ObjFunction_t *topLevel = NULL;
+    if ((topLevel = compile(source)) == NULL) {
+        // freeChunk(&chunk);
         return INTERPRET_COMPILE_ERROR;
     }
     
-    vm.chunk = &chunk;
-    vm.ip = vm.chunk->code;
+    // vm.chunk = &chunk;
+    vm.topLevel = topLevel;
+    vm.ip = vm.topLevel->chunk.code;
 
     InterpResult_t result = run();
 
-    freeChunk(&chunk);
+    freeChunk(&vm.topLevel->chunk.code);
     return result;
 }

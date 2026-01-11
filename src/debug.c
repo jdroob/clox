@@ -166,15 +166,6 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     }
 }
 
-void printObject(Value_t val) {
-    switch (OBJ_TYPE(val)) {
-        case OBJ_STRING:
-            printf("\"%s\"", AS_CSTRING(val));
-            if (appendNewline) printf("\n");
-            break;
-    }
-}
-
 void printValue(Value_t val) {
     switch(val.type) {
         case VAL_BOOL:
