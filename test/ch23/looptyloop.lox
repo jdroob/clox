@@ -33,7 +33,6 @@ for (var i=0; i<2; i = i + 1) {
         print("j: " + j);
         break; 
     }
-    print N_INNER;
 }
 
 
