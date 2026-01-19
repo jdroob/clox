@@ -61,13 +61,13 @@ typedef enum {
     TYPE_FUNCTION
 } FunctionType_e;
 
-/**
- * Simple, flat array of all locals that are in scope during each point of the compilation process.
- * Locals are ordered in the array in order their declarations appear in the code.
- */
 typedef struct {
     ObjFunction_t *function;
     FunctionType_e type;
+    /**
+     * Simple, flat array of all locals that are in scope during each point of the compilation process.
+     * Locals are ordered in the array in order their declarations appear in the code.
+     */
     Local_t *locals;
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
@@ -260,6 +260,7 @@ static void initLocals(void) {
         current->locals[i].depth = -1;
     }
     initIsFinalsArray(&current->localIsFinals);
+    writeIsFinalsArray(&current->localIsFinals, true);
 }
 
 static void addLocal(Token_t *);
@@ -284,14 +285,6 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     current = compiler;
 
     // A bit mysterious for now but reserving local slot 0 for VM's own internal use
-    // addLocal(
-    //     &(Token_t ){
-    //         .type = TOKEN_VM_RESERVED,
-    //         .start = "",
-    //         .length = 0,
-    //         .line = -1
-    //     }
-    // );
     initLocals();
     Local_t *local = &current->locals[current->localCount++];
     local->depth = 0;
@@ -1349,10 +1342,10 @@ ObjFunction_t *compile(const char *source) {
     freeTable(&literals);
     ObjFunction_t *function = endCompiler();
 
-    #ifdef DEBUG_CHUNK
-    #include "debug.h"
-    disassembleChunk(currentChunk(), "code");
-    #endif
+    // #ifdef DEBUG_CHUNK
+    // #include "debug.h"
+    // disassembleChunk(currentChunk(), "code");
+    // #endif
 
     return parser.hadError ? NULL : function;
 }

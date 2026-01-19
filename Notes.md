@@ -1047,3 +1047,190 @@ TODO:
         - case(s) without default is fine
         - default without case(s) are fine
         - I added 'break' so now we're not just doing the case-match then exit. We're allowing for fall-throughs and all that good stuff in C :)
+
+# Chapter 24: Functions and Calls
+
+1/13/2026
+- Some high-level notes while I'm feeling tired after work:
+    - We're moving away from one giant chunk containing all the bytecode
+    - Now, chunks will be created at compile-time on a per-function basis
+        - what about global (i.e. top-level) code?
+        - we're going to treat top-level code as the body of an implicit "main" function
+            - *globals are still treated differently from locals but we'll discuss this further later
+
+```
+    typedef struct {
+    ObjFunction_t *function;
+    FunctionType_e type;
+    /**
+     * Simple, flat array of all locals that are in scope during each point of the compilation process.
+     * Locals are ordered in the array in order their declarations appear in the code.
+     */
+    Local_t *locals;
+    int localCount; // number of locals in scope
+    int scopeDepth; // number of scopes enclosing current scope
+    int continueTarget;
+    bool continueFlag;
+    bool inFor;
+    bool forBlock;
+    // int breakTarget;
+    // int breakAllTarget;
+    BreakJump_t breakJumps;
+    int b_localCount_SnapShot;
+    BreakJump_t breakAllJumps;
+    int ba_localCount_SnapShot;
+    int loopDepth;
+    uint8_t switchDepth;
+    size_t capacity;
+    MutableTable_t localIsFinals;
+} Compiler_t;
+
+...
+
+ObjFunction_t *compile(const char *source) {
+    initScanner(source);
+    parser.hadError = false;
+    parser.panicMode = false;
+    // compilingChunk = chunk;
+    Compiler_t compiler = { 0 };
+    initCompiler(&compiler, TYPE_SCRIPT);
+    // initTable(&vm.globalNames);
+    initTable(&literals);
+    
+    ...
+
+static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
+    compiler->function = NULL;
+    compiler->type = type;  // <--
+    compiler->localCount = 0;
+    compiler->scopeDepth = 0;
+    compiler->continueTarget = -1;
+    compiler->continueFlag = false;
+    compiler->inFor = false;
+    compiler->forBlock = false;
+    // compiler->breakTarget = -1;
+    // compiler->breakAllTarget = -1;
+    initBreakJumpArray(&compiler->breakJumps);
+    compiler->b_localCount_SnapShot = -1;
+    initBreakJumpArray(&compiler->breakAllJumps);
+    compiler->ba_localCount_SnapShot = -1;
+    compiler->loopDepth = 0;
+    compiler->switchDepth = 0;
+    compiler->function = newFunction();
+    current = compiler;
+
+    // A bit mysterious for now but reserving local slot 0 for VM's own internal use
+    initLocals();
+    Local_t *local = &current->locals[current->localCount++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
+}
+```
+- If we have functions and functions have local vars that belong to them, and we're separating bytecode to a per-function basis, how do we need to update how we handle locals? (Currently, the operand for get/set local ops is the index into the stack)
+- We're *probably* going to keep the interface similar from an instruction perspective but from a book-keeping standpoint, we're going to do the following:
+
+- Consider:
+
+        ```
+        fun func() {        |
+            var a;          |       2: b
+            var b;          |       1: a
+        }                   |       0: <VM-reserved>
+        ```
+
+- When `func` is called, 'a' gets slot 1 in the stack and b gets slot 2
+
+- Now consider:
+
+        ```
+        fun first() {
+            var a;
+            second();
+            var b;
+            second();
+        }
+
+        fun second() {
+            var c;
+            var d;
+        }
+
+        fun main() {
+            first();
+        }
+
+        main();
+        ```
+
+- The locals stack would evolve as follows:
+
+        // After `a` var declaration in `first`
+        1: a
+        0: <VM-reserved>
+
+        // After first invocation of `second` (before returning)
+        3: d
+        2: c
+        1: a
+        0: <VM-reserved>
+
+        // After second invocation of `second` (before returning)
+        4: d
+        3: c
+        2: b
+        1: a
+        0: <VM-reserved>
+
+- Notice that the slots for `c` and `d` changed from slots 2 and 3 to slots 3 and 4 across calls
+- The insight here is: **with the introduction of functions, we can no longer allow locals to reserve a slot for their entire lifetime**
+- Instead, we observe that `d` is always right after `c` in the stack (when executing `second`). We also observe that `b` will always be after `a` (when executing `first`).
+- SO, we've glimpsed another key insight: **within functions, locals maintain the same relative order in the stack**
+- This means that we're going to update our VM to maintain a **frame pointer** that points to the slot *before* the first slot that belongs to the function in question.
+- In other words, at *compile time*, we know the relative locations of local vars in the stack. At *run time*, we know the absolute locations of local vars in the stack (absoluteLocation = framePointer + relativeLocation).
+
+- Another thing to consider is an aspect of clox's *calling conventions*
+- How does calling a function work? Well, we just need to update **ip** to the first instruction of the callee. Pretty simple, right?
+- ...but wait, how do we return to the instruction after the call site? We'll somehow need to store the return address in an easily-accessible location before calling a function such that, upon returning to the caller, `ip` will point to the instruction after the call site.
+
+- Next, let's discuss **call frames**
+- For each *live function invocation* (the function being exec'd that hasn't returned yet), we need to track: where on the stack the function's locals begin and where the caller should resume.
+
+        ```
+        // vm.h
+        // A call frame represents an ongoing function call
+        typedef struct {
+            ObjFunction_t *function;    // pointer to function being called
+            uint8_t *ip;    // this function's ip (when this function returns, this call frame is popped and the VM resumes wherever the caller's ip left off)
+            Value_t *slots; // location where this function's locals begin
+        } CallFrame_t;
+        ```
+- Sounds like the basic sketch of the new execution model will be:
+    - We start with an `ObjFunction_t` returned after compiling source
+    - This represents our implicit, top-level function
+    - We begin executing (`vm.ip = function->ip`) 
+    - Whenever we call a function, we create a new `CallFrame_t` object, push it to the vm.frames structure (the call stack)
+        - ip of the new call frame will be pre-determined at compile time
+    - Update vm's ip (`vm.ip = frame->ip`)
+    - Execute function's code
+    - When `ret` instruction is reached, pop call frame, restore VM's ip to ip of previous frame :)
+
+
+1/18/2026:
+- Spent some time debugging after refactoring code to support functions + top-level function vs one giant bytecode chunk:
+    - Bug 1:
+        - In compiler.c::initLocals()
+        ```
+        static void initLocals(void) {
+            size_t oldCapacity = current->capacity;
+            current->capacity = GROW_CAPACITY(oldCapacity);
+            current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
+            for (unsigned i=0; i < current->capacity; ++i) {
+                current->locals[i].depth = -1;
+            }
+            initIsFinalsArray(&current->localIsFinals);
+            writeIsFinalsArray(&current->localIsFinals, true);  // <-
+        }
+        ```
+        - Added `writeIsFinalsArray` call to set locals[0] (our top-level) to a `final`. (I don't *really* care that this is a final vs being mutable. I mean.. I guess it shouldn't be mutable, but that shouldn't ever matter in our execution model. The problem was that a local was being added to locals but no corresponding final flag was being written - leading to a corrupted compilation state).
+        - In `jump` ops, we had `*frame->ip += offset`... This is obviously wrong and was causing our bytecode to be rewritten at runtime - leading to **WEIRD** errors / stack states... Fortunately, the fix was as simple as `frame->ip += offset` :)

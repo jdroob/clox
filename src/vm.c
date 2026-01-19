@@ -11,18 +11,21 @@ VM_t vm;
 
 static void resetStack(void) {
     vm.stackTop = vm.stack;
+    vm.frameCount = 0;
 }
 
 void freeVM(void);
 static void runtimeError(const char *format, ...) {
+    CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
     va_list args;
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
     fputs("\n", stderr);
 
-    size_t instructionOffset = vm.ip - vm.topLevel->chunk.code - 1;
-    int line = getLine(&vm.topLevel->chunk, instructionOffset);
+    // size_t instructionOffset = vm.ip - vm.topLevel->chunk.code - 1;
+    size_t instructionOffset = frame->ip - frame->function->chunk.code - 1;
+    int line = getLine(&frame->function->chunk, instructionOffset);
     fprintf(stderr, "[line %d] in script\n", line);
     resetStack();
     //freeVM(); // freeing here will result in double free in main
@@ -237,8 +240,8 @@ void initVM(void) {
     #ifdef JRMALLOC
     init(); // init jrmalloc
     #endif
-    vm.topLevel = NULL;
-    vm.ip = 0;
+    // vm.topLevel = NULL;
+    // vm.ip = 0;
     vm.capacity = STACK_MAX;
     vm.switchCounter = 0;
     #ifdef JRMALLOC
@@ -276,7 +279,8 @@ void updateObjList(Obj_t *obj) {
 }
 
 static InterpResult_t run(void) {
-    #define READ_BYTE() (*vm.ip++)
+    CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
+    #define READ_BYTE() (*frame->ip++)
     #define READ_BYTES() \
     ({ \
         uint8_t byte2 = READ_BYTE(); \
@@ -292,7 +296,8 @@ static InterpResult_t run(void) {
         uint16_t bytes = (byte1 << 8) | byte0; \
         bytes; \
     })
-    #define READ_CONSTANT() (vm.topLevel->chunk.constants.values[READ_BYTE()])
+    #define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
+    //#define READ_CONSTANT() (vm.topLevel->chunk.constants.values[READ_BYTE()])
     /**
      * NOTE: below is a "statement expression"
      *  syntax:
@@ -306,7 +311,7 @@ static InterpResult_t run(void) {
         uint8_t byte2 = READ_BYTE(); \
         uint8_t byte1 = READ_BYTE(); \
         uint8_t byte0 = READ_BYTE(); \
-        vm.topLevel->chunk.constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
+        frame->function->chunk.constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
     #define READ_STRING() (AS_STRING(READ_CONSTANT()))
     #define READ_STRING_LONG() (AS_STRING(READ_CONSTANT_LONG()))
@@ -327,7 +332,7 @@ static InterpResult_t run(void) {
             printf(" ] ");
         }
         puts("\n");
-        disassembleInstruction(&vm.topLevel->chunk, (unsigned)(vm.ip - vm.topLevel->chunk.code));
+        disassembleInstruction(&frame->function->chunk, (unsigned)(frame->ip - frame->function->chunk.code));
         appendNewline = true;
         #endif
         switch(instruction = READ_BYTE()) {
@@ -486,7 +491,7 @@ static InterpResult_t run(void) {
                 } else {
                     idx = READ_BYTES();
                 }
-                push(vm.stack[idx]);
+                push(frame->slots[idx]);
                 break;
             }
             case OP_SET_LOCAL:
@@ -499,13 +504,13 @@ static InterpResult_t run(void) {
                 }
 
                 // writeStackAt(idx, peek(0));
-                vm.stack[idx] = peek(0);
+                frame->slots[idx] = peek(0);
                 break;
             }
             case OP_JUMP_IF_TRUE: {
                 uint16_t offset = READ_SHORT();
                 if (!isFalsey(peek(0))) {
-                    vm.ip += offset;
+                    frame->ip += offset;
                     break;
                 }
                 break;
@@ -513,7 +518,7 @@ static InterpResult_t run(void) {
             case OP_JUMP_IF_FALSE: {
                 uint16_t offset = READ_SHORT();
                 if (isFalsey(peek(0))) {
-                    vm.ip += offset;
+                    frame->ip += offset;
                     break;
                 }
 
@@ -584,18 +589,18 @@ static InterpResult_t run(void) {
                     // printf("vm.switchCounter: %d\n", vm.switchCounter);
                     vm.switchCounter--;
                     // printf("vm.switchCounter: %d\n", vm.switchCounter);
-                    vm.ip += offset;  // jump to next case or default
+                    frame->ip += offset;  // jump to next case or default
                 }
                 break;
             }
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
-                vm.ip += offset;
+                frame->ip += offset;
                 break;
             }
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
-                vm.ip -= offset;
+                frame->ip -= offset;
                 break;
             }
             default:
@@ -614,21 +619,26 @@ static InterpResult_t run(void) {
 }
 
 InterpResult_t interpret(const char *source) {
-    // Chunk_t chunk;
-    // initChunk(&chunk);
+    ObjFunction_t *function = NULL;
     
-    ObjFunction_t *topLevel = NULL;
-    if ((topLevel = compile(source)) == NULL) {
-        // freeChunk(&chunk);
+    // We're getting the top-level function back
+    if ((function = compile(source)) == NULL) {
+        // freeChunk(&function->chunk);
         return INTERPRET_COMPILE_ERROR;
     }
-    
+
+    push(OBJ_VAL(function));
+    CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    frame->function = function;
+    frame->ip = function->chunk.code;
+    frame->slots = vm.stack;
     // vm.chunk = &chunk;
-    vm.topLevel = topLevel;
-    vm.ip = vm.topLevel->chunk.code;
+    // vm.function = function;
+    // vm.ip = vm.topLevel->chunk.code;
 
-    InterpResult_t result = run();
+    // InterpResult_t result = run();
 
-    freeChunk(&vm.topLevel->chunk.code);
-    return result;
+    // freeChunk(&function->chunk);
+    // return result;
+    return run();
 }
