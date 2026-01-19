@@ -1047,3 +1047,44 @@ TODO:
         - case(s) without default is fine
         - default without case(s) are fine
         - I added 'break' so now we're not just doing the case-match then exit. We're allowing for fall-throughs and all that good stuff in C :)
+
+1/18/2026 - later in the night
+- Caught this while drinking
+```
+// Test 2
+print("");
+print("NEW LOOP");
+print("");
+for (var i=0; i<2; i = i + 1) {
+    var N_OUTER = 2;
+    print("outer");
+    print("i: " + i);
+    //continue;
+    for (var j=0; j<2; j = j + 1) {
+        print("inner");
+        print("j: " + j);
+        break; 
+    }
+    print N_OUTER;
+}
+```
+
+prints
+
+
+```
+""
+"NEW LOOP"
+""
+"outer"
+"i: 0"
+"inner"
+"j: 0"
+2
+"outer"
+"i: 2"
+0
+```
+
+- In other words, we're losing the outer loop's local `N_OUTER` too early...
+- Need to modify breakStatement() in compile.c
