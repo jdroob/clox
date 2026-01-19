@@ -213,7 +213,7 @@ static ObjFunction_t *endCompiler(void) {
     freeIsFinalsArray(&current->localIsFinals);
     freeBreakJumpArray(&current->breakJumps);
     freeBreakJumpArray(&current->breakAllJumps);
-    printf("endCompiler::current->localCount: %d\n", current->localCount);
+    // printf("endCompiler::current->localCount: %d\n", current->localCount);
     if (current->localCount == 1) {
         // <script> in slot 0
         emitByte(OP_POP);
@@ -800,12 +800,12 @@ static void endLoop(void) {
 
 static void beginScope(void) {
     current->scopeDepth++;
-   printf("Scope depth is %d\n", current->scopeDepth);
+//    printf("Scope depth is %d\n", current->scopeDepth);
 }
 
 static void endScope(void) {
     current->scopeDepth--;
-    printf("Scope depth is %d\n", current->scopeDepth);
+    // printf("Scope depth is %d\n", current->scopeDepth);
 
     // TODO: replace with OP_POPN
     // > 1 due to reserved slot for script
@@ -890,7 +890,7 @@ static void continueStatement(void) {
 }
 
 static bool inBreakScope(unsigned idx) {
-    printf("local var: %.*s at depth %d\n", current->locals[idx].name.length, current->locals[idx].name.start, current->locals[idx].depth);
+    // printf("local var: %.*s at depth %d\n", current->locals[idx].name.length, current->locals[idx].name.start, current->locals[idx].depth);
     if (current->inFor) {
         //printf("current->locals[idx].depth: %d\n", current->locals[idx].depth);
         //printf("current->scopeDepth: %d\n", current->scopeDepth);
@@ -912,7 +912,7 @@ static bool inBreakScope(unsigned idx) {
 }
 
 static void breakStatement(void) {
-    printf("Depth at BREAK: %d\n", current->scopeDepth);
+    // printf("Depth at BREAK: %d\n", current->scopeDepth);
     consume(TOKEN_SEMICOLON, "Expect a ';'.");
     if (current->loopDepth <= 0 && current->switchDepth == 0) {
         // TODO: Modify when switch is added
@@ -924,7 +924,7 @@ static void breakStatement(void) {
     int localsInScope = 0;
     int i = current->localCount - 1;
     while (i >= 0 && inBreakScope(i)) { localsInScope++; i--; }
-    printf("localsInScope: %d\ncurrent->localCount: %d\n", localsInScope, current->localCount);
+    // printf("localsInScope: %d\ncurrent->localCount: %d\n", localsInScope, current->localCount);
     current->b_localCount_SnapShot = localsInScope;
 
     emitByte(OP_BREAK);
