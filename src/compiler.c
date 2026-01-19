@@ -213,6 +213,11 @@ static ObjFunction_t *endCompiler(void) {
     freeIsFinalsArray(&current->localIsFinals);
     freeBreakJumpArray(&current->breakJumps);
     freeBreakJumpArray(&current->breakAllJumps);
+    printf("endCompiler::current->localCount: %d\n", current->localCount);
+    if (current->localCount == 1) {
+        // <script> in slot 0
+        emitByte(OP_POP);
+    }
     emitReturn();
 
     ObjFunction_t *function = current->function;
@@ -803,7 +808,8 @@ static void endScope(void) {
     //printf("Scope depth is %d\n", current->scopeDepth);
 
     // TODO: replace with OP_POPN
-    while (current->localCount > 0 &&
+    // > 1 due to reserved slot for script
+    while (current->localCount > 1 &&
            current->locals[current->localCount - 1].depth > current->scopeDepth) {
         emitByte(OP_POP);
         current->localCount--;
@@ -939,7 +945,7 @@ static void breakAllStatement(void) {
     //     current->localCount--;
     //     popLocalIsFinalFlag(&current->localIsFinals);
     // }
-    current->ba_localCount_SnapShot = current->localCount;
+    current->ba_localCount_SnapShot = current->localCount - 1;  // -1 for reserved script slot
     /**
      * Doing it like this because:
      *  We don't want to overwrite any of the Compiler_t info (remember we're still parsing)
