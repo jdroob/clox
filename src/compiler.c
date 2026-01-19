@@ -854,7 +854,7 @@ static void continueStatement(void) {
     current->continueFlag = true;
 }
 
-static bool inScope(unsigned idx) {
+static bool inBreakScope(unsigned idx) {
     if (current->inFor) {
         //printf("current->locals[idx].depth: %d\n", current->locals[idx].depth);
         //printf("current->scopeDepth: %d\n", current->scopeDepth);
@@ -870,7 +870,7 @@ static bool inScope(unsigned idx) {
          * - and in this case, there's a scope for the block
          */
         uint8_t maxDiff = current->forBlock ? 3 : 2;
-        return abs(current->locals[idx].depth - current->scopeDepth) <= maxDiff;
+        return abs(current->locals[idx].depth - current->scopeDepth) < maxDiff;
     }
     return current->locals[idx].depth == current->scopeDepth;
 }
@@ -886,7 +886,7 @@ static void breakStatement(void) {
     // endScope(); // decrement scope depth
     int localsInScope = 0;
     int i = current->localCount - 1;
-    while (i >= 0 && inScope(i)) { localsInScope++; i--; }
+    while (i >= 0 && inBreakScope(i)) { localsInScope++; i--; }
     //printf("localsInScope: %d\ncurrent->localCount: %d\n", localsInScope, current->localCount);
     current->b_localCount_SnapShot = localsInScope;
 
