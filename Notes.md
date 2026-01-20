@@ -1218,7 +1218,7 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
 
 1/18/2026:
 - Spent some time debugging after refactoring code to support functions + top-level function vs one giant bytecode chunk:
-    - Bug 1:
+    - Bug:
         - In compiler.c::initLocals()
         ```
         static void initLocals(void) {
@@ -1234,3 +1234,67 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
         ```
         - Added `writeIsFinalsArray` call to set locals[0] (our top-level) to a `final`. (I don't *really* care that this is a final vs being mutable. I mean.. I guess it shouldn't be mutable, but that shouldn't ever matter in our execution model. The problem was that a local was being added to locals but no corresponding final flag was being written - leading to a corrupted compilation state).
         - In `jump` ops, we had `*frame->ip += offset`... This is obviously wrong and was causing our bytecode to be rewritten at runtime - leading to **WEIRD** errors / stack states... Fortunately, the fix was as simple as `frame->ip += offset` :)
+
+1/19/2026:
+- Was drinking last night and caught a couple other bugs:
+    - 1) Here's the first one:
+        ```
+        static bool inBreakScope(unsigned idx) {
+            // printf("local var: %.*s at depth %d\n", current->locals[idx].name.length, current->locals[idx].name.start, current->locals[idx].depth);
+            if (current->inFor) {
+                //printf("current->locals[idx].depth: %d\n", current->locals[idx].depth);
+                //printf("current->scopeDepth: %d\n", current->scopeDepth);
+                /**
+                * for loop scoping is a little weird...
+                * in the case of:
+                *  for (...) {
+                *      ...
+                * }
+                * 
+                * - there's a scope for the 'for' params (e.g. var i=0; i < 2; i = i + 1)
+                * - there's a scope for the loop body
+                * - and in this case, there's a scope for the block
+                */
+                uint8_t maxDiff = current->forBlock ? 3 : 2;
+                return abs(current->locals[idx].depth - current->scopeDepth) < maxDiff; // e.g. if break at scopeDepth = 6 && maxDiff = 3, then pop vars in depths: 6, 5, and 4
+            }
+            return current->locals[idx].depth == current->scopeDepth;
+        }
+        ```
+        - Changed `<=` to `<` in first return statement (see comment next to that return for explanation)
+
+    - 2) And here's the second:
+        - Just needed to update number of locals to be popped in `breakAllStatement` from all of them to all except local at slot 0 (since that's <script>)
+
+        ```
+        static void breakAllStatement(void) {
+            consume(TOKEN_SEMICOLON,"Expect a ';'.");
+            if (current->loopDepth <= 0) {
+                error("Cannot use 'breakall' outside of loop.");
+                return;
+            }
+
+            // for (int i=0; i<current->localCount; ++i) {
+            //     emitByte(OP_POP);
+            //     current->localCount--;
+            //     popLocalIsFinalFlag(&current->localIsFinals);
+            // }
+            current->ba_localCount_SnapShot = current->localCount - 1;  // -1 for reserved script slot  // <----
+            /**
+            * Doing it like this because:
+            *  We don't want to overwrite any of the Compiler_t info (remember we're still parsing)
+            *  But we do want to pop all locals off...
+            *  But if we pop all locals off here, we'll still hit endScope and overpop
+            *  I'm deciding to be lazy and move this to runtime :) 
+            */
+            emitByte(OP_BREAKALL);
+            emitByte((uint8_t)(current->ba_localCount_SnapShot >> 16) & 0xFF);    // byte 2;
+            emitByte((uint8_t)(current->ba_localCount_SnapShot >> 8) & 0xFF);     // byte 1;
+            emitByte((uint8_t)(current->ba_localCount_SnapShot) & 0xFF);          // byte 0;
+            writeBreakJumpArray(&current->breakAllJumps, emitJump(OP_JUMP));
+            // current->breakAllTarget = emitJump(OP_JUMP);
+        }
+        ```
+
+    - At this point, feature-functions branch is functional again and behaving the same as master :)
+    
