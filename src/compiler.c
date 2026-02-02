@@ -62,6 +62,7 @@ typedef enum {
 } FunctionType_e;
 
 typedef struct {
+    struct Compiler_t *enclosing;  // pointer to compiler for function enclosing function this compiler object is associated with
     ObjFunction_t *function;
     FunctionType_e type;
     /**
@@ -89,7 +90,7 @@ typedef struct {
 
 // GLOBALS (uh-oh!!)
 Parser_t parser;
-Compiler_t *current;
+Compiler_t *current = NULL;
 // Chunk_t *compilingChunk;
 Table_t literals;
 bool isFinal = false;
@@ -227,7 +228,8 @@ static ObjFunction_t *endCompiler(void) {
         ? function->name->chars : "<script>");
     }
     #endif
-    
+
+    current = current->enclosing;
     return function;
 }
 
@@ -270,6 +272,7 @@ static void initLocals(void) {
 
 static void addLocal(Token_t *);
 static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
+    compiler->enclosing = current;
     compiler->function = NULL;
     compiler->type = type;
     compiler->localCount = 0;
@@ -289,7 +292,13 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     compiler->function = newFunction();
     current = compiler;
 
-    // A bit mysterious for now but reserving local slot 0 for VM's own internal use
+    if (type != TYPE_SCRIPT) {
+        current->function->name = makeString(parser.previous.start, parser.previous.length);
+    }
+
+    // For this Compiler_t struct, current->locals[0] refers to the stack location storing this function's corresponding ObjFunction_t
+    // ... we'll learn more later about why this is useful
+    current->locals = NULL;
     initLocals();
     Local_t *local = &current->locals[current->localCount++];
     local->depth = 0;
@@ -518,9 +527,33 @@ static void literal(bool canAssign) {
     }
 }
 
+static void _return(bool canAssign) {
+    expression();
+    emitByte(OP_RETURN);
+}
+
+static unsigned argumentList(void) {
+    unsigned argCount = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expression();
+            argCount++;
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')'.");
+    return argCount;
+}
+
+static void call(bool canAssign) {
+    // check arity
+    // argument list
+    unsigned argCount = argumentList();
+    emitVarLenInstr(argCount, OP_CALL, OP_CALL_LONG);
+}
+
 // side note: this is called designated initializer syntax (C99)
 ParseRule_t rules[] = {
-    [TOKEN_LEFT_PAREN]      =  {grouping, NULL, PREC_NONE},
+    [TOKEN_LEFT_PAREN]      =  {grouping, call, PREC_CALL},
     [TOKEN_RIGHT_PAREN]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
@@ -565,7 +598,7 @@ ParseRule_t rules[] = {
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
     [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
     [TOKEN_PRINT]           =  {NULL, NULL, PREC_NONE},
-    [TOKEN_RETURN]          =  {NULL, NULL, PREC_NONE},
+    [TOKEN_RETURN]          =  {_return, NULL, PREC_NONE},
     [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_THIS]            =  {NULL, NULL, PREC_NONE},
     [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
@@ -666,6 +699,7 @@ static unsigned makeConstant(Value_t value) {
 }
 
 static void markInitialized(void) {
+    if (current->scopeDepth == 0) return;   // don't mark globals as initialized - this policy only applies to locals
     current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
@@ -1242,6 +1276,39 @@ static void switchStatement(void) {
     // current->breakTarget = breakTarget;
 }
 
+static void function(FunctionType_e type) {
+    Compiler_t compiler;    // track compilation data  for this function
+    initCompiler(&compiler, TYPE_FUNCTION);
+    beginScope();   // This function's parameter scope
+
+    consume(TOKEN_LEFT_PAREN, "Expect a '(' after function name.");
+    // params();   // TODO: implement me :)
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            current->function->arity++;
+            // TODO: make param limit 255?
+            unsigned global = parseVariableName("Expect parameter name.");
+            defineVariable(global);
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')' after function name.");
+    consume(TOKEN_LEFT_BRACE, "Expect a '{' before function body.");
+    block();    // TOKEN_RIGHT_BRACE consumed in block()
+
+    ObjFunction_t *function = endCompiler();
+    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
+    
+    // No endScope() b/c compiler's lifetime ends when this function returns
+}
+
+static void funDeclaration(void) {
+    uint8_t global = parseVariableName("Expect a function name.");
+    markInitialized();
+    // compile function object, leave it on top of stack
+    function(TYPE_FUNCTION);
+    defineVariable(global);    
+}
+
 /**
  * LOX GRAMMAR RULES:
  *  **NOTE:** This is a little more bare-bones than the jlox grammar doc comment.
@@ -1250,12 +1317,13 @@ static void switchStatement(void) {
  *            It's easier to write the rules next to the code in a recursive descent
  *            parser (jlox) than it is here with a Pratt Parser (clox).
  * 
- *  declaration      ->  varDecl | ifStmt | whileStmt | stmt ;
+ *  declaration      ->  varDecl | ifStmt | whileStmt | forStmt | switchStmt | funStmt | stmt ;
  *  varDecl          ->  "var" IDENTIFIER ("=" expression)? ";" ;
  *  ifStmt           ->  "if" "(" condition ")" block ";" ;
  *  whileStmt        ->  "while" "(" condition ")" statement ;
  *  forStmt          ->  "for"   "(" initialization ";" condition ";" update ")" statement ;
  *  switchStmt       ->  "switch" "(" expression ")" "{" caseStmt* defaultStmt? "}" ;
+ *  funStmt          ->  "fun" IDENTIFIER "(" args ")" "{" declaration "}" ;
  *  caseStmt         ->  "case" expression ":" statement* ;
  *  defaultStmt      ->  "default" ":" statement*;
  *  initialization   ->  expression ;
@@ -1303,6 +1371,8 @@ static void declaration(void) {
         forStatement();
     } else if (match(TOKEN_SWITCH)) {
         switchStatement();
+    } else if (match(TOKEN_FUN)) {
+        funDeclaration();
     } else {
         statement();
     }

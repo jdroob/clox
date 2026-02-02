@@ -1,1 +1,2 @@
-for (var i=0; i<2; i = i + 1) { print i; }
+fun f() { print "hi"; return 4; }
+print f();

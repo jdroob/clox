@@ -6,6 +6,8 @@
 
 #define OP2STR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
+     (instruction) == OP_CALL ? "OP_CALL" : \
+     (instruction) == OP_CALL_LONG ? "OP_CALL_LONG" : \
      (instruction) == OP_NEGATE ? "OP_NEGATE" : \
      (instruction) == OP_ADD ? "OP_ADD" : \
      (instruction) == OP_GT ? "OP_GT" : \
@@ -138,6 +140,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_ACCESS_LOCAL:
         case OP_SET_LOCAL:
         case OP_ENDSWITCH:
+        case OP_CALL:
             return constantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
@@ -148,6 +151,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SET_LOCAL_LONG:
         case OP_BREAK:
         case OP_BREAKALL:
+        case OP_CALL_LONG:
             return longConstantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL_LONG:
         case OP_ACCESS_GLOBAL_LONG:

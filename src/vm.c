@@ -278,6 +278,40 @@ void updateObjList(Obj_t *obj) {
     obj->next = NULL;
 }
 
+static bool call(ObjFunction_t *function, unsigned argCount) {
+    if (function->arity != argCount) return false;
+
+    CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    frame->function = function;
+    frame->ip = function->chunk.code;
+    frame->slots = vm.stackTop - argCount - 1;
+    return true;
+}
+
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+               return call(AS_FUNCTION(callee), argCount);
+            default:
+               break; // Non-callable object type
+        }
+    }
+    runtimeError("Can only call functions and classes.");
+    return false;
+
+    // if (!IS_FUNCTION(callee)) return false;
+    // ObjFunction_t *function = AS_FUNCTION(callee);
+    // if (argCount != function->arity) return false;
+
+    // CallFrame_t frame;
+    // frame.function = function;
+    // frame.ip = function->chunk.code;
+    // frame.slots = &vm.stackTop[-1 - argCount];
+    // vm.frames[vm.frameCount++] = frame;
+    // return true;
+}
+
 static InterpResult_t run(void) {
     CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
     #define READ_BYTE() (*frame->ip++)
@@ -337,7 +371,16 @@ static InterpResult_t run(void) {
         #endif
         switch(instruction = READ_BYTE()) {
             case OP_RETURN: {
-                return INTERPRET_OK;
+                Value_t retVal = pop(); // grab return value
+                vm.frameCount--;        // pop off frame
+                if (vm.frameCount == 0) {
+                    pop(); // pop off <script>
+                    return INTERPRET_OK;
+                }
+                vm.stackTop = frame->slots; // reset stack to previous frame
+                frame = &vm.frames[vm.frameCount - 1];
+                push(retVal);   // push return value to top of stack
+                break;
             }
             case OP_CONSTANT: {
                 Value_t constant = READ_CONSTANT();
@@ -603,6 +646,20 @@ static InterpResult_t run(void) {
                 frame->ip -= offset;
                 break;
             }
+            case OP_CALL:
+            case OP_CALL_LONG: {
+                unsigned argCount;
+                if (instruction == OP_CALL) {
+                    argCount = (unsigned)READ_BYTE();
+                } else {
+                    argCount = READ_BYTES();
+                }
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
+                break;
+            }
             default:
         }
     }
@@ -628,10 +685,11 @@ InterpResult_t interpret(const char *source) {
     }
 
     push(OBJ_VAL(function));
-    CallFrame_t *frame = &vm.frames[vm.frameCount++];
-    frame->function = function;
-    frame->ip = function->chunk.code;
-    frame->slots = vm.stack;
+    call(function, 0);
+    // CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    // frame->function = function;
+    // frame->ip = function->chunk.code;
+    // frame->slots = vm.stack;
     // vm.chunk = &chunk;
     // vm.function = function;
     // vm.ip = vm.topLevel->chunk.code;

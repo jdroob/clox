@@ -52,6 +52,8 @@ typedef enum {
     OP_BREAKALL,
     // OP_JUMP_BACK,
     OP_LOOP,
+    OP_CALL,
+    OP_CALL_LONG,
     OP_RETURN,
 } OpCode_e;
 
