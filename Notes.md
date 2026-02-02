@@ -1297,4 +1297,176 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
         ```
 
     - At this point, feature-functions branch is functional again and behaving the same as master :)
-    
+
+
+2/1/2026:
+- Adding support for calls
+
+```C
+// compiler.c
+static unsigned argumentList(void) {
+    unsigned argCount = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expression();
+            argCount++;
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')'.");
+    return argCount;
+}
+
+static void call(bool canAssign) {
+    unsigned argCount = argumentList();
+    emitVarLenInstr(argCount, OP_CALL, OP_CALL_LONG);
+}
+
+// side note: this is called designated initializer syntax (C99)
+ParseRule_t rules[] = {
+    [TOKEN_LEFT_PAREN]      =  {grouping, call, PREC_CALL},
+    //...
+```
+- When parsing, if we have the '(' in the middle of an expressiion (i.e. an infix expression) - dispatch to the `call` function. This function counts the number of args provided and emits the `OP_CALL` instruction.
+
+- And for compiling `return`s:
+
+```C
+static void _return(bool canAssign) {
+    expression();
+    emitByte(OP_RETURN);
+}
+//...
+[TOKEN_RETURN]          =  {_return, NULL, PREC_NONE},
+//...
+```
+
+- Off to the VM!
+
+- For calls:
+
+```C
+//...
+            case OP_CALL:
+            case OP_CALL_LONG: {
+                unsigned argCount;
+                if (instruction == OP_CALL) {
+                    argCount = (unsigned)READ_BYTE();
+                } else {
+                    argCount = READ_BYTES();
+                }
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
+                break;
+            }
+
+//...
+static bool call(ObjFunction_t *function, unsigned argCount) {
+    if (function->arity != argCount) return false;
+
+    CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    frame->function = function;
+    frame->ip = function->chunk.code;
+    frame->slots = vm.stackTop - argCount - 1;  // reset slots to point to function object being called
+    return true;
+}
+
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+               return call(AS_FUNCTION(callee), argCount);
+            default:
+               break; // Non-callable object type
+        }
+    }
+    runtimeError("Can only call functions and classes.");
+    return false;
+}
+```
+
+- So for calls, we first check if we're calling a function, a method, or a ctor. Then we call `call`.
+- In `call`, we push a new frame onto the call stack and initialize it with info from the `ObjFunction_t` function passed to `call`.
+- Note that when *calling* a function, we first retrieve the function object from our globals (or locals for nested functions) table - meaning that ObjFunction_t object is pushed to the top of the stack (along with its args) prior to the call
+
+```
+$ bin/lox  test/ch24/debug.lox 
+==f==
+0000 0001 OP_CONSTANT         0 ''
+0002  | OP_PRINT
+0003  | OP_CONSTANT         1 ''
+0005  | OP_RETURN
+0006  | OP_POP
+0007  | OP_POP
+0008  | OP_RETURN
+==<script>==
+0000 0001 OP_CONSTANT         0 ''
+0002  | OP_DEFINE_GLOBAL    0 ''
+0004 0002 OP_ACCESS_GLOBAL    0 ''
+0006  | OP_CALL             0 ''
+0008  | OP_PRINT
+0009  | OP_POP
+0010  | OP_RETURN
+[ <script> ] 
+
+0000 0001 OP_CONSTANT         0 ''
+[ <script> ] [ <fn f> ] 
+
+0002  | OP_DEFINE_GLOBAL    0 ''
+[ <script> ] 
+
+0004 0002 OP_ACCESS_GLOBAL    0 ''  // <-- HERE
+[ <script> ] [ <fn f> ] 
+
+0006  | OP_CALL             0 ''
+[ <script> ] [ <fn f> ] 
+
+0000 0001 OP_CONSTANT         0 ''
+[ <script> ] [ <fn f> ] [ "hi" ] 
+
+0002  | OP_PRINT
+"hi"
+[ <script> ] [ <fn f> ] 
+
+0003  | OP_CONSTANT         1 ''
+[ <script> ] [ <fn f> ] [ 4 ] 
+
+0005  | OP_RETURN
+[ <script> ] [ 4 ] 
+
+0008  | OP_PRINT
+4
+[ <script> ] 
+
+0009  | OP_POP
+
+
+0010  | OP_RETURN
+$ 
+
+// debug.lox
+fun f() { print "hi"; return 4; }
+print f();
+```
+
+- Then for returning from functions, we pop off the top-most frame and reset the `frame pointer`. We also check if we're returning from the top-level - in which case we return from `interpret` altogether :)
+- Note that in `OP_RETURN` we grab the value at the top of the stack, reset frame pointer, then push that value back to the top of the stack. This is how we pass the return value from the callee to the caller
+
+```C
+// vm.c
+
+        switch(instruction = READ_BYTE()) {
+            case OP_RETURN: {
+                Value_t retVal = pop(); // grab return value
+                vm.frameCount--;        // pop off frame
+                if (vm.frameCount == 0) {
+                    pop(); // pop off <script>
+                    return INTERPRET_OK;
+                }
+                vm.stackTop = frame->slots; // reset stack to previous frame
+                frame = &vm.frames[vm.frameCount - 1];
+                push(retVal);   // push return value to top of stack
+                break;
+            }
+```

@@ -545,8 +545,6 @@ static unsigned argumentList(void) {
 }
 
 static void call(bool canAssign) {
-    // check arity
-    // argument list
     unsigned argCount = argumentList();
     emitVarLenInstr(argCount, OP_CALL, OP_CALL_LONG);
 }
