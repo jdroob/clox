@@ -46,6 +46,13 @@ ObjFunction_t *newFunction(void) {
     return function;
 }
 
+ObjNative_t *newNative(NativeFn_t function) {
+    ObjNative_t *native = ALLOCATE_OBJ(ObjNative_t, sizeof(ObjNative_t), OBJ_FUNCTION);
+    native->function = function;
+    native->obj.type = OBJ_NATIVE;
+    return native;
+}
+
 ObjString_t *makeString(char *chars, int length) {
     uint32_t hash = hashString(chars, length);
     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
@@ -71,6 +78,10 @@ void printObject(Value_t val) {
         case OBJ_FUNCTION: {
             printFunction(AS_FUNCTION(val));
             if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_NATIVE: {
+            printf("<native fn>");
             break;
         }
     }

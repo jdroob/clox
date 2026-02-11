@@ -9,6 +9,27 @@
 
 VM_t vm;
 
+/**
+ * Native functions
+ */
+
+static Value_t clockNative(int argCount, Value_t *args) {
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
+// TODO: Implement us :)
+// static Value_t fwriteNative(int argCount, Value_t *args) {
+    
+// }
+
+// static Value_t freadNative(int argCount, Value_t *args) {
+
+// }
+
+// static Value_t readNative(int argCount, Value_t *args) {
+
+// }
+
 static void resetStack(void) {
     vm.stackTop = vm.stack;
     vm.frameCount = 0;
@@ -29,6 +50,20 @@ static void runtimeError(const char *format, ...) {
     fprintf(stderr, "[line %d] in script\n", line);
     resetStack();
     //freeVM(); // freeing here will result in double free in main
+}
+
+static defineNative(const char *funcName, NativeFn_t function) {
+    /**
+     * Pushing then immediately popping for GC purposes
+     */
+    push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
+    push(OBJ_VAL(newNative(function)));
+    // unsigned idx = vm.globalValues.count;
+    tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));  // count should always be zero here...
+    // writeValueArray(&vm.globalNames, vm.stack[0]);  // write name
+    writeValueArray(&vm.globalValues, vm.stack[1]);
+    pop();
+    pop();
 }
 
 void initIsFinalsArray(MutableTable_t *array) {
@@ -255,6 +290,9 @@ void initVM(void) {
     initValueArray(&vm.globalValues);
     initIsFinalsArray(&vm.globalIsFinals);
     resetStack();
+    
+    // define native functions
+    defineNative("clock", clockNative);
 }
 
 void freeVM(void) {
@@ -279,8 +317,16 @@ void updateObjList(Obj_t *obj) {
 }
 
 static bool call(ObjFunction_t *function, unsigned argCount) {
-    if (function->arity != argCount) return false;
+    if (function->arity != argCount) {
+        runtimeError("Expected %d args for %.*s but received %d.", 
+            function->arity, function->name->length, function->name->chars, argCount);
+        return false;
+    }
 
+    if (vm.frameCount == FRAMES_MAX) {
+        runtimeError("Stack overflow.");
+        return false;
+    }
     CallFrame_t *frame = &vm.frames[vm.frameCount++];
     frame->function = function;
     frame->ip = function->chunk.code;
@@ -293,23 +339,19 @@ static bool callValue(Value_t callee, unsigned argCount) {
         switch (OBJ_TYPE(callee)) {
             case OBJ_FUNCTION:
                return call(AS_FUNCTION(callee), argCount);
+            case OBJ_NATIVE: {
+                NativeFn_t native = AS_NATIVE(callee);
+                Value_t result = native(argCount, vm.stackTop - argCount);  // call native function
+                vm.stackTop -= argCount + 1;    // reset stack pointer
+                push(result);
+                return true;
+            }
             default:
                break; // Non-callable object type
         }
     }
     runtimeError("Can only call functions and classes.");
     return false;
-
-    // if (!IS_FUNCTION(callee)) return false;
-    // ObjFunction_t *function = AS_FUNCTION(callee);
-    // if (argCount != function->arity) return false;
-
-    // CallFrame_t frame;
-    // frame.function = function;
-    // frame.ip = function->chunk.code;
-    // frame.slots = &vm.stackTop[-1 - argCount];
-    // vm.frames[vm.frameCount++] = frame;
-    // return true;
 }
 
 static InterpResult_t run(void) {

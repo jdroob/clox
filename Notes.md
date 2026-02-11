@@ -724,7 +724,7 @@ static void varDeclaration(void) {
 
 ## Local Case
 
-- Added another MutabileTable_t struct to the Compiler_t struct that lives during parsing / code generation
+- Added another MutableTable_t struct to the Compiler_t struct that lives during parsing / code generation
 
 ```
 typedef struct {
@@ -1470,3 +1470,12 @@ print f();
                 break;
             }
 ```
+
+
+2/8/2026:
+- sorry for the delay :(
+- busy times at work with RUM NG + vGCD CTH migration
+- anyway! finished first pass of functions chapter today
+- TL;DR - we parse the function definition, generate an ObjFunction_t object, emit an `OP_CONSTANT` so the function object exists in the constant pool and is defined (bound to function name) at runtime. Then, when a call is made, the function object (and other crap) is written to a new call frame. The VM's frame pointer points to this new frame. This means IP is also reset and the function's bytecode is executed until the function returns. When the function returns, the top frame is popped off, IP is resored to the bytecode in the previous frame, and execution continues. Analogous to what happens at assembly level.
+- I also added support for native functions tonight (functions used in Lox that are written in C)
+- Was hitting failures due to me forgetting how new vm.globalNames / vm.globalValues tables work

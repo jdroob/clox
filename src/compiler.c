@@ -175,6 +175,7 @@ static void emitVarLenInstr(unsigned idx, uint8_t shortOp, uint8_t longOp) {
 }
 
 static void emitReturn(void) {
+    emitByte(OP_NIL);   // Provide a default return value
     emitByte(OP_RETURN);
 }
 
@@ -219,7 +220,7 @@ static ObjFunction_t *endCompiler(void) {
         // <script> in slot 0
         emitByte(OP_POP);
     }
-    emitReturn();
+    emitReturn(); // now the function has this just in case there was no explicit return
 
     ObjFunction_t *function = current->function;
     #ifdef DEBUG_CHUNK
@@ -527,9 +528,18 @@ static void literal(bool canAssign) {
     }
 }
 
-static void _return(bool canAssign) {
-    expression();
-    emitByte(OP_RETURN);
+static void returnStmt(void) {
+    if (current->type == TYPE_SCRIPT) {
+        error("'return' cannot be used at top-level.");
+    }
+    if (match(TOKEN_SEMICOLON)) {
+        // for the `{ stmt0; stmt1; ... stmtN; return; }` case
+        emitReturn();
+    } else {
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect a ';' after return value.");
+        emitByte(OP_RETURN);
+    }
 }
 
 static unsigned argumentList(void) {
@@ -596,7 +606,7 @@ ParseRule_t rules[] = {
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
     [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
     [TOKEN_PRINT]           =  {NULL, NULL, PREC_NONE},
-    [TOKEN_RETURN]          =  {_return, NULL, PREC_NONE},
+//    [TOKEN_RETURN]          =  {returnStmt, NULL, PREC_NONE},
     [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_THIS]            =  {NULL, NULL, PREC_NONE},
     [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
@@ -1280,13 +1290,11 @@ static void function(FunctionType_e type) {
     beginScope();   // This function's parameter scope
 
     consume(TOKEN_LEFT_PAREN, "Expect a '(' after function name.");
-    // params();   // TODO: implement me :)
     if (!check(TOKEN_RIGHT_PAREN)) {
         do {
             current->function->arity++;
-            // TODO: make param limit 255?
-            unsigned global = parseVariableName("Expect parameter name.");
-            defineVariable(global);
+            unsigned param = parseVariableName("Expect parameter name.");
+            defineVariable(param);
         } while (match(TOKEN_COMMA));
     }
     consume(TOKEN_RIGHT_PAREN, "Expect a ')' after function name.");
@@ -1300,10 +1308,17 @@ static void function(FunctionType_e type) {
 }
 
 static void funDeclaration(void) {
-    uint8_t global = parseVariableName("Expect a function name.");
+    // Declare function's name as global or local
+    //  i.e. add function name to globals (or locals) table
+    unsigned global = parseVariableName("Expect a function name.");
     markInitialized();
-    // compile function object, leave it on top of stack
+    
+    // Compile function body
+    // function object will be on top of stack after OP_CONSTANT is exec'd
+    // function object's bytecode is contained inside the function object
     function(TYPE_FUNCTION);
+
+    // Using our idx which refers to the function object in the constant pool, we bind the function object to it's name
     defineVariable(global);    
 }
 
@@ -1346,8 +1361,10 @@ static void statement(void) {
         breakStatement();
     } else if (match(TOKEN_BREAKALL)) {
         breakAllStatement();
-    }else if (match(TOKEN_CONTINUE)) {
+    } else if (match(TOKEN_CONTINUE)) {
         continueStatement();
+    } else if (match(TOKEN_RETURN)) {
+        returnStmt();
     } else {
         expressionStatement();
     }
