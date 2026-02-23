@@ -1479,3 +1479,41 @@ print f();
 - TL;DR - we parse the function definition, generate an ObjFunction_t object, emit an `OP_CONSTANT` so the function object exists in the constant pool and is defined (bound to function name) at runtime. Then, when a call is made, the function object (and other crap) is written to a new call frame. The VM's frame pointer points to this new frame. This means IP is also reset and the function's bytecode is executed until the function returns. When the function returns, the top frame is popped off, IP is resored to the bytecode in the previous frame, and execution continues. Analogous to what happens at assembly level.
 - I also added support for native functions tonight (functions used in Lox that are written in C)
 - Was hitting failures due to me forgetting how new vm.globalNames / vm.globalValues tables work
+
+2/22/2026:
+- I promise I'm not giving up on this project!
+- I just wanted to read through the functions chapter a second time
+- Random note: always keep in mind that a function declaration is just the binding of a function object to an identifier.
+    - That identifier can be local (nested) or global (at top level)
+    - If local, function object will exist in stack
+        - When function is referenced (e.g. called), the function object will be retrieved via a `OP_ACCESS_LOCAL` instruction
+    - If global, function object will exist in vm.globalValues
+- Remember that parameters are added in `function` function in compiler.c
+- parameters are immedicately marked as initialized using by calling `defineVariable`
+- The parameters are initialized to corresponding relative stack locations
+- e.g.
+```
+fun f(a, b, c) { ... }
+f(1, 2, 3)
+
+/**
+
+________
+3           <-- c
+________
+2           <-- b
+________
+1           <-- a
+________
+<fn f>       <-- vm.FRAMES[top].slots
+________
+...
+________
+
+*/
+```
+
+- Random bug fix / clean up:
+    - Added limit to how nested function declarations can be (1024 for now)
+        - Can you imagine a program with 1024 nested functions??
+    - Bug fix: wasn't initializing compiler->capacity in `initCompiler`, resulting in garbage values being fed to realloc

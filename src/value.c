@@ -24,7 +24,7 @@ void writeValueArray(ValueArray_t *array, Value_t value) {
 static void boundsCheck(ValueArray_t *array, unsigned idx) {
     if (idx >= array->capacity) {
         fprintf(stderr, "value.c::writeValueArrayAt: IndexOutOfBounds!\n");
-        fprintf(stderr, "Attempted to write to index %lu of array of size %lu\n", idx, array->capacity);
+        fprintf(stderr, "Attempted to write to index %u of array of size %lu\n", idx, array->capacity);
         exit(EXIT_FAILURE);
     }
 }

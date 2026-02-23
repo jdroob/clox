@@ -91,6 +91,7 @@ typedef struct {
 // GLOBALS (uh-oh!!)
 Parser_t parser;
 Compiler_t *current = NULL;
+size_t compilerLinkedListLen = 0;
 // Chunk_t *compilingChunk;
 Table_t literals;
 bool isFinal = false;
@@ -113,6 +114,7 @@ static void errorAt(Token_t *token, const char *msg) {
 }
 
 static void error(const char *msg) {
+    // TODO: make variadic
     errorAt(&parser.previous, msg);
 }
 
@@ -211,6 +213,12 @@ static void patchJump(int offset) {
 }
 
 static ObjFunction_t *endCompiler(void) {
+    if (compilerLinkedListLen > 0) {
+        compilerLinkedListLen--;
+    } else {
+        error("Attempted to decrement compilerLinkedListLen at zero...\nSomething has gone horribly wrong");
+        return;
+    }
     FREE_ARRAY(Local_t, current->locals, current->capacity);
     freeIsFinalsArray(&current->localIsFinals);
     freeBreakJumpArray(&current->breakJumps);
@@ -273,6 +281,11 @@ static void initLocals(void) {
 
 static void addLocal(Token_t *);
 static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
+    if (compilerLinkedListLen >= COMPILER_LL_LEN_MAX) {
+        error("Exceeded maximum depth of nested function declarations");
+        return;
+    }
+    compilerLinkedListLen++;
     compiler->enclosing = current;
     compiler->function = NULL;
     compiler->type = type;
@@ -290,6 +303,7 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     compiler->ba_localCount_SnapShot = -1;
     compiler->loopDepth = 0;
     compiler->switchDepth = 0;
+    compiler->capacity = 0; // TEST THIS
     compiler->function = newFunction();
     current = compiler;
 
@@ -776,11 +790,11 @@ static void declareVariable(void) {
      *          }
      * 
      *      aha! but here's something to ALWAYS keep in mind...
-     *      current->locals contains an array of locals that *must*
-     *      always be monotonically increasing in depth.
+     *      current->locals contains an array of locals that *only retains locals*
+     *      while new current->scopeDepth is monotonically increasing in depth.
      *      
      *      why? because as soon a var goes out of scope (endScope is called)
-     *      it's popped off the stack and removed from locals :)
+     *      it's popped off the stack (runtime) and removed from locals (compile time) :)
      */
     for (int i=current->localCount - 1; i >= 0; --i) {
         Local_t *local = &current->locals[i];
@@ -800,9 +814,9 @@ static void declareVariable(void) {
 
 static unsigned parseVariableName(const char *errMsg) {
     consume(TOKEN_IDENTIFIER, "Expect an indentifier");
-    declareVariable();
-    if (current->scopeDepth > 0) return 0;
-    return identifierConstant(&parser.previous, isFinal);
+    declareVariable();  // if identifier is a local, add to locals
+    if (current->scopeDepth > 0) return 0;  // if identifier is local, return
+    return identifierConstant(&parser.previous, isFinal);   // identifier is a global, add to globals, return globals idx
 }
 
 static void defineVariable(unsigned global) {
@@ -1293,6 +1307,10 @@ static void function(FunctionType_e type) {
     if (!check(TOKEN_RIGHT_PAREN)) {
         do {
             current->function->arity++;
+            if (current->function->arity > ARITY_MAX) {
+                // TODO: make variadic
+                errorAtCurrent("Too many parameters in function.");
+            }
             unsigned param = parseVariableName("Expect parameter name.");
             defineVariable(param);
         } while (match(TOKEN_COMMA));
@@ -1311,7 +1329,7 @@ static void funDeclaration(void) {
     // Declare function's name as global or local
     //  i.e. add function name to globals (or locals) table
     unsigned global = parseVariableName("Expect a function name.");
-    markInitialized();
+    markInitialized();  // ensures function's name can be referenced inside body (i.e. recursion)
     
     // Compile function body
     // function object will be on top of stack after OP_CONSTANT is exec'd

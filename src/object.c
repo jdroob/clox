@@ -21,7 +21,7 @@ static Obj_t *allocateObject(size_t size, Obj_e objectType) {
 static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32_t hash) {
     ObjString_t *string = ALLOCATE_OBJ(ObjString_t, sizeof(ObjString_t) + length + 1, OBJ_STRING);
     string->length = length;
-    string->isConst = isConst;
+    string->isConst = isConst;  // TODO: remove isConst - no longer needed
     string->hash = hash;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';

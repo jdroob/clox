@@ -44,7 +44,6 @@ static void runtimeError(const char *format, ...) {
     va_end(args);
     fputs("\n", stderr);
 
-    // size_t instructionOffset = vm.ip - vm.topLevel->chunk.code - 1;
     size_t instructionOffset = frame->ip - frame->function->chunk.code - 1;
     int line = getLine(&frame->function->chunk, instructionOffset);
     fprintf(stderr, "[line %d] in script\n", line);
@@ -52,15 +51,15 @@ static void runtimeError(const char *format, ...) {
     //freeVM(); // freeing here will result in double free in main
 }
 
-static defineNative(const char *funcName, NativeFn_t function) {
+static void defineNative(const char *funcName, NativeFn_t function) {
     /**
      * Pushing then immediately popping for GC purposes
      */
     push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
     push(OBJ_VAL(newNative(function)));
-    // unsigned idx = vm.globalValues.count;
+    // write function name to global names table
     tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));  // count should always be zero here...
-    // writeValueArray(&vm.globalNames, vm.stack[0]);  // write name
+    // write function object to global values table (function name --> function object)
     writeValueArray(&vm.globalValues, vm.stack[1]);
     pop();
     pop();
@@ -267,7 +266,10 @@ static Value_t getStackAt(unsigned idx) {
 }
 
 Value_t pop(void) {
-    if (vm.stackTop == vm.stack) return;
+    if (vm.stackTop == vm.stack) {
+        // warning("Attempting to pop from empty stack");  // TODO: Implement me
+        return NIL_VAL;
+    }
     return *(--vm.stackTop);
 }
 
@@ -411,7 +413,7 @@ static InterpResult_t run(void) {
         disassembleInstruction(&frame->function->chunk, (unsigned)(frame->ip - frame->function->chunk.code));
         appendNewline = true;
         #endif
-        switch(instruction = READ_BYTE()) {
+        switch (instruction = READ_BYTE()) {
             case OP_RETURN: {
                 Value_t retVal = pop(); // grab return value
                 vm.frameCount--;        // pop off frame

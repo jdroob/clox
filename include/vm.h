@@ -11,7 +11,7 @@
 
 typedef struct {
     ObjFunction_t *function;
-    uint8_t *ip;    // where caller should resume
+    uint8_t *ip;    // as the name implies - the instruction pointer
     Value_t *slots; // location in stack where this function's (callee's) locals begin
 } CallFrame_t;
 
@@ -34,13 +34,8 @@ typedef struct {
 } BreakJump_t;
 
 typedef struct {
-    // Chunk_t         *chunk;
     CallFrame_t     frames[FRAMES_MAX];     // Fine w/ doing this for now - stack overflows are an expected limitation
     int             frameCount;
-
-    // ObjFunction_t   *function;              // TODO: remove
-
-    // uint8_t         *ip;                 // TODO: remove
     uint32_t        capacity;
     Value_t         *stack;
     Value_t         *stackTop;
