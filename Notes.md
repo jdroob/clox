@@ -1574,3 +1574,38 @@ ________
 - TODO: elaborate on this - but long story short, at VM startup time, native functions are added to the globals table
 - So when the user calls a native function, the name is found in the globals table and a function object with type OBJ_NATIVE is returned
 - From there, when the native function is called, a C function pointer is what is stored in `value.obj`
+
+3/3/2026:
+- Spent WAY too long on this :(
+- Challenge 1 of ch 24: create a local `register` var in vm.c::run() to encourage compiler to maintain the pointer `ip` in a register
+```C
+// in vm.c::run()
+register uint8_t *ip = frame->ip;
+```
+- This means on function calls, before call update `frame->ip` (so you don't lose it when you make call) and on function return, reset `ip` to `frame->ip`
+- Obviously, other changes to `READ_BYTE`, etc. were made to but above was the state restoration step (important)
+- The TL;DR of the error I was running into was:
+
+```C
+// BAD
+case OP_CALL:
+            case OP_CALL_LONG: {
+                frame->ip = ip; // when caller resumes, frame->ip is correct
+                unsigned argCount;
+                if (instruction == OP_CALL) {
+                    argCount = (unsigned)READ_BYTE();
+                } else {
+                    argCount = READ_BYTES();
+                }
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
+                ip = frame->ip;
+                break;
+            }
+```
+
+- Do you see it?
+- Okay - here it is, you update `frame->ip` THEN either call READ_BYTE or READ_BYTES and bump `ip` (but not frame->ip)
+- So when you eventually reset ip to frame->ip, you're out of sync and all hell breaks loose

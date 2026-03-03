@@ -371,7 +371,9 @@ static bool callValue(Value_t callee, unsigned argCount) {
 
 static InterpResult_t run(void) {
     CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
-    #define READ_BYTE() (*frame->ip++)
+    register uint8_t *ip = frame->ip;
+    #define READ_BYTE() (*ip++)
+    // #define READ_BYTE() (*frame->ip++)
     #define READ_BYTES() \
     ({ \
         uint8_t byte2 = READ_BYTE(); \
@@ -423,7 +425,7 @@ static InterpResult_t run(void) {
             printf(" ] ");
         }
         puts("\n");
-        disassembleInstruction(&frame->function->chunk, (unsigned)(frame->ip - frame->function->chunk.code));
+        disassembleInstruction(&frame->function->chunk, (unsigned)(ip - frame->function->chunk.code));
         appendNewline = true;
         #endif
         switch (instruction = READ_BYTE()) {
@@ -437,6 +439,7 @@ static InterpResult_t run(void) {
                 vm.stackTop = frame->slots; // reset stack to top of previous frame
                 frame = &vm.frames[vm.frameCount - 1];
                 push(retVal);   // push return value to top of stack
+                ip = frame->ip;
                 break;
             }
             case OP_CONSTANT: {
@@ -475,6 +478,7 @@ static InterpResult_t run(void) {
             }
             case OP_NEGATE: {
                 if (!IS_NUMBER(peek(0))) {
+                    frame->ip = ip;
                     runtimeError("Operand must be a number.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -492,8 +496,10 @@ static InterpResult_t run(void) {
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
                     BINARY_OP(NUMBER, NUMBER, +); 
                 } else if (IS_NUMSTR(peek(0), peek(1))) {
+                    frame->ip = ip;
                     concatenateNum();
                 } else {
+                    frame->ip = ip;
                     runtimeError("Operands must be two numbers or two strings.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -547,6 +553,7 @@ static InterpResult_t run(void) {
                 }
                 Value_t value = getValueAt(&vm.globalValues, idx);
                 if (IS_UNDEFINED(value)) {
+                    frame->ip = ip;
                     runtimeError("Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -573,10 +580,12 @@ static InterpResult_t run(void) {
                 
                 // Should have been set to NIL or defined value by this point
                 if (IS_UNDEFINED(getValueAt(&vm.globalValues, idx))) {
+                    frame->ip = ip;
                     runtimeError("Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 if (IS_FINAL(idx)) {
+                    frame->ip = ip;
                     runtimeError("Cannot assign to 'final' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -610,7 +619,7 @@ static InterpResult_t run(void) {
             case OP_JUMP_IF_TRUE: {
                 uint16_t offset = READ_SHORT();
                 if (!isFalsey(peek(0))) {
-                    frame->ip += offset;
+                    ip += offset;
                     break;
                 }
                 break;
@@ -618,7 +627,7 @@ static InterpResult_t run(void) {
             case OP_JUMP_IF_FALSE: {
                 uint16_t offset = READ_SHORT();
                 if (isFalsey(peek(0))) {
-                    frame->ip += offset;
+                    ip += offset;
                     break;
                 }
 
@@ -659,7 +668,7 @@ static InterpResult_t run(void) {
             // }
             case OP_ENDSWITCH: {
                 // printf("vm.switchCounter: %d\n", vm.switchCounter);
-                if (vm.switchCounter < 0) runtimeError("Stack in invalid state post-switch.");
+                if (vm.switchCounter < 0) frame->ip = ip, runtimeError("Stack in invalid state post-switch.");
                 
                 /**
                  * precondition: vm.switchCounter >= prevSwitchDepth
@@ -689,18 +698,18 @@ static InterpResult_t run(void) {
                     // printf("vm.switchCounter: %d\n", vm.switchCounter);
                     vm.switchCounter--;
                     // printf("vm.switchCounter: %d\n", vm.switchCounter);
-                    frame->ip += offset;  // jump to next case or default
+                    ip += offset;  // jump to next case or default
                 }
                 break;
             }
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
-                frame->ip += offset;
+                ip += offset;
                 break;
             }
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
-                frame->ip -= offset;
+                ip -= offset;
                 break;
             }
             case OP_CALL:
@@ -711,10 +720,12 @@ static InterpResult_t run(void) {
                 } else {
                     argCount = READ_BYTES();
                 }
+                frame->ip = ip; // when caller resumes, frame->ip is correct
                 if (!callValue(peek(argCount), argCount)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm.frames[vm.frameCount - 1];
+                ip = frame->ip;
                 break;
             }
             default:
