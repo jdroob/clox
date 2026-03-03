@@ -560,7 +560,7 @@ static unsigned argumentList(void) {
     unsigned argCount = 0;
     if (!check(TOKEN_RIGHT_PAREN)) {
         do {
-            expression();
+            expression(); // push arg to stack
             argCount++;
         } while (match(TOKEN_COMMA));
     }

@@ -44,9 +44,21 @@ static void runtimeError(const char *format, ...) {
     va_end(args);
     fputs("\n", stderr);
 
-    size_t instructionOffset = frame->ip - frame->function->chunk.code - 1;
-    int line = getLine(&frame->function->chunk, instructionOffset);
-    fprintf(stderr, "[line %d] in script\n", line);
+//    size_t instructionOffset = frame->ip - frame->function->chunk.code - 1;
+//    int line = getLine(&frame->function->chunk, instructionOffset);
+//    fprintf(stderr, "[line %d] in script\n", line);
+    for (int i=vm.frameCount - 1; i>=0; --i) {
+        ObjFunction_t *function = vm.frames[i].function;
+        unsigned instruction = vm.frames[i].ip - function->chunk.code - 1;    // -1 since ip points to instr after current instr
+        int line = getLine(&function->chunk, instruction);
+        
+        fprintf(stderr, "[line %d]: ", line);
+        if (function->name == NULL) {
+            fprintf(stderr, "<script>\n");
+        } else {
+            fprintf(stderr, "<fn: %s>\n", function->name->chars);
+        }
+    }
     resetStack();
     //freeVM(); // freeing here will result in double free in main
 }
@@ -58,7 +70,7 @@ static void defineNative(const char *funcName, NativeFn_t function) {
     push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
     push(OBJ_VAL(newNative(function)));
     // write function name to global names table
-    tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));  // count should always be zero here...
+    tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));
     // write function object to global values table (function name --> function object)
     writeValueArray(&vm.globalValues, vm.stack[1]);
     pop();
@@ -329,6 +341,7 @@ static bool call(ObjFunction_t *function, unsigned argCount) {
         runtimeError("Stack overflow.");
         return false;
     }
+
     CallFrame_t *frame = &vm.frames[vm.frameCount++];
     frame->function = function;
     frame->ip = function->chunk.code;
@@ -421,7 +434,7 @@ static InterpResult_t run(void) {
                     pop(); // pop off <script>
                     return INTERPRET_OK;
                 }
-                vm.stackTop = frame->slots; // reset stack to previous frame
+                vm.stackTop = frame->slots; // reset stack to top of previous frame
                 frame = &vm.frames[vm.frameCount - 1];
                 push(retVal);   // push return value to top of stack
                 break;

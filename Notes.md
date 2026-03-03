@@ -1482,14 +1482,15 @@ print f();
 
 2/22/2026:
 - I promise I'm not giving up on this project!
+    - For reference, right now i'm working on RUM NG, Spec2GTRTL validation work, GCD crap, etc. (hopefully bazel soon)
 - I just wanted to read through the functions chapter a second time
 - Random note: always keep in mind that a function declaration is just the binding of a function object to an identifier.
     - That identifier can be local (nested) or global (at top level)
-    - If local, function object will exist in stack
+    - If local, function object will exist on Lox's Value_t stack
         - When function is referenced (e.g. called), the function object will be retrieved via a `OP_ACCESS_LOCAL` instruction
     - If global, function object will exist in vm.globalValues
 - Remember that parameters are added in `function` function in compiler.c
-- parameters are immedicately marked as initialized using by calling `defineVariable`
+- In local case, parameters are immedicately marked as initialized by calling `defineVariable`
 - The parameters are initialized to corresponding relative stack locations
 - e.g.
 ```
@@ -1516,4 +1517,60 @@ ________
 - Random bug fix / clean up:
     - Added limit to how nested function declarations can be (1024 for now)
         - Can you imagine a program with 1024 nested functions??
-    - Bug fix: wasn't initializing compiler->capacity in `initCompiler`, resulting in garbage values being fed to realloc
+    - Bug fix: wasn't initializing compiler->capacity in `initCompiler`, resulting in garbage values being fed to realloc causing the program to freak out and die
+    - This particular bug only manifested when writing a program with nested function declarations
+
+2/27/2026:
+- Drank a beer and started considering the differences b/w how the VM's (and its stack) operates vs how traditional OS / arch processes (including their stacks) operate
+    - How function calls work on OS / Arch Processes (and their stacks)
+        - Single IP (or PC - I'm going to call it IP) register that holds address of next instruction to be executed
+        - From code perspective, function call is simply a jump with a few extra bookkeeping instrs before and after
+        - On function call, return address, caller's stack pointer, caller's frame pointer, args are pushed to stack
+        - At beginning of function call, prologue is exec'd, stack pointer reset, frame pointer reset
+        - Execute function
+        - Epilogue: return value pushed, stack pointer reset, frame pointer reset, IP reset to address of instruction after call
+        * roughly speaking, this is how function calls work in hardware
+
+    - How function calls work in clox VM
+        - OP_CALL opcode decoded
+        - args and function object read
+            - if global, read from globals table
+            - if local, read from stack
+        - `callValue -> call` are called
+            - argCount == function.arity asserted
+            - New CallFrame_t populated
+                - vm.frames[newFrameIdx]->name = function->name 
+                - vm.frames[newFrameIdx]->ip = function->chunk.code
+                - vm.frames[newFrameIdx]->slots = vm.stackTop - argCount - 1
+            - cached `frame` var set to &vm.frames[vm.frameCount - 1]
+        - Now, execution will resume from the beginning of the callee
+        - Callee is exec'd
+        - OP_RETURN opcode decoded
+            - return value is saved
+            - vm.frameCount decremented
+            - if vm.frameCount is now 0, pop <script> and return from vm.run()
+            - else, set `vm.stackTop` to `frame->slots`
+                - this is part of "popping" call frame
+            - set cached `frame` to vm.frames[vm.frameCount] (remember - we just decremented vm.frameCount)
+            - push the return value onto the stack so it's available to the caller
+
+    - Similarities b/w "bare-metal" function calls and VM function calls
+        - same pattern: 
+            - save state before call
+            - execute callee
+            - restore state
+    - Differences b/w "bare-metal" function calls and VM function calls
+        - VM's "stack" is kinda split b/w 2 data structures:
+            - vm.stack
+            - vm.frames
+        - Each frame has it's own code and IP
+        - In hardware, 1 stack and 1 IP
+
+2/28/2026 
+- You understand that **native functions** are functions written in the host language that can be called from a Lox program
+- But taking a step back, the user won't see much of a difference between calling `time()` and calling `fib()`, so from an implementation perspective, what's really different about native functions and user-defined functions?
+- The main difference is that native functions have no associated bytecode
+- This raises the obvious question - what happens when a user calls a native function?
+- TODO: elaborate on this - but long story short, at VM startup time, native functions are added to the globals table
+- So when the user calls a native function, the name is found in the globals table and a function object with type OBJ_NATIVE is returned
+- From there, when the native function is called, a C function pointer is what is stored in `value.obj`
