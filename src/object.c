@@ -46,9 +46,10 @@ ObjFunction_t *newFunction(void) {
     return function;
 }
 
-ObjNative_t *newNative(NativeFn_t function) {
+ObjNative_t *newNative(NativeFn_t function, int arity) {
     ObjNative_t *native = ALLOCATE_OBJ(ObjNative_t, sizeof(ObjNative_t), OBJ_FUNCTION);
     native->function = function;
+    native->arity = arity;
     native->obj.type = OBJ_NATIVE;
     return native;
 }

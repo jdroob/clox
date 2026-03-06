@@ -63,12 +63,12 @@ static void runtimeError(const char *format, ...) {
     //freeVM(); // freeing here will result in double free in main
 }
 
-static void defineNative(const char *funcName, NativeFn_t function) {
+static void defineNative(const char *funcName, NativeFn_t function, int arity) {
     /**
      * Pushing then immediately popping for GC purposes
      */
     push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
-    push(OBJ_VAL(newNative(function)));
+    push(OBJ_VAL(newNative(function, arity)));
     // write function name to global names table
     tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));
     // write function object to global values table (function name --> function object)
@@ -306,7 +306,7 @@ void initVM(void) {
     resetStack();
     
     // define native functions
-    defineNative("clock", clockNative);
+    defineNative("clock", clockNative, 0);
 }
 
 void freeVM(void) {
@@ -355,6 +355,11 @@ static bool callValue(Value_t callee, unsigned argCount) {
             case OBJ_FUNCTION:
                return call(AS_FUNCTION(callee), argCount);
             case OBJ_NATIVE: {
+                ObjNative_t *func = (ObjNative_t *)(callee.as.obj);
+                if (func->arity != argCount) {
+                    runtimeError("native function expected %d arguments but received %u", func->arity, argCount);
+                    return false;
+                }
                 NativeFn_t native = AS_NATIVE(callee);
                 Value_t result = native(argCount, vm.stackTop - argCount);  // call native function
                 vm.stackTop -= argCount + 1;    // reset stack pointer

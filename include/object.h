@@ -34,6 +34,7 @@ typedef struct {
 typedef Value_t (*NativeFn_t)(int argCount, Value_t *args);
 typedef struct {
     Obj_t obj;
+    int arity;
     NativeFn_t function;
 } ObjNative_t;
 
@@ -51,7 +52,7 @@ static inline bool isObjType(Value_t value, Obj_e type) {
 }
 
 ObjFunction_t *newFunction(void);
-ObjNative_t *newNative(NativeFn_t function);
+ObjNative_t *newNative(NativeFn_t function, int arity);
 ObjString_t *makeString(char *chars, int length);
 void printObject(Value_t val);
 // ObjString_t *takeString(char *chars, int length);   // create dynamic string
