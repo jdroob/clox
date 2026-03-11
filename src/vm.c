@@ -12,9 +12,24 @@ VM_t vm;
 /**
  * Native functions
  */
-
+static void runtimeError(const char *format, ...);
 static Value_t clockNative(int argCount, Value_t *args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
+static Value_t fopenNative(int argCount, Value_t *args) {
+    if (!IS_STRING(args[0])){
+       runtimeError("open requires string argument type");
+       return NIL_VAL; 
+    } 
+    char *fname = AS_CSTRING(args[0]);
+    FILE *fh = fopen(fname, "r");
+    if (!fh) {
+        runtimeError("Unable to find file: %s", fname);
+        return NIL_VAL;
+    }
+    ObjFileHandle_t *fhObj = newFileHandle(fh, (const char *)fname);
+    return OBJ_VAL(fhObj);
 }
 
 // TODO: Implement us :)
@@ -307,6 +322,7 @@ void initVM(void) {
     
     // define native functions
     defineNative("clock", clockNative, 0);
+    defineNative("open", fopenNative, 1);
 }
 
 void freeVM(void) {

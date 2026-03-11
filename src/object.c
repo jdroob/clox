@@ -54,6 +54,14 @@ ObjNative_t *newNative(NativeFn_t function, int arity) {
     return native;
 }
 
+ObjFileHandle_t *newFileHandle(FILE *fh, const char *name) {
+    ObjFileHandle_t *fileHandle = ALLOCATE_OBJ(ObjFileHandle_t, sizeof(ObjFileHandle_t), OBJ_FILEHANDLE);
+    fileHandle->fh = fh;
+    fileHandle->obj.type = OBJ_FILEHANDLE;
+    fileHandle->name = name;
+    return fileHandle;
+}
+
 ObjString_t *makeString(char *chars, int length) {
     uint32_t hash = hashString(chars, length);
     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
@@ -83,6 +91,12 @@ void printObject(Value_t val) {
         }
         case OBJ_NATIVE: {
             printf("<native fn>");
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_FILEHANDLE: {
+            printf("<file handle: %s>", AS_FILEHANDLE(val)->name);
+            if (appendNewline) printf("\n");
             break;
         }
     }

@@ -43,6 +43,11 @@ static void freeObject(Obj_t *object) {
             FREE(ObjNative_t, object);
             break;
         }
+        case OBJ_FILEHANDLE: {
+            fclose(((ObjFileHandle_t *)object)->fh);
+            FREE(ObjFileHandle_t, object);
+            break;
+        }
     }
 }
 

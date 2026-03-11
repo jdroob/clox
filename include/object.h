@@ -8,7 +8,8 @@
 typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
-    OBJ_NATIVE
+    OBJ_NATIVE,
+    OBJ_FILEHANDLE
 } Obj_e;
 
 struct Obj_t {
@@ -38,14 +39,22 @@ typedef struct {
     NativeFn_t function;
 } ObjNative_t;
 
-#define OBJ_TYPE(value)     (AS_OBJ(value)->type)
-#define IS_STRING(value)    isObjType(value, OBJ_STRING)
-#define AS_STRING(value)    ((ObjString_t *)AS_OBJ(value))
-#define AS_CSTRING(value)   (((ObjString_t *)AS_OBJ(value))->chars)
-#define IS_FUNCTION(value)  isObjType(value, OBJ_FUNCTION)
-#define AS_FUNCTION(value)  ((ObjFunction_t *)AS_OBJ(value))
-#define IS_NATIVE(value)    isObjType(value, OBJ_NATIVE)
-#define AS_NATIVE(value)    ((ObjNative_t *)AS_OBJ(value))->function
+typedef struct {
+    Obj_t obj;
+    const char *name;
+    FILE *fh;
+} ObjFileHandle_t;
+
+#define OBJ_TYPE(value)       (AS_OBJ(value)->type)
+#define IS_STRING(value)      isObjType(value, OBJ_STRING)
+#define AS_STRING(value)      ((ObjString_t *)AS_OBJ(value))
+#define AS_CSTRING(value)     (((ObjString_t *)AS_OBJ(value))->chars)
+#define IS_FUNCTION(value)    isObjType(value, OBJ_FUNCTION)
+#define AS_FUNCTION(value)    ((ObjFunction_t *)AS_OBJ(value))
+#define IS_NATIVE(value)      isObjType(value, OBJ_NATIVE)
+#define AS_NATIVE(value)      ((ObjNative_t *)AS_OBJ(value))->function
+#define IS_FILEHANDLE(value)  isObjType(value, OBJ_FILEHANDLE)
+#define AS_FILEHANDLE(value)  (((ObjFileHandle_t *)AS_OBJ(value)))
 
 static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
@@ -53,6 +62,7 @@ static inline bool isObjType(Value_t value, Obj_e type) {
 
 ObjFunction_t *newFunction(void);
 ObjNative_t *newNative(NativeFn_t function, int arity);
+ObjFileHandle_t *newFileHandle(FILE *fh, const char *name);
 ObjString_t *makeString(char *chars, int length);
 void printObject(Value_t val);
 // ObjString_t *takeString(char *chars, int length);   // create dynamic string
