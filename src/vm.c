@@ -32,6 +32,54 @@ static Value_t fopenNative(int argCount, Value_t *args) {
     return OBJ_VAL(fhObj);
 }
 
+static Value_t freadNative(int argCount, Value_t *args) {
+    if (!IS_FILEHANDLE(args[0])) {
+        runtimeError("read requires file handle argument type");
+        return NIL_VAL;
+    }
+    FILE *fh = AS_FILEHANDLE(args[0])->fh;
+    fseek(fh, 0, SEEK_END);
+    long length = ftell(fh);
+    fseek(fh, 0, SEEK_SET);
+
+    char *contents = ALLOCATE(char, length + 1);
+    size_t bytesRead = fread(contents, 1, length, fh);
+    if (bytesRead != length) {
+        runtimeError(
+            "Error during read: Expected to read %ld bytes but instead read %lu bytes", 
+            length, bytesRead);
+        return NIL_VAL;
+    }
+    contents[length] = '\0';
+    ObjString_t *wrappedContents = makeString(contents, length);
+    return OBJ_VAL(wrappedContents);
+}
+
+static Value_t fcloseNative(int argCount, Value_t *args) {
+    // return 0 on success? NIL_VAL on failure?
+    if (!IS_FILEHANDLE(args[0])) {
+        runtimeError("close requires file handle argument type");
+        return NIL_VAL;
+    }
+    FILE *fh = AS_FILEHANDLE(args[0])->fh;
+    int retVal = fclose(fh);
+    if (retVal) {
+        runtimeError("Error closing file");
+        return NIL_VAL;
+    }
+    return NUMBER_VAL(0);
+}
+
+static Value_t lenNative(int argCount, Value_t *args) {
+    // TODO: Add support for data structures as they become available
+    if (!IS_STRING(args[0])) {
+        runtimeError("len requires string type argument");
+        return NIL_VAL;
+    }
+    size_t len = strnlen(AS_CSTRING(args[0]), LONG_MAX);    // seems reasonable?
+    return NUMBER_VAL((double)len);
+}
+
 // TODO: Implement us :)
 // static Value_t fwriteNative(int argCount, Value_t *args) {
     
@@ -323,6 +371,9 @@ void initVM(void) {
     // define native functions
     defineNative("clock", clockNative, 0);
     defineNative("open", fopenNative, 1);
+    defineNative("close", fcloseNative, 1);
+    defineNative("read", freadNative, 1);
+    defineNative("len", lenNative, 1);
 }
 
 void freeVM(void) {

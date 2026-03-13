@@ -1609,3 +1609,11 @@ case OP_CALL:
 - Do you see it?
 - Okay - here it is, you update `frame->ip` THEN either call READ_BYTE or READ_BYTES and bump `ip` (but not frame->ip)
 - So when you eventually reset ip to frame->ip, you're out of sync and all hell breaks loose
+
+
+3/11/2026:
+- Got a new dog! (love ya Remi)
+- Added native function `open` today :)
+
+3/13/2026:
+- Added `read`, `close`, `len`

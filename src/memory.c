@@ -44,7 +44,11 @@ static void freeObject(Obj_t *object) {
             break;
         }
         case OBJ_FILEHANDLE: {
-            fclose(((ObjFileHandle_t *)object)->fh);
+            FILE *fh = ((ObjFileHandle_t *)object)->fh;
+            int fd = fileno(fh);
+            if (fd != -1) { // valid file descriptor
+                fclose(fh);
+            }
             FREE(ObjFileHandle_t, object);
             break;
         }
