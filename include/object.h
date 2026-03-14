@@ -42,6 +42,7 @@ typedef struct {
 typedef struct {
     Obj_t obj;
     const char *name;
+    const char *accessType;
     FILE *fh;
 } ObjFileHandle_t;
 
@@ -62,7 +63,7 @@ static inline bool isObjType(Value_t value, Obj_e type) {
 
 ObjFunction_t *newFunction(void);
 ObjNative_t *newNative(NativeFn_t function, int arity);
-ObjFileHandle_t *newFileHandle(FILE *fh, const char *name);
+ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType);
 ObjString_t *makeString(char *chars, int length);
 void printObject(Value_t val);
 // ObjString_t *takeString(char *chars, int length);   // create dynamic string

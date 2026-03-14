@@ -13,22 +13,38 @@ VM_t vm;
  * Native functions
  */
 static void runtimeError(const char *format, ...);
+static bool isValidOperation(int requiredMode, const char *providedMode) {
+    if (requiredMode == NULL || providedMode == NULL) {
+        runtimeError("Invalid access type provided OR invalid file operation performed");
+        return false;
+    }
+    if (strchr(providedMode, requiredMode) != NULL ||
+        strchr(providedMode, '+')) {
+        return true;
+    }
+    return false;
+}
 static Value_t clockNative(int argCount, Value_t *args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
 static Value_t fopenNative(int argCount, Value_t *args) {
-    if (!IS_STRING(args[0])){
-       runtimeError("open requires string argument type");
+    if (!IS_STRING(args[0])) {
+       runtimeError("arg0: open requires string argument type");
        return NIL_VAL; 
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: open requires string argument type");
+        return NIL_VAL;
     } 
     char *fname = AS_CSTRING(args[0]);
-    FILE *fh = fopen(fname, "r");
+    char *accessType = AS_CSTRING(args[1]);
+    FILE *fh = fopen(fname, accessType);
     if (!fh) {
         runtimeError("Unable to find file: %s", fname);
         return NIL_VAL;
     }
-    ObjFileHandle_t *fhObj = newFileHandle(fh, (const char *)fname);
+    ObjFileHandle_t *fhObj = newFileHandle(fh, (const char *)fname, (const char *)accessType);
     return OBJ_VAL(fhObj);
 }
 
@@ -37,7 +53,12 @@ static Value_t freadNative(int argCount, Value_t *args) {
         runtimeError("read requires file handle argument type");
         return NIL_VAL;
     }
-    FILE *fh = AS_FILEHANDLE(args[0])->fh;
+    ObjFileHandle_t *fhObj = AS_FILEHANDLE(args[0]);
+    if (!isValidOperation('r', fhObj->accessType)) {
+        runtimeError("Trying to read in non-read mode");
+        return NIL_VAL;
+    }
+    FILE *fh = fhObj->fh;
     fseek(fh, 0, SEEK_END);
     long length = ftell(fh);
     fseek(fh, 0, SEEK_SET);
@@ -53,6 +74,31 @@ static Value_t freadNative(int argCount, Value_t *args) {
     contents[length] = '\0';
     ObjString_t *wrappedContents = makeString(contents, length);
     return OBJ_VAL(wrappedContents);
+}
+
+static Value_t fwriteNative(int argCount, Value_t *args) {
+    if (!IS_STRING(args[0])) {
+        runtimeError("arg0: write requires string argument type");
+        return NIL_VAL;
+    }
+    if (!IS_FILEHANDLE(args[1])) {
+        runtimeError("arg1: write requires file handle argument type");
+        return NIL_VAL;
+    }
+    ObjFileHandle_t *fhObj = AS_FILEHANDLE(args[1]);
+    if (!isValidOperation('2', fhObj->accessType)) {
+        runtimeError("Trying to write in non-write mode");
+        return NIL_VAL;
+    }
+    ObjString_t *toWrite = AS_STRING(args[0]);
+    FILE *fh = fhObj->fh;
+    size_t len = toWrite->length;
+    size_t bytesWritten = fwrite(toWrite->chars, 1, len, fh);
+    if (bytesWritten != len) {
+        runtimeError("Error occurred while writing to file");
+        return NIL_VAL;
+    }
+    return NUMBER_VAL((double)bytesWritten);
 }
 
 static Value_t fcloseNative(int argCount, Value_t *args) {
@@ -80,18 +126,27 @@ static Value_t lenNative(int argCount, Value_t *args) {
     return NUMBER_VAL((double)len);
 }
 
-// TODO: Implement us :)
-// static Value_t fwriteNative(int argCount, Value_t *args) {
-    
-// }
+static Value_t getlineNative(int argCount, Value_t *args) {
+    if (!IS_FILEHANDLE(args[0])) {
+        runtimeError("getline requires file handle type argument");
+        return NIL_VAL;
+    }
+    char *line = NULL;
+    size_t len = 0;
+    FILE *fh = AS_FILEHANDLE(args[0])->fh;
+    ssize_t bytesRead = getline(&line, &len, fh);
+    if (bytesRead == -1) {
+        runtimeError("Error occurred in getline");
+        return NIL_VAL;
+    }
+    ObjString_t *lineObj = makeString(line, (int)len);
+    return OBJ_VAL(lineObj);
+}
 
-// static Value_t freadNative(int argCount, Value_t *args) {
-
-// }
-
-// static Value_t readNative(int argCount, Value_t *args) {
-
-// }
+static Value_t asciiNative(int argCount, Value_t *args) {
+    // TODO: Implement me :)
+    return NIL_VAL;
+}
 
 static void resetStack(void) {
     vm.stackTop = vm.stack;
@@ -370,9 +425,11 @@ void initVM(void) {
     
     // define native functions
     defineNative("clock", clockNative, 0);
-    defineNative("open", fopenNative, 1);
+    defineNative("open", fopenNative, 2);
     defineNative("close", fcloseNative, 1);
     defineNative("read", freadNative, 1);
+    defineNative("write", fwriteNative, 2);
+    defineNative("getline", getlineNative, 1);
     defineNative("len", lenNative, 1);
 }
 

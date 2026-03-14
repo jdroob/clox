@@ -54,11 +54,12 @@ ObjNative_t *newNative(NativeFn_t function, int arity) {
     return native;
 }
 
-ObjFileHandle_t *newFileHandle(FILE *fh, const char *name) {
+ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType) {
     ObjFileHandle_t *fileHandle = ALLOCATE_OBJ(ObjFileHandle_t, sizeof(ObjFileHandle_t), OBJ_FILEHANDLE);
     fileHandle->fh = fh;
     fileHandle->obj.type = OBJ_FILEHANDLE;
     fileHandle->name = name;
+    fileHandle->accessType = accessType;
     return fileHandle;
 }
 

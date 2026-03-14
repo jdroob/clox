@@ -1,5 +1,6 @@
 #ifndef COMMON_H
 #define COMMON_H
+#define _GNU_SOURCE // for getline
 
 #include <stdlib.h>
 #include <stdio.h>

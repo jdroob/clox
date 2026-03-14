@@ -1617,3 +1617,26 @@ case OP_CALL:
 
 3/13/2026:
 - Added `read`, `close`, `len`
+- Added `getline`
+- Modified `open` to accept access type argument (e.g., "r", "w", "rb", ...)
+- Added support for `write`
+- Added file access type check
+    - e.g., runtime errors when trying to write to read-only files, etc.
+
+- **TODO**: Make error handling more graceful when writing read-only files and vice-versa
+e.g.,
+```
+$ bin/lox
+> var fh = open("test/ch24/test.txt", "w+");
+> print read(fh);
+""
+> write("here ya go", fh);
+> read(fh);
+> close(fh);
+> var fh = open("test/ch24/test.txt", "r");
+> write("here ya go", fh);
+Trying to write in non-write mode
+[line 1]: <script>
+Segmentation fault (core dumped)
+```
+- I'd rather not seg fault here
