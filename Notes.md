@@ -724,7 +724,7 @@ static void varDeclaration(void) {
 
 ## Local Case
 
-- Added another MutabileTable_t struct to the Compiler_t struct that lives during parsing / code generation
+- Added another MutableTable_t struct to the Compiler_t struct that lives during parsing / code generation
 
 ```
 typedef struct {
@@ -1048,43 +1048,707 @@ TODO:
         - default without case(s) are fine
         - I added 'break' so now we're not just doing the case-match then exit. We're allowing for fall-throughs and all that good stuff in C :)
 
-1/18/2026 - later in the night
-- Caught this while drinking
+# Chapter 24: Functions and Calls
+
+1/13/2026
+- Some high-level notes while I'm feeling tired after work:
+    - We're moving away from one giant chunk containing all the bytecode
+    - Now, chunks will be created at compile-time on a per-function basis
+        - what about global (i.e. top-level) code?
+        - we're going to treat top-level code as the body of an implicit "main" function
+            - *globals are still treated differently from locals but we'll discuss this further later
+
 ```
-// Test 2
-print("");
-print("NEW LOOP");
-print("");
-for (var i=0; i<2; i = i + 1) {
-    var N_OUTER = 2;
-    print("outer");
-    print("i: " + i);
-    //continue;
-    for (var j=0; j<2; j = j + 1) {
-        print("inner");
-        print("j: " + j);
-        break; 
+    typedef struct {
+    ObjFunction_t *function;
+    FunctionType_e type;
+    /**
+     * Simple, flat array of all locals that are in scope during each point of the compilation process.
+     * Locals are ordered in the array in order their declarations appear in the code.
+     */
+    Local_t *locals;
+    int localCount; // number of locals in scope
+    int scopeDepth; // number of scopes enclosing current scope
+    int continueTarget;
+    bool continueFlag;
+    bool inFor;
+    bool forBlock;
+    // int breakTarget;
+    // int breakAllTarget;
+    BreakJump_t breakJumps;
+    int b_localCount_SnapShot;
+    BreakJump_t breakAllJumps;
+    int ba_localCount_SnapShot;
+    int loopDepth;
+    uint8_t switchDepth;
+    size_t capacity;
+    MutableTable_t localIsFinals;
+} Compiler_t;
+
+...
+
+ObjFunction_t *compile(const char *source) {
+    initScanner(source);
+    parser.hadError = false;
+    parser.panicMode = false;
+    // compilingChunk = chunk;
+    Compiler_t compiler = { 0 };
+    initCompiler(&compiler, TYPE_SCRIPT);
+    // initTable(&vm.globalNames);
+    initTable(&literals);
+    
+    ...
+
+static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
+    compiler->function = NULL;
+    compiler->type = type;  // <--
+    compiler->localCount = 0;
+    compiler->scopeDepth = 0;
+    compiler->continueTarget = -1;
+    compiler->continueFlag = false;
+    compiler->inFor = false;
+    compiler->forBlock = false;
+    // compiler->breakTarget = -1;
+    // compiler->breakAllTarget = -1;
+    initBreakJumpArray(&compiler->breakJumps);
+    compiler->b_localCount_SnapShot = -1;
+    initBreakJumpArray(&compiler->breakAllJumps);
+    compiler->ba_localCount_SnapShot = -1;
+    compiler->loopDepth = 0;
+    compiler->switchDepth = 0;
+    compiler->function = newFunction();
+    current = compiler;
+
+    // A bit mysterious for now but reserving local slot 0 for VM's own internal use
+    initLocals();
+    Local_t *local = &current->locals[current->localCount++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
+}
+```
+- If we have functions and functions have local vars that belong to them, and we're separating bytecode to a per-function basis, how do we need to update how we handle locals? (Currently, the operand for get/set local ops is the index into the stack)
+- We're *probably* going to keep the interface similar from an instruction perspective but from a book-keeping standpoint, we're going to do the following:
+
+- Consider:
+
+        ```
+        fun func() {        |
+            var a;          |       2: b
+            var b;          |       1: a
+        }                   |       0: <VM-reserved>
+        ```
+
+- When `func` is called, 'a' gets slot 1 in the stack and b gets slot 2
+
+- Now consider:
+
+        ```
+        fun first() {
+            var a;
+            second();
+            var b;
+            second();
+        }
+
+        fun second() {
+            var c;
+            var d;
+        }
+
+        fun main() {
+            first();
+        }
+
+        main();
+        ```
+
+- The locals stack would evolve as follows:
+
+        // After `a` var declaration in `first`
+        1: a
+        0: <VM-reserved>
+
+        // After first invocation of `second` (before returning)
+        3: d
+        2: c
+        1: a
+        0: <VM-reserved>
+
+        // After second invocation of `second` (before returning)
+        4: d
+        3: c
+        2: b
+        1: a
+        0: <VM-reserved>
+
+- Notice that the slots for `c` and `d` changed from slots 2 and 3 to slots 3 and 4 across calls
+- The insight here is: **with the introduction of functions, we can no longer allow locals to reserve a slot for their entire lifetime**
+- Instead, we observe that `d` is always right after `c` in the stack (when executing `second`). We also observe that `b` will always be after `a` (when executing `first`).
+- SO, we've glimpsed another key insight: **within functions, locals maintain the same relative order in the stack**
+- This means that we're going to update our VM to maintain a **frame pointer** that points to the slot *before* the first slot that belongs to the function in question.
+- In other words, at *compile time*, we know the relative locations of local vars in the stack. At *run time*, we know the absolute locations of local vars in the stack (absoluteLocation = framePointer + relativeLocation).
+
+- Another thing to consider is an aspect of clox's *calling conventions*
+- How does calling a function work? Well, we just need to update **ip** to the first instruction of the callee. Pretty simple, right?
+- ...but wait, how do we return to the instruction after the call site? We'll somehow need to store the return address in an easily-accessible location before calling a function such that, upon returning to the caller, `ip` will point to the instruction after the call site.
+
+- Next, let's discuss **call frames**
+- For each *live function invocation* (the function being exec'd that hasn't returned yet), we need to track: where on the stack the function's locals begin and where the caller should resume.
+
+        ```
+        // vm.h
+        // A call frame represents an ongoing function call
+        typedef struct {
+            ObjFunction_t *function;    // pointer to function being called
+            uint8_t *ip;    // this function's ip (when this function returns, this call frame is popped and the VM resumes wherever the caller's ip left off)
+            Value_t *slots; // location where this function's locals begin
+        } CallFrame_t;
+        ```
+- Sounds like the basic sketch of the new execution model will be:
+    - We start with an `ObjFunction_t` returned after compiling source
+    - This represents our implicit, top-level function
+    - We begin executing (`vm.ip = function->ip`) 
+    - Whenever we call a function, we create a new `CallFrame_t` object, push it to the vm.frames structure (the call stack)
+        - ip of the new call frame will be pre-determined at compile time
+    - Update vm's ip (`vm.ip = frame->ip`)
+    - Execute function's code
+    - When `ret` instruction is reached, pop call frame, restore VM's ip to ip of previous frame :)
+
+
+1/18/2026:
+- Spent some time debugging after refactoring code to support functions + top-level function vs one giant bytecode chunk:
+    - Bug:
+        - In compiler.c::initLocals()
+        ```
+        static void initLocals(void) {
+            size_t oldCapacity = current->capacity;
+            current->capacity = GROW_CAPACITY(oldCapacity);
+            current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
+            for (unsigned i=0; i < current->capacity; ++i) {
+                current->locals[i].depth = -1;
+            }
+            initIsFinalsArray(&current->localIsFinals);
+            writeIsFinalsArray(&current->localIsFinals, true);  // <-
+        }
+        ```
+        - Added `writeIsFinalsArray` call to set locals[0] (our top-level) to a `final`. (I don't *really* care that this is a final vs being mutable. I mean.. I guess it shouldn't be mutable, but that shouldn't ever matter in our execution model. The problem was that a local was being added to locals but no corresponding final flag was being written - leading to a corrupted compilation state).
+        - In `jump` ops, we had `*frame->ip += offset`... This is obviously wrong and was causing our bytecode to be rewritten at runtime - leading to **WEIRD** errors / stack states... Fortunately, the fix was as simple as `frame->ip += offset` :)
+
+1/19/2026:
+- Was drinking last night and caught a couple other bugs:
+    - 1) Here's the first one:
+        ```
+        static bool inBreakScope(unsigned idx) {
+            // printf("local var: %.*s at depth %d\n", current->locals[idx].name.length, current->locals[idx].name.start, current->locals[idx].depth);
+            if (current->inFor) {
+                //printf("current->locals[idx].depth: %d\n", current->locals[idx].depth);
+                //printf("current->scopeDepth: %d\n", current->scopeDepth);
+                /**
+                * for loop scoping is a little weird...
+                * in the case of:
+                *  for (...) {
+                *      ...
+                * }
+                * 
+                * - there's a scope for the 'for' params (e.g. var i=0; i < 2; i = i + 1)
+                * - there's a scope for the loop body
+                * - and in this case, there's a scope for the block
+                */
+                uint8_t maxDiff = current->forBlock ? 3 : 2;
+                return abs(current->locals[idx].depth - current->scopeDepth) < maxDiff; // e.g. if break at scopeDepth = 6 && maxDiff = 3, then pop vars in depths: 6, 5, and 4
+            }
+            return current->locals[idx].depth == current->scopeDepth;
+        }
+        ```
+        - Changed `<=` to `<` in first return statement (see comment next to that return for explanation)
+
+    - 2) And here's the second:
+        - Just needed to update number of locals to be popped in `breakAllStatement` from all of them to all except local at slot 0 (since that's <script>)
+
+        ```
+        static void breakAllStatement(void) {
+            consume(TOKEN_SEMICOLON,"Expect a ';'.");
+            if (current->loopDepth <= 0) {
+                error("Cannot use 'breakall' outside of loop.");
+                return;
+            }
+
+            // for (int i=0; i<current->localCount; ++i) {
+            //     emitByte(OP_POP);
+            //     current->localCount--;
+            //     popLocalIsFinalFlag(&current->localIsFinals);
+            // }
+            current->ba_localCount_SnapShot = current->localCount - 1;  // -1 for reserved script slot  // <----
+            /**
+            * Doing it like this because:
+            *  We don't want to overwrite any of the Compiler_t info (remember we're still parsing)
+            *  But we do want to pop all locals off...
+            *  But if we pop all locals off here, we'll still hit endScope and overpop
+            *  I'm deciding to be lazy and move this to runtime :) 
+            */
+            emitByte(OP_BREAKALL);
+            emitByte((uint8_t)(current->ba_localCount_SnapShot >> 16) & 0xFF);    // byte 2;
+            emitByte((uint8_t)(current->ba_localCount_SnapShot >> 8) & 0xFF);     // byte 1;
+            emitByte((uint8_t)(current->ba_localCount_SnapShot) & 0xFF);          // byte 0;
+            writeBreakJumpArray(&current->breakAllJumps, emitJump(OP_JUMP));
+            // current->breakAllTarget = emitJump(OP_JUMP);
+        }
+        ```
+
+    - At this point, feature-functions branch is functional again and behaving the same as master :)
+
+
+2/1/2026:
+- Adding support for calls
+
+```C
+// compiler.c
+static unsigned argumentList(void) {
+    unsigned argCount = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expression();
+            argCount++;
+        } while (match(TOKEN_COMMA));
     }
-    print N_OUTER;
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')'.");
+    return argCount;
+}
+
+static void call(bool canAssign) {
+    unsigned argCount = argumentList();
+    emitVarLenInstr(argCount, OP_CALL, OP_CALL_LONG);
+}
+
+// side note: this is called designated initializer syntax (C99)
+ParseRule_t rules[] = {
+    [TOKEN_LEFT_PAREN]      =  {grouping, call, PREC_CALL},
+    //...
+```
+- When parsing, if we have the '(' in the middle of an expressiion (i.e. an infix expression) - dispatch to the `call` function. This function counts the number of args provided and emits the `OP_CALL` instruction.
+
+- And for compiling `return`s:
+
+```C
+static void _return(bool canAssign) {
+    expression();
+    emitByte(OP_RETURN);
+}
+//...
+[TOKEN_RETURN]          =  {_return, NULL, PREC_NONE},
+//...
+```
+
+- Off to the VM!
+
+- For calls:
+
+```C
+//...
+            case OP_CALL:
+            case OP_CALL_LONG: {
+                unsigned argCount;
+                if (instruction == OP_CALL) {
+                    argCount = (unsigned)READ_BYTE();
+                } else {
+                    argCount = READ_BYTES();
+                }
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
+                break;
+            }
+
+//...
+static bool call(ObjFunction_t *function, unsigned argCount) {
+    if (function->arity != argCount) return false;
+
+    CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    frame->function = function;
+    frame->ip = function->chunk.code;
+    frame->slots = vm.stackTop - argCount - 1;  // reset slots to point to function object being called
+    return true;
+}
+
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+               return call(AS_FUNCTION(callee), argCount);
+            default:
+               break; // Non-callable object type
+        }
+    }
+    runtimeError("Can only call functions and classes.");
+    return false;
 }
 ```
 
-prints
-
+- So for calls, we first check if we're calling a function, a method, or a ctor. Then we call `call`.
+- In `call`, we push a new frame onto the call stack and initialize it with info from the `ObjFunction_t` function passed to `call`.
+- Note that when *calling* a function, we first retrieve the function object from our globals (or locals for nested functions) table - meaning that ObjFunction_t object is pushed to the top of the stack (along with its args) prior to the call
 
 ```
-""
-"NEW LOOP"
-""
-"outer"
-"i: 0"
-"inner"
-"j: 0"
-2
-"outer"
-"i: 2"
-0
+$ bin/lox  test/ch24/debug.lox 
+==f==
+0000 0001 OP_CONSTANT         0 ''
+0002  | OP_PRINT
+0003  | OP_CONSTANT         1 ''
+0005  | OP_RETURN
+0006  | OP_POP
+0007  | OP_POP
+0008  | OP_RETURN
+==<script>==
+0000 0001 OP_CONSTANT         0 ''
+0002  | OP_DEFINE_GLOBAL    0 ''
+0004 0002 OP_ACCESS_GLOBAL    0 ''
+0006  | OP_CALL             0 ''
+0008  | OP_PRINT
+0009  | OP_POP
+0010  | OP_RETURN
+[ <script> ] 
+
+0000 0001 OP_CONSTANT         0 ''
+[ <script> ] [ <fn f> ] 
+
+0002  | OP_DEFINE_GLOBAL    0 ''
+[ <script> ] 
+
+0004 0002 OP_ACCESS_GLOBAL    0 ''  // <-- HERE
+[ <script> ] [ <fn f> ] 
+
+0006  | OP_CALL             0 ''
+[ <script> ] [ <fn f> ] 
+
+0000 0001 OP_CONSTANT         0 ''
+[ <script> ] [ <fn f> ] [ "hi" ] 
+
+0002  | OP_PRINT
+"hi"
+[ <script> ] [ <fn f> ] 
+
+0003  | OP_CONSTANT         1 ''
+[ <script> ] [ <fn f> ] [ 4 ] 
+
+0005  | OP_RETURN
+[ <script> ] [ 4 ] 
+
+0008  | OP_PRINT
+4
+[ <script> ] 
+
+0009  | OP_POP
+
+
+0010  | OP_RETURN
+$ 
+
+// debug.lox
+fun f() { print "hi"; return 4; }
+print f();
 ```
 
-- In other words, we're losing the outer loop's local `N_OUTER` too early...
-- Need to modify breakStatement() in compile.c
+- Then for returning from functions, we pop off the top-most frame and reset the `frame pointer`. We also check if we're returning from the top-level - in which case we return from `interpret` altogether :)
+- Note that in `OP_RETURN` we grab the value at the top of the stack, reset frame pointer, then push that value back to the top of the stack. This is how we pass the return value from the callee to the caller
+
+```C
+// vm.c
+
+        switch(instruction = READ_BYTE()) {
+            case OP_RETURN: {
+                Value_t retVal = pop(); // grab return value
+                vm.frameCount--;        // pop off frame
+                if (vm.frameCount == 0) {
+                    pop(); // pop off <script>
+                    return INTERPRET_OK;
+                }
+                vm.stackTop = frame->slots; // reset stack to previous frame
+                frame = &vm.frames[vm.frameCount - 1];
+                push(retVal);   // push return value to top of stack
+                break;
+            }
+```
+
+
+2/8/2026:
+- sorry for the delay :(
+- busy times at work with RUM NG + vGCD CTH migration
+- anyway! finished first pass of functions chapter today
+- TL;DR - we parse the function definition, generate an ObjFunction_t object, emit an `OP_CONSTANT` so the function object exists in the constant pool and is defined (bound to function name) at runtime. Then, when a call is made, the function object (and other crap) is written to a new call frame. The VM's frame pointer points to this new frame. This means IP is also reset and the function's bytecode is executed until the function returns. When the function returns, the top frame is popped off, IP is resored to the bytecode in the previous frame, and execution continues. Analogous to what happens at assembly level.
+- I also added support for native functions tonight (functions used in Lox that are written in C)
+- Was hitting failures due to me forgetting how new vm.globalNames / vm.globalValues tables work
+
+2/22/2026:
+- I promise I'm not giving up on this project!
+    - For reference, right now i'm working on RUM NG, Spec2GTRTL validation work, GCD crap, etc. (hopefully bazel soon)
+- I just wanted to read through the functions chapter a second time
+- Random note: always keep in mind that a function declaration is just the binding of a function object to an identifier.
+    - That identifier can be local (nested) or global (at top level)
+    - If local, function object will exist on Lox's Value_t stack
+        - When function is referenced (e.g. called), the function object will be retrieved via a `OP_ACCESS_LOCAL` instruction
+    - If global, function object will exist in vm.globalValues
+- Remember that parameters are added in `function` function in compiler.c
+- In local case, parameters are immedicately marked as initialized by calling `defineVariable`
+- The parameters are initialized to corresponding relative stack locations
+- e.g.
+```
+fun f(a, b, c) { ... }
+f(1, 2, 3)
+
+/**
+
+________
+3           <-- c
+________
+2           <-- b
+________
+1           <-- a
+________
+<fn f>       <-- vm.FRAMES[top].slots
+________
+...
+________
+
+*/
+```
+
+- Random bug fix / clean up:
+    - Added limit to how nested function declarations can be (1024 for now)
+        - Can you imagine a program with 1024 nested functions??
+    - Bug fix: wasn't initializing compiler->capacity in `initCompiler`, resulting in garbage values being fed to realloc causing the program to freak out and die
+    - This particular bug only manifested when writing a program with nested function declarations
+
+2/27/2026:
+- Drank a beer and started considering the differences b/w how the VM's (and its stack) operates vs how traditional OS / arch processes (including their stacks) operate
+    - How function calls work on OS / Arch Processes (and their stacks)
+        - Single IP (or PC - I'm going to call it IP) register that holds address of next instruction to be executed
+        - From code perspective, function call is simply a jump with a few extra bookkeeping instrs before and after
+        - On function call, return address, caller's stack pointer, caller's frame pointer, args are pushed to stack
+        - At beginning of function call, prologue is exec'd, stack pointer reset, frame pointer reset
+        - Execute function
+        - Epilogue: return value pushed, stack pointer reset, frame pointer reset, IP reset to address of instruction after call
+        * roughly speaking, this is how function calls work in hardware
+
+    - How function calls work in clox VM
+        - OP_CALL opcode decoded
+        - args and function object read
+            - if global, read from globals table
+            - if local, read from stack
+        - `callValue -> call` are called
+            - argCount == function.arity asserted
+            - New CallFrame_t populated
+                - vm.frames[newFrameIdx]->name = function->name 
+                - vm.frames[newFrameIdx]->ip = function->chunk.code
+                - vm.frames[newFrameIdx]->slots = vm.stackTop - argCount - 1
+            - cached `frame` var set to &vm.frames[vm.frameCount - 1]
+        - Now, execution will resume from the beginning of the callee
+        - Callee is exec'd
+        - OP_RETURN opcode decoded
+            - return value is saved
+            - vm.frameCount decremented
+            - if vm.frameCount is now 0, pop <script> and return from vm.run()
+            - else, set `vm.stackTop` to `frame->slots`
+                - this is part of "popping" call frame
+            - set cached `frame` to vm.frames[vm.frameCount] (remember - we just decremented vm.frameCount)
+            - push the return value onto the stack so it's available to the caller
+
+    - Similarities b/w "bare-metal" function calls and VM function calls
+        - same pattern: 
+            - save state before call
+            - execute callee
+            - restore state
+    - Differences b/w "bare-metal" function calls and VM function calls
+        - VM's "stack" is kinda split b/w 2 data structures:
+            - vm.stack
+            - vm.frames
+        - Each frame has it's own code and IP
+        - In hardware, 1 stack and 1 IP
+
+2/28/2026 
+- You understand that **native functions** are functions written in the host language that can be called from a Lox program
+- But taking a step back, the user won't see much of a difference between calling `time()` and calling `fib()`, so from an implementation perspective, what's really different about native functions and user-defined functions?
+- The main difference is that native functions have no associated bytecode
+- This raises the obvious question - what happens when a user calls a native function?
+- TODO: elaborate on this - but long story short, at VM startup time, native functions are added to the globals table
+- So when the user calls a native function, the name is found in the globals table and a function object with type OBJ_NATIVE is returned
+- From there, when the native function is called, a C function pointer is what is stored in `value.obj`
+
+3/3/2026:
+- Spent WAY too long on this :(
+- Challenge 1 of ch 24: create a local `register` var in vm.c::run() to encourage compiler to maintain the pointer `ip` in a register
+```C
+// in vm.c::run()
+register uint8_t *ip = frame->ip;
+```
+- This means on function calls, before call update `frame->ip` (so you don't lose it when you make call) and on function return, reset `ip` to `frame->ip`
+- Obviously, other changes to `READ_BYTE`, etc. were made to but above was the state restoration step (important)
+- The TL;DR of the error I was running into was:
+
+```C
+// BAD
+case OP_CALL:
+            case OP_CALL_LONG: {
+                frame->ip = ip; // when caller resumes, frame->ip is correct
+                unsigned argCount;
+                if (instruction == OP_CALL) {
+                    argCount = (unsigned)READ_BYTE();
+                } else {
+                    argCount = READ_BYTES();
+                }
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
+                ip = frame->ip;
+                break;
+            }
+```
+
+- Do you see it?
+- Okay - here it is, you update `frame->ip` THEN either call READ_BYTE or READ_BYTES and bump `ip` (but not frame->ip)
+- So when you eventually reset ip to frame->ip, you're out of sync and all hell breaks loose
+
+
+3/11/2026:
+- Got a new dog! (love ya Remi)
+- Added native function `open` today :)
+
+3/13/2026:
+- Added `read`, `close`, `len`
+- Added `getline`
+- Modified `open` to accept access type argument (e.g., "r", "w", "rb", ...)
+- Added support for `write`
+- Added file access type check
+    - e.g., runtime errors when trying to write to read-only files, etc.
+
+- **TODO**: Make error handling more graceful when writing read-only files and vice-versa
+e.g.,
+```
+$ bin/lox
+> var fh = open("test/ch24/test.txt", "w+");
+> print read(fh);
+""
+> write("here ya go", fh);
+> read(fh);
+> close(fh);
+> var fh = open("test/ch24/test.txt", "r");
+> write("here ya go", fh);
+Trying to write in non-write mode
+[line 1]: <script>
+Segmentation fault (core dumped)
+```
+- I'd rather not seg fault here
+
+3/14/2024
+Happy St. Patrick's Day (weekend)!
+- Fixed seg fault above
+- Basic error was runtimeError was being raised but we were continuing to try to execute program
+- Problem is once we raise runtimeError, we reset the stack
+- BUT the next thing we did in `callValue` was update `vm.stackTop` by popping off args from stack
+- Then, we try writing result from native function to stack
+- Due to resetting stack + popping args, stack was (often) in invalid state
+- So writing result to stack was a write to unallocated memory, resulting in a seg fault
+- Here's the fix
+```C
+static bool wasError(Value_t value) {
+    return value.type == VAL_ERR;   // HERE: I added an ERR_VAL Value_t type so we could know a runtimeError
+                                    //       occurred during execution of native function
+}
+
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+               return call(AS_FUNCTION(callee), argCount);
+            case OBJ_NATIVE: {
+                ObjNative_t *func = (ObjNative_t *)(callee.as.obj);
+                if (func->arity != argCount) {
+                    runtimeError("native function expected %d arguments but received %u", func->arity, argCount);
+                    return false;
+                }
+                NativeFn_t native = AS_NATIVE(callee);
+                Value_t result = native(argCount, vm.stackTop - argCount);  // call native function
+                if (wasError(result)) {    // <-- HERE: I added exit condition
+                    return false;
+                }
+                //vm.stackTop -= argCount + 1;    // reset stack pointer
+                vm.stackTop = vm.stackTop - argCount + 1;    // reset stack pointer
+                push(result);
+                return true;
+            }
+```
+
+3/18/2026:
+- Just finished chapter 24 (finally!)
+- Last challenge was adding runtimeErrors to native functions...
+- But that's actually what I already did above :)
+- For completeness, here's Nystrom's implementation
+```
+There are a few ways you can do this. The interesting part is that the native
+C function needs to have sort of two signal paths to get data back to the VM:
+it needs to be able to return a Value when successful, and it needs a separate
+way to indicate a runtime error.
+
+I think a clean way is to use the `args` array as both an input and output to
+the native function. The function will read arguments from that and write the
+result value to it when successful. Right now, `args` points to the first
+argument. After a call completes, the return value is expected to be at the
+slot just before that, which currently contains the function itself. So we'll
+say that a native function is expected to store the return value in `args[-1]`.
+
+Then the return value of the C function itself can be used to indicate success
+or failure:
+
+typedef bool (*NativeFn)(int argCount, Value* args);
+
+So the `clock()` native function becomes this:
+
+
+static bool clockNative(int argCount, Value* args) {
+  args[-1] = NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+  return true;
+}
+
+
+If a native function does fail, it would be nice to print a runtime error, so
+we'll let it store a string in `args[-1]` for an error message to print. Here's
+one that always fails:
+
+static bool errNative(int argCount, Value* args) {
+  args[-1] = OBJ_VAL(copyString("Error!", 6));
+  return false;
+}
+
+The VM needs to handle this new calling convention. In `callValue()`, the new
+code looks like this:
+
+
+      case OBJ_NATIVE: {
+        NativeFn native = AS_NATIVE(callee);
+        if (native(argCount, vm.stackTop - argCount)) {
+          vm.stackTop -= argCount;
+          return true;
+        } else {
+          runtimeError(AS_STRING(vm.stackTop[-argCount - 1])->chars);
+          return false;
+        }
+      }
+
+
+In some ways, the code is simpler. Instead of getting the return value from the
+C function and pushing it onto the stack, this simply discards all but one of
+the stack slots. Since the return value is already there at slot zero, that
+leaves it right on top with no extra work.
+
+But the `if` statement to see if the call succeeded is expensive. Inserting some
+control flow on a critical path like this is always a performance hit. On my
+laptop, this change makes the Fibonnaci benchmark about 25% slower, even though
+no actual runtime errors ever occur.
+
+That's the price you pay for a robust VM, I guess.
+```
+- As usual, his is more straightfoward. I added an error type and check the Value for error each time a native is exec'd
+- Pro: Personally, I prefer using return values rather than return values + output params
+- Con: Adding an error type for just this case seems a bit overkill. Guess I'll need to find more use for them down the road. Also, calling `wasError` each time adds overhead on top of the condition on critical path (however, we can simply inline the above - function exists primarily for readability)

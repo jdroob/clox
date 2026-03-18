@@ -1,0 +1,10 @@
+/**
+ * Simply read test.txt and print to stdout
+*/
+
+var fname = "test/ch24/test.txt";
+var fh = open(fname, "r");
+var fileContents = read(fh);
+print fileContents;
+print len(fileContents) + " bytes in file: " + fname;
+close(fh);

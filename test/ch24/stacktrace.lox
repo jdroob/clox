@@ -1,0 +1,5 @@
+/* intentionally throw runtimeError to visualize stack trace */
+fun a() { b(); }
+fun b() { c(); }
+fun c() { c("too many params"); }
+a();

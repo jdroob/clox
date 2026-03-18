@@ -31,7 +31,7 @@ size_t nAllocatedChunks = 0;
  * jrchunk format:
  *  byte0-7: previous free chunk (0xXXXXXXXX_XXXXXXXX)
  *  byte8-15: next free chunk    (0xXXXXXXXX_XXXXXXXX)
- *  byte 16-19: size 
+ *  byte 16-19: size of current chunk
  *  byte 20-23: padding
  */
 

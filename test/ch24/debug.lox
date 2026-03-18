@@ -1,0 +1,2 @@
+fun f() { print "hi"; return 4; }
+print f();

@@ -1,0 +1,6 @@
+fun f0() {
+    fun f1() {
+        return;
+    }
+    return;
+}

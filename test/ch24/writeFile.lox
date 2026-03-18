@@ -1,0 +1,14 @@
+/**
+ * Simply write test.txt and print new contents to stdout
+*/
+
+var fname = "test/ch24/test.txt";
+var fh = open(fname, "r+"); // r+ allows for writing
+var fileContents = read(fh);    // save original contents
+var bytesWritten = write("I'm writing to you from 'writeFile.lox'", fh);
+print read(fh); // print latest contents
+close(fh);
+
+var fh = open(fname, "w");  // this clears file contents
+write(fileContents, fh);    // restore file contents
+close(fh);

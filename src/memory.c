@@ -32,6 +32,26 @@ static void freeObject(Obj_t *object) {
             FREE(ObjString_t, object);
             break;
         }
+        case OBJ_FUNCTION: {
+            ObjFunction_t *function = (ObjFunction_t *)object;
+            // freeObject(function->name);  <- GARBAGE COLLECTOR SHOULD TAKE CARE OF THIS LATER
+            freeChunk(&function->chunk);
+            FREE(ObjFunction_t, object);
+            break;
+        }
+        case OBJ_NATIVE: {
+            FREE(ObjNative_t, object);
+            break;
+        }
+        case OBJ_FILEHANDLE: {
+            FILE *fh = ((ObjFileHandle_t *)object)->fh;
+            int fd = fileno(fh);
+            if (fd != -1) { // valid file descriptor
+                fclose(fh);
+            }
+            FREE(ObjFileHandle_t, object);
+            break;
+        }
     }
 }
 

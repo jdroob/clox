@@ -6,7 +6,14 @@
 #include "object.h"
 #include "table.h"
 
-#define STACK_MAX 1073741824
+#define FRAMES_MAX 64
+#define STACK_MAX (FRAMES_MAX * (UINT8_MAX  + 1))
+
+typedef struct {
+    ObjFunction_t *function;
+    uint8_t *ip;    // as the name implies - the instruction pointer
+    Value_t *slots; // location in stack where this function's (callee's) locals begin
+} CallFrame_t;
 
 typedef enum {
     INTERPRET_OK,
@@ -27,8 +34,8 @@ typedef struct {
 } BreakJump_t;
 
 typedef struct {
-    Chunk_t         *chunk;
-    uint8_t         *ip;
+    CallFrame_t     frames[FRAMES_MAX];     // Fine w/ doing this for now - stack overflows are an expected limitation
+    int             frameCount;
     uint32_t        capacity;
     Value_t         *stack;
     Value_t         *stackTop;

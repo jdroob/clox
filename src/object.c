@@ -3,6 +3,7 @@
 #include "memory.h"
 #include "object.h"
 #include "value.h"
+#include "debug.h"
 #include "vm.h"
 
 
@@ -20,7 +21,7 @@ static Obj_t *allocateObject(size_t size, Obj_e objectType) {
 static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32_t hash) {
     ObjString_t *string = ALLOCATE_OBJ(ObjString_t, sizeof(ObjString_t) + length + 1, OBJ_STRING);
     string->length = length;
-    string->isConst = isConst;
+    string->isConst = isConst;  // TODO: remove isConst - no longer needed
     string->hash = hash;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';
@@ -32,9 +33,34 @@ static uint32_t hashString(const char *key, int length) {
     uint32_t hash = 2166136261u;    // 0x811C_9DC5
     for (int i=0; i<length; ++i) {
         hash ^= (uint8_t)key[i];
-        hash *= 1677719;    // 0x0000_418B
+        hash *= 1677719;            // 0x0000_418B
     }
     return hash;
+}
+
+ObjFunction_t *newFunction(void) {
+    ObjFunction_t *function = ALLOCATE_OBJ(ObjFunction_t, sizeof(ObjFunction_t), OBJ_FUNCTION);
+    function->arity = 0;
+    function->name = NULL;
+    initChunk(&function->chunk);
+    return function;
+}
+
+ObjNative_t *newNative(NativeFn_t function, int arity) {
+    ObjNative_t *native = ALLOCATE_OBJ(ObjNative_t, sizeof(ObjNative_t), OBJ_FUNCTION);
+    native->function = function;
+    native->arity = arity;
+    native->obj.type = OBJ_NATIVE;
+    return native;
+}
+
+ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType) {
+    ObjFileHandle_t *fileHandle = ALLOCATE_OBJ(ObjFileHandle_t, sizeof(ObjFileHandle_t), OBJ_FILEHANDLE);
+    fileHandle->fh = fh;
+    fileHandle->obj.type = OBJ_FILEHANDLE;
+    fileHandle->name = name;
+    fileHandle->accessType = accessType;
+    return fileHandle;
 }
 
 ObjString_t *makeString(char *chars, int length) {
@@ -42,6 +68,39 @@ ObjString_t *makeString(char *chars, int length) {
     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
     if (interned != NULL) return interned;
     return allocateString(chars, length, false, hash);
+}
+
+static void printFunction(ObjFunction_t *function) {
+    if (function->name == NULL) {
+    printf("<script>");
+        return;
+    }
+    printf("<fn %s>", function->name->chars);
+}
+
+void printObject(Value_t val) {
+    switch (OBJ_TYPE(val)) {
+        case OBJ_STRING: {
+            printf("\"%s\"", AS_CSTRING(val));
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_FUNCTION: {
+            printFunction(AS_FUNCTION(val));
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_NATIVE: {
+            printf("<native fn>");
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_FILEHANDLE: {
+            printf("<file handle: %s>", AS_FILEHANDLE(val)->name);
+            if (appendNewline) printf("\n");
+            break;
+        }
+    }
 }
 
 // ObjString_t *takeString(char *chars, int length) {

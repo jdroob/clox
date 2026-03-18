@@ -8,15 +8,15 @@ void initLineMap(LineMap_t *lines) {
     lines->encoding = NULL;
 }
 
-static void writeLine(LineMap_t *lines, int newLine) {
+static void writeLine(LineMap_t *lines, int line) {
     if (lines->count > 0) {
         int currLine = lines->encoding[lines->count - 1].line;
-        if (currLine == newLine) {
+        if (currLine == line) {
             lines->encoding[lines->count - 1].frequency++;
             return;
         }
     }
-    lines->encoding[lines->count].line = newLine;
+    lines->encoding[lines->count].line = line;
     lines->encoding[lines->count++].frequency = 1;
 }
 

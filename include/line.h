@@ -4,6 +4,9 @@
 #include "common.h"
 
 typedef struct {
+    /**
+     * line -> #bytecode instrs
+     */
     int line;
     size_t frequency;
 } Pair_t;

@@ -9,23 +9,190 @@
 
 VM_t vm;
 
+/**
+ * Native functions
+ */
+static void runtimeError(const char *format, ...);
+static bool isValidOperation(int requiredMode, const char *providedMode) {
+    if (requiredMode == NULL || providedMode == NULL) {
+        runtimeError("Invalid access type provided OR invalid file operation performed");
+        return false;
+    }
+    if (strchr(providedMode, requiredMode) != NULL ||
+        strchr(providedMode, '+')) {
+        return true;
+    }
+    return false;
+}
+static Value_t clockNative(int argCount, Value_t *args) {
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
+static Value_t fopenNative(int argCount, Value_t *args) {
+    if (!IS_STRING(args[0])) {
+       runtimeError("arg0: open requires string argument type");
+       return ERR_VAL; 
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: open requires string argument type");
+        return ERR_VAL;
+    } 
+    char *fname = AS_CSTRING(args[0]);
+    char *accessType = AS_CSTRING(args[1]);
+    FILE *fh = fopen(fname, accessType);
+    if (!fh) {
+        runtimeError("Unable to find file: %s", fname);
+        return ERR_VAL;
+    }
+    ObjFileHandle_t *fhObj = newFileHandle(fh, (const char *)fname, (const char *)accessType);
+    return OBJ_VAL(fhObj);
+}
+
+static Value_t freadNative(int argCount, Value_t *args) {
+    if (!IS_FILEHANDLE(args[0])) {
+        runtimeError("read requires file handle argument type");
+        return ERR_VAL;
+    }
+    ObjFileHandle_t *fhObj = AS_FILEHANDLE(args[0]);
+    if (!isValidOperation('r', fhObj->accessType)) {
+        runtimeError("Trying to read in non-read mode");
+        return ERR_VAL;
+    }
+    FILE *fh = fhObj->fh;
+    fseek(fh, 0, SEEK_END);
+    long length = ftell(fh);
+    fseek(fh, 0, SEEK_SET);
+
+    char *contents = ALLOCATE(char, length + 1);
+    size_t bytesRead = fread(contents, 1, length, fh);
+    if (bytesRead != length) {
+        runtimeError(
+            "Error during read: Expected to read %ld bytes but instead read %lu bytes", 
+            length, bytesRead);
+        return ERR_VAL;
+    }
+    contents[length] = '\0';
+    ObjString_t *wrappedContents = makeString(contents, length);
+    return OBJ_VAL(wrappedContents);
+}
+
+static Value_t fwriteNative(int argCount, Value_t *args) {
+    if (!IS_STRING(args[0])) {
+        runtimeError("arg0: write requires string argument type");
+        return ERR_VAL;
+    }
+    if (!IS_FILEHANDLE(args[1])) {
+        runtimeError("arg1: write requires file handle argument type");
+        return ERR_VAL;
+    }
+    ObjFileHandle_t *fhObj = AS_FILEHANDLE(args[1]);
+    if (!isValidOperation('w', fhObj->accessType)) {
+        runtimeError("Trying to write in non-write mode");
+        return ERR_VAL;
+    }
+    ObjString_t *toWrite = AS_STRING(args[0]);
+    FILE *fh = fhObj->fh;
+    size_t len = toWrite->length;
+    size_t bytesWritten = fwrite(toWrite->chars, 1, len, fh);
+    if (bytesWritten != len) {
+        runtimeError("Error occurred while writing to file");
+        return ERR_VAL;
+    }
+    return NUMBER_VAL((double)bytesWritten);
+}
+
+static Value_t fcloseNative(int argCount, Value_t *args) {
+    // return 0 on success? ERR_VAL on failure?
+    if (!IS_FILEHANDLE(args[0])) {
+        runtimeError("close requires file handle argument type");
+        return ERR_VAL;
+    }
+    FILE *fh = AS_FILEHANDLE(args[0])->fh;
+    int retVal = fclose(fh);
+    if (retVal) {
+        runtimeError("Error closing file");
+        return ERR_VAL;
+    }
+    return NUMBER_VAL(0);
+}
+
+static Value_t lenNative(int argCount, Value_t *args) {
+    // TODO: Add support for data structures as they become available
+    if (!IS_STRING(args[0])) {
+        runtimeError("len requires string type argument");
+        return ERR_VAL;
+    }
+    size_t len = strnlen(AS_CSTRING(args[0]), LONG_MAX);    // seems reasonable?
+    return NUMBER_VAL((double)len);
+}
+
+static Value_t getlineNative(int argCount, Value_t *args) {
+    if (!IS_FILEHANDLE(args[0])) {
+        runtimeError("getline requires file handle type argument");
+        return ERR_VAL;
+    }
+    char *line = NULL;
+    size_t len = 0;
+    FILE *fh = AS_FILEHANDLE(args[0])->fh;
+    ssize_t bytesRead = getline(&line, &len, fh);
+    if (bytesRead == -1) {
+        runtimeError("Error occurred in getline");
+        return ERR_VAL;
+    }
+    ObjString_t *lineObj = makeString(line, (int)len);
+    return OBJ_VAL(lineObj);
+}
+
+static Value_t asciiNative(int argCount, Value_t *args) {
+    // TODO: Implement me :)
+    return ERR_VAL;
+}
+
 static void resetStack(void) {
     vm.stackTop = vm.stack;
+    vm.frameCount = 0;
 }
 
 void freeVM(void);
 static void runtimeError(const char *format, ...) {
+    CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
     va_list args;
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
     fputs("\n", stderr);
 
-    size_t instructionOffset = vm.ip - vm.chunk->code - 1;
-    int line = getLine(vm.chunk, instructionOffset);
-    fprintf(stderr, "[line %d] in script\n", line);
+//    size_t instructionOffset = frame->ip - frame->function->chunk.code - 1;
+//    int line = getLine(&frame->function->chunk, instructionOffset);
+//    fprintf(stderr, "[line %d] in script\n", line);
+    for (int i=vm.frameCount - 1; i>=0; --i) {
+        ObjFunction_t *function = vm.frames[i].function;
+        unsigned instruction = vm.frames[i].ip - function->chunk.code - 1;    // -1 since ip points to instr after current instr
+        int line = getLine(&function->chunk, instruction);
+        
+        fprintf(stderr, "[line %d]: ", line);
+        if (function->name == NULL) {
+            fprintf(stderr, "<script>\n");
+        } else {
+            fprintf(stderr, "<fn: %s>\n", function->name->chars);
+        }
+    }
     resetStack();
     //freeVM(); // freeing here will result in double free in main
+}
+
+static void defineNative(const char *funcName, NativeFn_t function, int arity) {
+    /**
+     * Pushing then immediately popping for GC purposes
+     */
+    push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
+    push(OBJ_VAL(newNative(function, arity)));
+    // write function name to global names table
+    tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));
+    // write function object to global values table (function name --> function object)
+    writeValueArray(&vm.globalValues, vm.stack[1]);
+    pop();
+    pop();
 }
 
 void initIsFinalsArray(MutableTable_t *array) {
@@ -229,7 +396,10 @@ static Value_t getStackAt(unsigned idx) {
 }
 
 Value_t pop(void) {
-    if (vm.stackTop == vm.stack) return;
+    if (vm.stackTop == vm.stack) {
+        // warning("Attempting to pop from empty stack");  // TODO: Implement me
+        return NIL_VAL;
+    }
     return *(--vm.stackTop);
 }
 
@@ -237,8 +407,8 @@ void initVM(void) {
     #ifdef JRMALLOC
     init(); // init jrmalloc
     #endif
-    vm.chunk = NULL;
-    vm.ip = 0;
+    // vm.topLevel = NULL;
+    // vm.ip = 0;
     vm.capacity = STACK_MAX;
     vm.switchCounter = 0;
     #ifdef JRMALLOC
@@ -252,6 +422,15 @@ void initVM(void) {
     initValueArray(&vm.globalValues);
     initIsFinalsArray(&vm.globalIsFinals);
     resetStack();
+    
+    // define native functions
+    defineNative("clock", clockNative, 0);
+    defineNative("open", fopenNative, 2);
+    defineNative("close", fcloseNative, 1);
+    defineNative("read", freadNative, 1);
+    defineNative("write", fwriteNative, 2);
+    defineNative("getline", getlineNative, 1);
+    defineNative("len", lenNative, 1);
 }
 
 void freeVM(void) {
@@ -275,8 +454,63 @@ void updateObjList(Obj_t *obj) {
     obj->next = NULL;
 }
 
+static bool call(ObjFunction_t *function, unsigned argCount) {
+    if (function->arity != argCount) {
+        runtimeError("Expected %d args for %.*s but received %d.", 
+            function->arity, function->name->length, function->name->chars, argCount);
+        return false;
+    }
+
+    if (vm.frameCount == FRAMES_MAX) {
+        runtimeError("Stack overflow.");
+        return false;
+    }
+
+    CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    frame->function = function;
+    frame->ip = function->chunk.code;
+    frame->slots = vm.stackTop - argCount - 1;
+    return true;
+}
+
+static bool wasError(Value_t value) {
+    return value.type == VAL_ERR;
+}
+
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+               return call(AS_FUNCTION(callee), argCount);
+            case OBJ_NATIVE: {
+                ObjNative_t *func = (ObjNative_t *)(callee.as.obj);
+                if (func->arity != argCount) {
+                    runtimeError("native function expected %d arguments but received %u", func->arity, argCount);
+                    return false;
+                }
+                NativeFn_t native = AS_NATIVE(callee);
+                Value_t result = native(argCount, vm.stackTop - argCount);  // call native function
+                if (wasError(result)) {
+                    return false;
+                }
+                //vm.stackTop -= argCount + 1;    // reset stack pointer
+                vm.stackTop = vm.stackTop - argCount + 1;    // reset stack pointer
+                push(result);
+                return true;
+            }
+            default:
+               break; // Non-callable object type
+        }
+    }
+    runtimeError("Can only call functions and classes.");
+    return false;
+}
+
 static InterpResult_t run(void) {
-    #define READ_BYTE() (*vm.ip++)
+    CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
+    register uint8_t *ip = frame->ip;
+    #define READ_BYTE() (*ip++)
+    // #define READ_BYTE() (*frame->ip++)
     #define READ_BYTES() \
     ({ \
         uint8_t byte2 = READ_BYTE(); \
@@ -292,7 +526,8 @@ static InterpResult_t run(void) {
         uint16_t bytes = (byte1 << 8) | byte0; \
         bytes; \
     })
-    #define READ_CONSTANT() (vm.chunk->constants.values[READ_BYTE()])
+    #define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
+    //#define READ_CONSTANT() (vm.topLevel->chunk.constants.values[READ_BYTE()])
     /**
      * NOTE: below is a "statement expression"
      *  syntax:
@@ -306,7 +541,7 @@ static InterpResult_t run(void) {
         uint8_t byte2 = READ_BYTE(); \
         uint8_t byte1 = READ_BYTE(); \
         uint8_t byte0 = READ_BYTE(); \
-        vm.chunk->constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
+        frame->function->chunk.constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
     #define READ_STRING() (AS_STRING(READ_CONSTANT()))
     #define READ_STRING_LONG() (AS_STRING(READ_CONSTANT_LONG()))
@@ -327,12 +562,22 @@ static InterpResult_t run(void) {
             printf(" ] ");
         }
         puts("\n");
-        disassembleInstruction(vm.chunk, (unsigned)(vm.ip - vm.chunk->code));
+        disassembleInstruction(&frame->function->chunk, (unsigned)(ip - frame->function->chunk.code));
         appendNewline = true;
         #endif
-        switch(instruction = READ_BYTE()) {
+        switch (instruction = READ_BYTE()) {
             case OP_RETURN: {
-                return INTERPRET_OK;
+                Value_t retVal = pop(); // grab return value
+                vm.frameCount--;        // pop off frame
+                if (vm.frameCount == 0) {
+                    pop(); // pop off <script>
+                    return INTERPRET_OK;
+                }
+                vm.stackTop = frame->slots; // reset stack to top of previous frame
+                frame = &vm.frames[vm.frameCount - 1];
+                push(retVal);   // push return value to top of stack
+                ip = frame->ip;
+                break;
             }
             case OP_CONSTANT: {
                 Value_t constant = READ_CONSTANT();
@@ -370,6 +615,7 @@ static InterpResult_t run(void) {
             }
             case OP_NEGATE: {
                 if (!IS_NUMBER(peek(0))) {
+                    frame->ip = ip;
                     runtimeError("Operand must be a number.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -387,8 +633,10 @@ static InterpResult_t run(void) {
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
                     BINARY_OP(NUMBER, NUMBER, +); 
                 } else if (IS_NUMSTR(peek(0), peek(1))) {
+                    frame->ip = ip;
                     concatenateNum();
                 } else {
+                    frame->ip = ip;
                     runtimeError("Operands must be two numbers or two strings.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -442,6 +690,7 @@ static InterpResult_t run(void) {
                 }
                 Value_t value = getValueAt(&vm.globalValues, idx);
                 if (IS_UNDEFINED(value)) {
+                    frame->ip = ip;
                     runtimeError("Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -468,10 +717,12 @@ static InterpResult_t run(void) {
                 
                 // Should have been set to NIL or defined value by this point
                 if (IS_UNDEFINED(getValueAt(&vm.globalValues, idx))) {
+                    frame->ip = ip;
                     runtimeError("Undefined variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 if (IS_FINAL(idx)) {
+                    frame->ip = ip;
                     runtimeError("Cannot assign to 'final' variable.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -486,7 +737,7 @@ static InterpResult_t run(void) {
                 } else {
                     idx = READ_BYTES();
                 }
-                push(vm.stack[idx]);
+                push(frame->slots[idx]);
                 break;
             }
             case OP_SET_LOCAL:
@@ -499,13 +750,13 @@ static InterpResult_t run(void) {
                 }
 
                 // writeStackAt(idx, peek(0));
-                vm.stack[idx] = peek(0);
+                frame->slots[idx] = peek(0);
                 break;
             }
             case OP_JUMP_IF_TRUE: {
                 uint16_t offset = READ_SHORT();
                 if (!isFalsey(peek(0))) {
-                    vm.ip += offset;
+                    ip += offset;
                     break;
                 }
                 break;
@@ -513,7 +764,7 @@ static InterpResult_t run(void) {
             case OP_JUMP_IF_FALSE: {
                 uint16_t offset = READ_SHORT();
                 if (isFalsey(peek(0))) {
-                    vm.ip += offset;
+                    ip += offset;
                     break;
                 }
 
@@ -554,7 +805,7 @@ static InterpResult_t run(void) {
             // }
             case OP_ENDSWITCH: {
                 // printf("vm.switchCounter: %d\n", vm.switchCounter);
-                if (vm.switchCounter < 0) runtimeError("Stack in invalid state post-switch.");
+                if (vm.switchCounter < 0) frame->ip = ip, runtimeError("Stack in invalid state post-switch.");
                 
                 /**
                  * precondition: vm.switchCounter >= prevSwitchDepth
@@ -584,18 +835,34 @@ static InterpResult_t run(void) {
                     // printf("vm.switchCounter: %d\n", vm.switchCounter);
                     vm.switchCounter--;
                     // printf("vm.switchCounter: %d\n", vm.switchCounter);
-                    vm.ip += offset;  // jump to next case or default
+                    ip += offset;  // jump to next case or default
                 }
                 break;
             }
             case OP_JUMP: {
                 uint16_t offset = READ_SHORT();
-                vm.ip += offset;
+                ip += offset;
                 break;
             }
             case OP_LOOP: {
                 uint16_t offset = READ_SHORT();
-                vm.ip -= offset;
+                ip -= offset;
+                break;
+            }
+            case OP_CALL:
+            case OP_CALL_LONG: {
+                unsigned argCount;
+                if (instruction == OP_CALL) {
+                    argCount = (unsigned)READ_BYTE();
+                } else {
+                    argCount = READ_BYTES();
+                }
+                frame->ip = ip; // when caller resumes, frame->ip is correct
+                if (!callValue(peek(argCount), argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1];
+                ip = frame->ip;
                 break;
             }
             default:
@@ -614,19 +881,27 @@ static InterpResult_t run(void) {
 }
 
 InterpResult_t interpret(const char *source) {
-    Chunk_t chunk;
-    initChunk(&chunk);
+    ObjFunction_t *function = NULL;
     
-    if (!compile(source, &chunk)) {
-        freeChunk(&chunk);
+    // We're getting the top-level function back
+    if ((function = compile(source)) == NULL) {
+        // freeChunk(&function->chunk);
         return INTERPRET_COMPILE_ERROR;
     }
-    
-    vm.chunk = &chunk;
-    vm.ip = vm.chunk->code;
 
-    InterpResult_t result = run();
+    push(OBJ_VAL(function));
+    call(function, 0);
+    // CallFrame_t *frame = &vm.frames[vm.frameCount++];
+    // frame->function = function;
+    // frame->ip = function->chunk.code;
+    // frame->slots = vm.stack;
+    // vm.chunk = &chunk;
+    // vm.function = function;
+    // vm.ip = vm.topLevel->chunk.code;
 
-    freeChunk(&chunk);
-    return result;
+    // InterpResult_t result = run();
+
+    // freeChunk(&function->chunk);
+    // return result;
+    return run();
 }

@@ -1,10 +1,11 @@
 #include "common.h"
 #include "chunk.h"
+#include "object.h"
 #include "compiler.h"
 #include "scanner.h"
 #include "memory.h"
-#include "object.h"
 #include "table.h"
+#include "debug.h"
 #include "vm.h"
 
 
@@ -55,11 +56,19 @@ typedef struct {
     int depth;
 } Local_t;
 
-/**
- * Simple, flat array of all locals that are in scope during each point of the compilation process.
- * Locals are ordered in the array in order their declarations appear in the code.
- */
+typedef enum {
+    TYPE_SCRIPT,    // Account for globals at top-level, outside of implicit top-level function
+    TYPE_FUNCTION
+} FunctionType_e;
+
 typedef struct {
+    struct Compiler_t *enclosing;  // pointer to compiler for function enclosing function this compiler object is associated with
+    ObjFunction_t *function;
+    FunctionType_e type;
+    /**
+     * Simple, flat array of all locals that are in scope during each point of the compilation process.
+     * Locals are ordered in the array in order their declarations appear in the code.
+     */
     Local_t *locals;
     int localCount; // number of locals in scope
     int scopeDepth; // number of scopes enclosing current scope
@@ -81,8 +90,9 @@ typedef struct {
 
 // GLOBALS (uh-oh!!)
 Parser_t parser;
-Compiler_t *current;
-Chunk_t *compilingChunk;
+Compiler_t *current = NULL;
+size_t compilerLinkedListLen = 0;
+// Chunk_t *compilingChunk;
 Table_t literals;
 bool isFinal = false;
 
@@ -104,6 +114,7 @@ static void errorAt(Token_t *token, const char *msg) {
 }
 
 static void error(const char *msg) {
+    // TODO: make variadic
     errorAt(&parser.previous, msg);
 }
 
@@ -142,7 +153,7 @@ static void consume(TokenType_e type, const char *msg) {
 }
 
 static Chunk_t *currentChunk(void) {
-    return compilingChunk;
+    return &current->function->chunk;
 }
 
 static void emitByte(uint8_t byte) {
@@ -166,6 +177,7 @@ static void emitVarLenInstr(unsigned idx, uint8_t shortOp, uint8_t longOp) {
 }
 
 static void emitReturn(void) {
+    emitByte(OP_NIL);   // Provide a default return value
     emitByte(OP_RETURN);
 }
 
@@ -200,12 +212,34 @@ static void patchJump(int offset) {
     currentChunk()->code[offset + 1] = jump & 0xFF;     // write low byte of jump
 }
 
-static void endCompiler(void) {
+static ObjFunction_t *endCompiler(void) {
+    if (compilerLinkedListLen > 0) {
+        compilerLinkedListLen--;
+    } else {
+        error("Attempted to decrement compilerLinkedListLen at zero...\nSomething has gone horribly wrong");
+        return;
+    }
     FREE_ARRAY(Local_t, current->locals, current->capacity);
     freeIsFinalsArray(&current->localIsFinals);
     freeBreakJumpArray(&current->breakJumps);
     freeBreakJumpArray(&current->breakAllJumps);
-    emitReturn();
+    // printf("endCompiler::current->localCount: %d\n", current->localCount);
+    if (current->localCount == 1) {
+        // <script> in slot 0
+        emitByte(OP_POP);
+    }
+    emitReturn(); // now the function has this just in case there was no explicit return
+
+    ObjFunction_t *function = current->function;
+    #ifdef DEBUG_CHUNK
+    if (!parser.hadError) {
+        disassembleChunk(currentChunk(), function->name != NULL 
+        ? function->name->chars : "<script>");
+    }
+    #endif
+
+    current = current->enclosing;
+    return function;
 }
 
 static void emitConstant(Value_t value) {
@@ -242,9 +276,19 @@ static void initLocals(void) {
         current->locals[i].depth = -1;
     }
     initIsFinalsArray(&current->localIsFinals);
+    writeIsFinalsArray(&current->localIsFinals, true);
 }
 
-static void initCompiler(Compiler_t *compiler) {
+static void addLocal(Token_t *);
+static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
+    if (compilerLinkedListLen >= COMPILER_LL_LEN_MAX) {
+        error("Exceeded maximum depth of nested function declarations");
+        return;
+    }
+    compilerLinkedListLen++;
+    compiler->enclosing = current;
+    compiler->function = NULL;
+    compiler->type = type;
     compiler->localCount = 0;
     compiler->scopeDepth = 0;
     compiler->continueTarget = -1;
@@ -259,8 +303,22 @@ static void initCompiler(Compiler_t *compiler) {
     compiler->ba_localCount_SnapShot = -1;
     compiler->loopDepth = 0;
     compiler->switchDepth = 0;
+    compiler->capacity = 0; // TEST THIS
+    compiler->function = newFunction();
     current = compiler;
+
+    if (type != TYPE_SCRIPT) {
+        current->function->name = makeString(parser.previous.start, parser.previous.length);
+    }
+
+    // For this Compiler_t struct, current->locals[0] refers to the stack location storing this function's corresponding ObjFunction_t
+    // ... we'll learn more later about why this is useful
+    current->locals = NULL;
     initLocals();
+    Local_t *local = &current->locals[current->localCount++];
+    local->depth = 0;
+    local->name.start = "";
+    local->name.length = 0;
 }
 
 static void expression(void);
@@ -484,9 +542,40 @@ static void literal(bool canAssign) {
     }
 }
 
+static void returnStmt(void) {
+    if (current->type == TYPE_SCRIPT) {
+        error("'return' cannot be used at top-level.");
+    }
+    if (match(TOKEN_SEMICOLON)) {
+        // for the `{ stmt0; stmt1; ... stmtN; return; }` case
+        emitReturn();
+    } else {
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect a ';' after return value.");
+        emitByte(OP_RETURN);
+    }
+}
+
+static unsigned argumentList(void) {
+    unsigned argCount = 0;
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            expression(); // push arg to stack
+            argCount++;
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')'.");
+    return argCount;
+}
+
+static void call(bool canAssign) {
+    unsigned argCount = argumentList();
+    emitVarLenInstr(argCount, OP_CALL, OP_CALL_LONG);
+}
+
 // side note: this is called designated initializer syntax (C99)
 ParseRule_t rules[] = {
-    [TOKEN_LEFT_PAREN]      =  {grouping, NULL, PREC_NONE},
+    [TOKEN_LEFT_PAREN]      =  {grouping, call, PREC_CALL},
     [TOKEN_RIGHT_PAREN]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
@@ -531,7 +620,7 @@ ParseRule_t rules[] = {
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
     [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
     [TOKEN_PRINT]           =  {NULL, NULL, PREC_NONE},
-    [TOKEN_RETURN]          =  {NULL, NULL, PREC_NONE},
+//    [TOKEN_RETURN]          =  {returnStmt, NULL, PREC_NONE},
     [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_THIS]            =  {NULL, NULL, PREC_NONE},
     [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
@@ -632,6 +721,7 @@ static unsigned makeConstant(Value_t value) {
 }
 
 static void markInitialized(void) {
+    if (current->scopeDepth == 0) return;   // don't mark globals as initialized - this policy only applies to locals
     current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
@@ -700,11 +790,11 @@ static void declareVariable(void) {
      *          }
      * 
      *      aha! but here's something to ALWAYS keep in mind...
-     *      current->locals contains an array of locals that *must*
-     *      always be monotonically increasing in depth.
+     *      current->locals contains an array of locals that *only retains locals*
+     *      while new current->scopeDepth is monotonically increasing in depth.
      *      
      *      why? because as soon a var goes out of scope (endScope is called)
-     *      it's popped off the stack and removed from locals :)
+     *      it's popped off the stack (runtime) and removed from locals (compile time) :)
      */
     for (int i=current->localCount - 1; i >= 0; --i) {
         Local_t *local = &current->locals[i];
@@ -724,9 +814,9 @@ static void declareVariable(void) {
 
 static unsigned parseVariableName(const char *errMsg) {
     consume(TOKEN_IDENTIFIER, "Expect an indentifier");
-    declareVariable();
-    if (current->scopeDepth > 0) return 0;
-    return identifierConstant(&parser.previous, isFinal);
+    declareVariable();  // if identifier is a local, add to locals
+    if (current->scopeDepth > 0) return 0;  // if identifier is local, return
+    return identifierConstant(&parser.previous, isFinal);   // identifier is a global, add to globals, return globals idx
 }
 
 static void defineVariable(unsigned global) {
@@ -766,15 +856,16 @@ static void endLoop(void) {
 
 static void beginScope(void) {
     current->scopeDepth++;
-   //printf("Scope depth is %d\n", current->scopeDepth);
+//    printf("Scope depth is %d\n", current->scopeDepth);
 }
 
 static void endScope(void) {
     current->scopeDepth--;
-    //printf("Scope depth is %d\n", current->scopeDepth);
+    // printf("Scope depth is %d\n", current->scopeDepth);
 
     // TODO: replace with OP_POPN
-    while (current->localCount > 0 &&
+    // > 1 due to reserved slot for script
+    while (current->localCount > 1 &&
            current->locals[current->localCount - 1].depth > current->scopeDepth) {
         emitByte(OP_POP);
         current->localCount--;
@@ -870,12 +961,13 @@ static bool inBreakScope(unsigned idx) {
          * - and in this case, there's a scope for the block
          */
         uint8_t maxDiff = current->forBlock ? 3 : 2;
-        return abs(current->locals[idx].depth - current->scopeDepth) < maxDiff;
+        return abs(current->locals[idx].depth - current->scopeDepth) < maxDiff; // e.g. if break at scopeDepth = 6 && maxDiff = 3, then pop vars in depths: 6, 5, and 4
     }
     return current->locals[idx].depth == current->scopeDepth;
 }
 
 static void breakStatement(void) {
+    // printf("Depth at BREAK: %d\n", current->scopeDepth);
     consume(TOKEN_SEMICOLON, "Expect a ';'.");
     if (current->loopDepth <= 0 && current->switchDepth == 0) {
         // TODO: Modify when switch is added
@@ -887,7 +979,7 @@ static void breakStatement(void) {
     int localsInScope = 0;
     int i = current->localCount - 1;
     while (i >= 0 && inBreakScope(i)) { localsInScope++; i--; }
-    //printf("localsInScope: %d\ncurrent->localCount: %d\n", localsInScope, current->localCount);
+    // printf("localsInScope: %d\ncurrent->localCount: %d\n", localsInScope, current->localCount);
     current->b_localCount_SnapShot = localsInScope;
 
     emitByte(OP_BREAK);
@@ -910,7 +1002,7 @@ static void breakAllStatement(void) {
     //     current->localCount--;
     //     popLocalIsFinalFlag(&current->localIsFinals);
     // }
-    current->ba_localCount_SnapShot = current->localCount;
+    current->ba_localCount_SnapShot = current->localCount - 1;  // -1 for reserved script slot
     /**
      * Doing it like this because:
      *  We don't want to overwrite any of the Compiler_t info (remember we're still parsing)
@@ -1136,6 +1228,10 @@ static void forStatement(void) {
 
 static void switchStatement(void) {
     uint8_t prevSwitchDepth = current->switchDepth++;
+    if (current->switchDepth > UINT8_MAX) {
+        error("Too many nested switch statements.");
+        return;
+    }
     // int breakTarget = current->breakTarget;
     int caseOrDefaultJump = -1;
     bool hasDefault = false;
@@ -1201,6 +1297,48 @@ static void switchStatement(void) {
     // current->breakTarget = breakTarget;
 }
 
+static void function(FunctionType_e type) {
+    Compiler_t compiler;    // track compilation data  for this function
+    initCompiler(&compiler, TYPE_FUNCTION);
+    beginScope();   // This function's parameter scope
+
+    consume(TOKEN_LEFT_PAREN, "Expect a '(' after function name.");
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            current->function->arity++;
+            if (current->function->arity > ARITY_MAX) {
+                // TODO: make variadic
+                errorAtCurrent("Too many parameters in function.");
+            }
+            unsigned param = parseVariableName("Expect parameter name.");
+            defineVariable(param);
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')' after function name.");
+    consume(TOKEN_LEFT_BRACE, "Expect a '{' before function body.");
+    block();    // TOKEN_RIGHT_BRACE consumed in block()
+
+    ObjFunction_t *function = endCompiler();
+    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
+    
+    // No endScope() b/c compiler's lifetime ends when this function returns
+}
+
+static void funDeclaration(void) {
+    // Declare function's name as global or local
+    //  i.e. add function name to globals (or locals) table
+    unsigned global = parseVariableName("Expect a function name.");
+    markInitialized();  // ensures function's name can be referenced inside body (i.e. recursion)
+    
+    // Compile function body
+    // function object will be on top of stack after OP_CONSTANT is exec'd
+    // function object's bytecode is contained inside the function object
+    function(TYPE_FUNCTION);
+
+    // Using our idx which refers to the function object in the constant pool, we bind the function object to it's name
+    defineVariable(global);    
+}
+
 /**
  * LOX GRAMMAR RULES:
  *  **NOTE:** This is a little more bare-bones than the jlox grammar doc comment.
@@ -1209,12 +1347,13 @@ static void switchStatement(void) {
  *            It's easier to write the rules next to the code in a recursive descent
  *            parser (jlox) than it is here with a Pratt Parser (clox).
  * 
- *  declaration      ->  varDecl | ifStmt | whileStmt | stmt ;
+ *  declaration      ->  varDecl | ifStmt | whileStmt | forStmt | switchStmt | funStmt | stmt ;
  *  varDecl          ->  "var" IDENTIFIER ("=" expression)? ";" ;
  *  ifStmt           ->  "if" "(" condition ")" block ";" ;
  *  whileStmt        ->  "while" "(" condition ")" statement ;
  *  forStmt          ->  "for"   "(" initialization ";" condition ";" update ")" statement ;
  *  switchStmt       ->  "switch" "(" expression ")" "{" caseStmt* defaultStmt? "}" ;
+ *  funStmt          ->  "fun" IDENTIFIER "(" args ")" "{" declaration "}" ;
  *  caseStmt         ->  "case" expression ":" statement* ;
  *  defaultStmt      ->  "default" ":" statement*;
  *  initialization   ->  expression ;
@@ -1239,8 +1378,10 @@ static void statement(void) {
         breakStatement();
     } else if (match(TOKEN_BREAKALL)) {
         breakAllStatement();
-    }else if (match(TOKEN_CONTINUE)) {
+    } else if (match(TOKEN_CONTINUE)) {
         continueStatement();
+    } else if (match(TOKEN_RETURN)) {
+        returnStmt();
     } else {
         expressionStatement();
     }
@@ -1262,6 +1403,8 @@ static void declaration(void) {
         forStatement();
     } else if (match(TOKEN_SWITCH)) {
         switchStatement();
+    } else if (match(TOKEN_FUN)) {
+        funDeclaration();
     } else {
         statement();
     }
@@ -1269,13 +1412,13 @@ static void declaration(void) {
     if (parser.panicMode) synchronize();
 }
 
-bool compile(const char *source, Chunk_t *chunk) {
+ObjFunction_t *compile(const char *source) {
     initScanner(source);
     parser.hadError = false;
     parser.panicMode = false;
-    compilingChunk = chunk;
+    // compilingChunk = chunk;
     Compiler_t compiler = { 0 };
-    initCompiler(&compiler);
+    initCompiler(&compiler, TYPE_SCRIPT);
     // initTable(&vm.globalNames);
     initTable(&literals);
 
@@ -1307,12 +1450,12 @@ bool compile(const char *source, Chunk_t *chunk) {
 
     // freeTable(&vm.globalNames);
     freeTable(&literals);
-    endCompiler();
+    ObjFunction_t *function = endCompiler();
 
-    #ifdef DEBUG_CHUNK
-    #include "debug.h"
-    disassembleChunk(currentChunk(), "code");
-    #endif
+    // #ifdef DEBUG_CHUNK
+    // #include "debug.h"
+    // disassembleChunk(currentChunk(), "code");
+    // #endif
 
-    return !parser.hadError;
+    return parser.hadError ? NULL : function;
 }
