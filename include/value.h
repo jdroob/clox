@@ -13,6 +13,8 @@ typedef enum {
     VAL_BOOL,
     VAL_OBJ,
     VAL_NIL,
+    VAL_ERR,    // as of 3/14/26 - used for proper error handling from native function calls
+    /* Used for table placeholders */
     VAL_EMPTY, // Internal empty type
     VAL_UNDEFINED,
 } ValueType_e;
@@ -30,6 +32,7 @@ typedef struct {
 #define NUMBER_VAL(value)     ((Value_t){.type = VAL_NUM, .as.num = value})
 #define OBJ_VAL(object)       ((Value_t){.type = VAL_OBJ, .as.obj = object})
 #define NIL_VAL               ((Value_t){.type = VAL_NIL, .as.num = 0})
+#define ERR_VAL               ((Value_t){.type = VAL_ERR, .as.num = 0})
 #define EMPTY_VAL             ((Value_t){.type = VAL_EMPTY, .as.num = 0})
 #define UNDEFINED_VAL         ((Value_t){.type = VAL_UNDEFINED, .as.num = 0})
 

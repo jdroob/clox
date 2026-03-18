@@ -1640,3 +1640,115 @@ Trying to write in non-write mode
 Segmentation fault (core dumped)
 ```
 - I'd rather not seg fault here
+
+3/14/2024
+Happy St. Patrick's Day (weekend)!
+- Fixed seg fault above
+- Basic error was runtimeError was being raised but we were continuing to try to execute program
+- Problem is once we raise runtimeError, we reset the stack
+- BUT the next thing we did in `callValue` was update `vm.stackTop` by popping off args from stack
+- Then, we try writing result from native function to stack
+- Due to resetting stack + popping args, stack was (often) in invalid state
+- So writing result to stack was a write to unallocated memory, resulting in a seg fault
+- Here's the fix
+```C
+static bool wasError(Value_t value) {
+    return value.type == VAL_ERR;   // HERE: I added an ERR_VAL Value_t type so we could know a runtimeError
+                                    //       occurred during execution of native function
+}
+
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_FUNCTION:
+               return call(AS_FUNCTION(callee), argCount);
+            case OBJ_NATIVE: {
+                ObjNative_t *func = (ObjNative_t *)(callee.as.obj);
+                if (func->arity != argCount) {
+                    runtimeError("native function expected %d arguments but received %u", func->arity, argCount);
+                    return false;
+                }
+                NativeFn_t native = AS_NATIVE(callee);
+                Value_t result = native(argCount, vm.stackTop - argCount);  // call native function
+                if (wasError(result)) {    // <-- HERE: I added exit condition
+                    return false;
+                }
+                //vm.stackTop -= argCount + 1;    // reset stack pointer
+                vm.stackTop = vm.stackTop - argCount + 1;    // reset stack pointer
+                push(result);
+                return true;
+            }
+```
+
+3/18/2026:
+- Just finished chapter 24 (finally!)
+- Last challenge was adding runtimeErrors to native functions...
+- But that's actually what I already did above :)
+- For completeness, here's Nystrom's implementation
+```
+There are a few ways you can do this. The interesting part is that the native
+C function needs to have sort of two signal paths to get data back to the VM:
+it needs to be able to return a Value when successful, and it needs a separate
+way to indicate a runtime error.
+
+I think a clean way is to use the `args` array as both an input and output to
+the native function. The function will read arguments from that and write the
+result value to it when successful. Right now, `args` points to the first
+argument. After a call completes, the return value is expected to be at the
+slot just before that, which currently contains the function itself. So we'll
+say that a native function is expected to store the return value in `args[-1]`.
+
+Then the return value of the C function itself can be used to indicate success
+or failure:
+
+typedef bool (*NativeFn)(int argCount, Value* args);
+
+So the `clock()` native function becomes this:
+
+
+static bool clockNative(int argCount, Value* args) {
+  args[-1] = NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+  return true;
+}
+
+
+If a native function does fail, it would be nice to print a runtime error, so
+we'll let it store a string in `args[-1]` for an error message to print. Here's
+one that always fails:
+
+static bool errNative(int argCount, Value* args) {
+  args[-1] = OBJ_VAL(copyString("Error!", 6));
+  return false;
+}
+
+The VM needs to handle this new calling convention. In `callValue()`, the new
+code looks like this:
+
+
+      case OBJ_NATIVE: {
+        NativeFn native = AS_NATIVE(callee);
+        if (native(argCount, vm.stackTop - argCount)) {
+          vm.stackTop -= argCount;
+          return true;
+        } else {
+          runtimeError(AS_STRING(vm.stackTop[-argCount - 1])->chars);
+          return false;
+        }
+      }
+
+
+In some ways, the code is simpler. Instead of getting the return value from the
+C function and pushing it onto the stack, this simply discards all but one of
+the stack slots. Since the return value is already there at slot zero, that
+leaves it right on top with no extra work.
+
+But the `if` statement to see if the call succeeded is expensive. Inserting some
+control flow on a critical path like this is always a performance hit. On my
+laptop, this change makes the Fibonnaci benchmark about 25% slower, even though
+no actual runtime errors ever occur.
+
+That's the price you pay for a robust VM, I guess.
+```
+- As usual, his is more straightfoward. I added an error type and check the Value for error each time a native is exec'd
+- Pro: Personally, I prefer using return values rather than return values + output params
+- Con: Adding an error type for just this case seems a bit overkill. Guess I'll need to find more use for them down the road. Also, calling `wasError` each time adds overhead on top of the condition on critical path (however, we can simply inline the above - function exists primarily for readability)

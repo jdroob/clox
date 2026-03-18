@@ -31,18 +31,18 @@ static Value_t clockNative(int argCount, Value_t *args) {
 static Value_t fopenNative(int argCount, Value_t *args) {
     if (!IS_STRING(args[0])) {
        runtimeError("arg0: open requires string argument type");
-       return NIL_VAL; 
+       return ERR_VAL; 
     }
     if (!IS_STRING(args[1])) {
         runtimeError("arg1: open requires string argument type");
-        return NIL_VAL;
+        return ERR_VAL;
     } 
     char *fname = AS_CSTRING(args[0]);
     char *accessType = AS_CSTRING(args[1]);
     FILE *fh = fopen(fname, accessType);
     if (!fh) {
         runtimeError("Unable to find file: %s", fname);
-        return NIL_VAL;
+        return ERR_VAL;
     }
     ObjFileHandle_t *fhObj = newFileHandle(fh, (const char *)fname, (const char *)accessType);
     return OBJ_VAL(fhObj);
@@ -51,12 +51,12 @@ static Value_t fopenNative(int argCount, Value_t *args) {
 static Value_t freadNative(int argCount, Value_t *args) {
     if (!IS_FILEHANDLE(args[0])) {
         runtimeError("read requires file handle argument type");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     ObjFileHandle_t *fhObj = AS_FILEHANDLE(args[0]);
     if (!isValidOperation('r', fhObj->accessType)) {
         runtimeError("Trying to read in non-read mode");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     FILE *fh = fhObj->fh;
     fseek(fh, 0, SEEK_END);
@@ -69,7 +69,7 @@ static Value_t freadNative(int argCount, Value_t *args) {
         runtimeError(
             "Error during read: Expected to read %ld bytes but instead read %lu bytes", 
             length, bytesRead);
-        return NIL_VAL;
+        return ERR_VAL;
     }
     contents[length] = '\0';
     ObjString_t *wrappedContents = makeString(contents, length);
@@ -79,16 +79,16 @@ static Value_t freadNative(int argCount, Value_t *args) {
 static Value_t fwriteNative(int argCount, Value_t *args) {
     if (!IS_STRING(args[0])) {
         runtimeError("arg0: write requires string argument type");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     if (!IS_FILEHANDLE(args[1])) {
         runtimeError("arg1: write requires file handle argument type");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     ObjFileHandle_t *fhObj = AS_FILEHANDLE(args[1]);
-    if (!isValidOperation('2', fhObj->accessType)) {
+    if (!isValidOperation('w', fhObj->accessType)) {
         runtimeError("Trying to write in non-write mode");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     ObjString_t *toWrite = AS_STRING(args[0]);
     FILE *fh = fhObj->fh;
@@ -96,22 +96,22 @@ static Value_t fwriteNative(int argCount, Value_t *args) {
     size_t bytesWritten = fwrite(toWrite->chars, 1, len, fh);
     if (bytesWritten != len) {
         runtimeError("Error occurred while writing to file");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     return NUMBER_VAL((double)bytesWritten);
 }
 
 static Value_t fcloseNative(int argCount, Value_t *args) {
-    // return 0 on success? NIL_VAL on failure?
+    // return 0 on success? ERR_VAL on failure?
     if (!IS_FILEHANDLE(args[0])) {
         runtimeError("close requires file handle argument type");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     FILE *fh = AS_FILEHANDLE(args[0])->fh;
     int retVal = fclose(fh);
     if (retVal) {
         runtimeError("Error closing file");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     return NUMBER_VAL(0);
 }
@@ -120,7 +120,7 @@ static Value_t lenNative(int argCount, Value_t *args) {
     // TODO: Add support for data structures as they become available
     if (!IS_STRING(args[0])) {
         runtimeError("len requires string type argument");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     size_t len = strnlen(AS_CSTRING(args[0]), LONG_MAX);    // seems reasonable?
     return NUMBER_VAL((double)len);
@@ -129,7 +129,7 @@ static Value_t lenNative(int argCount, Value_t *args) {
 static Value_t getlineNative(int argCount, Value_t *args) {
     if (!IS_FILEHANDLE(args[0])) {
         runtimeError("getline requires file handle type argument");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     char *line = NULL;
     size_t len = 0;
@@ -137,7 +137,7 @@ static Value_t getlineNative(int argCount, Value_t *args) {
     ssize_t bytesRead = getline(&line, &len, fh);
     if (bytesRead == -1) {
         runtimeError("Error occurred in getline");
-        return NIL_VAL;
+        return ERR_VAL;
     }
     ObjString_t *lineObj = makeString(line, (int)len);
     return OBJ_VAL(lineObj);
@@ -145,7 +145,7 @@ static Value_t getlineNative(int argCount, Value_t *args) {
 
 static Value_t asciiNative(int argCount, Value_t *args) {
     // TODO: Implement me :)
-    return NIL_VAL;
+    return ERR_VAL;
 }
 
 static void resetStack(void) {
@@ -473,6 +473,10 @@ static bool call(ObjFunction_t *function, unsigned argCount) {
     return true;
 }
 
+static bool wasError(Value_t value) {
+    return value.type == VAL_ERR;
+}
+
 static bool callValue(Value_t callee, unsigned argCount) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
@@ -486,7 +490,11 @@ static bool callValue(Value_t callee, unsigned argCount) {
                 }
                 NativeFn_t native = AS_NATIVE(callee);
                 Value_t result = native(argCount, vm.stackTop - argCount);  // call native function
-                vm.stackTop -= argCount + 1;    // reset stack pointer
+                if (wasError(result)) {
+                    return false;
+                }
+                //vm.stackTop -= argCount + 1;    // reset stack pointer
+                vm.stackTop = vm.stackTop - argCount + 1;    // reset stack pointer
                 push(result);
                 return true;
             }

@@ -1,0 +1,7 @@
+/**
+ * Intentionally try to write read-only file to raise error
+ */
+
+var fh = open("test/ch24/test.txt", "r");
+var bytesWritten = write("this will cause an error", fh);   // Error
+close(fh);  // Unreachable
