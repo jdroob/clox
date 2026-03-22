@@ -38,6 +38,12 @@ static uint32_t hashString(const char *key, int length) {
     return hash;
 }
 
+ObjClosure_t *newClosure(ObjFunction_t *function) {
+    ObjClosure_t *closure = ALLOCATE_OBJ(ObjClosure_t, sizeof(ObjClosure_t), OBJ_CLOSURE);
+    closure->function = function;
+    return closure;
+}
+
 ObjFunction_t *newFunction(void) {
     ObjFunction_t *function = ALLOCATE_OBJ(ObjFunction_t, sizeof(ObjFunction_t), OBJ_FUNCTION);
     function->arity = 0;
@@ -98,6 +104,10 @@ void printObject(Value_t val) {
         case OBJ_FILEHANDLE: {
             printf("<file handle: %s>", AS_FILEHANDLE(val)->name);
             if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_CLOSURE: {
+            printFunction(AS_CLOSURE(val)->function);
             break;
         }
     }

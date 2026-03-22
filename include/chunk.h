@@ -54,6 +54,8 @@ typedef enum {
     OP_LOOP,
     OP_CALL,
     OP_CALL_LONG,
+    OP_CLOSURE,
+    OP_CLOSURE_LONG,
     OP_RETURN,
 } OpCode_e;
 

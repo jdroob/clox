@@ -48,6 +48,8 @@
      (instruction) == OP_BREAKALL ? "OP_BREAKALL" : \
      (instruction) == OP_DEFAULTCASE ? "OP_DEFAULTCASE" : \
      (instruction) == OP_ENDSWITCH ? "OP_ENDSWITCH" : \
+     (instruction) == OP_CLOSURE ? "OP_CLOSURE" : \
+     (instruction) == OP_CLOSURE_LONG ? "OP_CLOSURE_LONG" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -164,6 +166,24 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
             return jumpInstruction(name, 1, chunk, offset);
         case OP_LOOP:
             return jumpInstruction(name, -1, chunk, offset);
+        case OP_CLOSURE: {
+            offset++;
+            uint8_t idxOfConstant = chunk->code[offset++];
+            printf("%-16s %4d", "OP_CLOSURE", idxOfConstant);
+            printValue(chunk->constants.values[idxOfConstant]);
+            printf("\n");
+            return offset;
+        }
+        case OP_CLOSURE_LONG: {
+            unsigned idxOfConstant = 0;
+            idxOfConstant |= chunk->code[offset + 1] << 16;
+            idxOfConstant |= chunk->code[offset + 2] << 8;
+            idxOfConstant |= chunk->code[offset + 3];
+            printf("%-16s %4d", "OP_CLOSURE", idxOfConstant);
+            printValue(chunk->constants.values[idxOfConstant]);
+            printf("\n");
+            return offset + 4;
+        }
         default:
             fprintf(stderr, "Unknown opcode %u.\n", instruction);
             return offset + 1;

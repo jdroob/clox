@@ -1366,7 +1366,7 @@ static bool call(ObjFunction_t *function, unsigned argCount) {
     if (function->arity != argCount) return false;
 
     CallFrame_t *frame = &vm.frames[vm.frameCount++];
-    frame->function = function;
+    frame->closure->function = function;
     frame->ip = function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;  // reset slots to point to function object being called
     return true;
@@ -1752,3 +1752,35 @@ That's the price you pay for a robust VM, I guess.
 - As usual, his is more straightfoward. I added an error type and check the Value for error each time a native is exec'd
 - Pro: Personally, I prefer using return values rather than return values + output params
 - Con: Adding an error type for just this case seems a bit overkill. Guess I'll need to find more use for them down the road. Also, calling `wasError` each time adds overhead on top of the condition on critical path (however, we can simply inline the above - function exists primarily for readability)
+
+
+# Ch 25: Closures
+- Motivating example:
+```
+var x = "global";
+
+fun outer() {
+    var x = "local";
+    fun inner() {
+        print x;
+    }
+    return inner;
+}
+
+var callable = outer();
+callable();  // should print "local"
+```
+- Above program should print "local" but as of rn, prints "global"
+- Above *should* print "local"
+- Problem is rn, globals win over local defs
+- In fact, `inner` only has access to globals and its own locals
+- `outer`'s `x` var dies (it's liefetime ends) when `outer` returns
+- Stategy: when a local is **not** captured in a closure, it should live on the value stack
+    - when a local **is** captured in a closure, it may need a longer lifetime than the value stack's semantics permit; therefore, it should live on the heap
+
+3/22/2026:
+- parsing bug:
+- string + (num + num) seems to be evaluating as (string + num) + num
+- [FIXED] - needed to reset native code in OBJ_NATIVE in callValue to
+- `vm.stackTop -= argCount + 1`
+- just remember we eval the right then assign to the left :)

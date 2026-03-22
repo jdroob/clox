@@ -10,7 +10,8 @@
 #define STACK_MAX (FRAMES_MAX * (UINT8_MAX  + 1))
 
 typedef struct {
-    ObjFunction_t *function;
+    ObjClosure_t *closure;
+    // ObjFunction_t *function;
     uint8_t *ip;    // as the name implies - the instruction pointer
     Value_t *slots; // location in stack where this function's (callee's) locals begin
 } CallFrame_t;

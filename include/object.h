@@ -9,7 +9,8 @@ typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
     OBJ_NATIVE,
-    OBJ_FILEHANDLE
+    OBJ_FILEHANDLE,
+    OBJ_CLOSURE
 } Obj_e;
 
 struct Obj_t {
@@ -32,6 +33,11 @@ typedef struct {
     ObjString_t *name;
 } ObjFunction_t;
 
+typedef struct {
+    Obj_t obj;
+    ObjFunction_t *function;
+} ObjClosure_t;
+
 typedef Value_t (*NativeFn_t)(int argCount, Value_t *args);
 typedef struct {
     Obj_t obj;
@@ -50,6 +56,8 @@ typedef struct {
 #define IS_STRING(value)      isObjType(value, OBJ_STRING)
 #define AS_STRING(value)      ((ObjString_t *)AS_OBJ(value))
 #define AS_CSTRING(value)     (((ObjString_t *)AS_OBJ(value))->chars)
+#define IS_CLOSURE(value)     isObjType(value, OBJ_CLOSURE)
+#define AS_CLOSURE(value)     ((ObjClosure_t *)AS_OBJ(value))
 #define IS_FUNCTION(value)    isObjType(value, OBJ_FUNCTION)
 #define AS_FUNCTION(value)    ((ObjFunction_t *)AS_OBJ(value))
 #define IS_NATIVE(value)      isObjType(value, OBJ_NATIVE)
@@ -61,6 +69,7 @@ static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
 }
 
+ObjClosure_t *newClosure(ObjFunction_t *);
 ObjFunction_t *newFunction(void);
 ObjNative_t *newNative(NativeFn_t function, int arity);
 ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType);

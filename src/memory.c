@@ -52,6 +52,11 @@ static void freeObject(Obj_t *object) {
             FREE(ObjFileHandle_t, object);
             break;
         }
+        case OBJ_CLOSURE: {
+            ObjClosure_t *closure = (ObjClosure_t *)object;
+            // freeObject(closure->function);   // don't free function b/c multiple closures may enclose function
+            FREE(ObjClosure_t, object);
+        }
     }
 }
 

@@ -24,6 +24,7 @@ static bool isValidOperation(int requiredMode, const char *providedMode) {
     }
     return false;
 }
+
 static Value_t clockNative(int argCount, Value_t *args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
@@ -162,11 +163,11 @@ static void runtimeError(const char *format, ...) {
     va_end(args);
     fputs("\n", stderr);
 
-//    size_t instructionOffset = frame->ip - frame->function->chunk.code - 1;
-//    int line = getLine(&frame->function->chunk, instructionOffset);
+//    size_t instructionOffset = frame->ip - frame->closure->function->chunk.code - 1;
+//    int line = getLine(&frame->closure->function->chunk, instructionOffset);
 //    fprintf(stderr, "[line %d] in script\n", line);
     for (int i=vm.frameCount - 1; i>=0; --i) {
-        ObjFunction_t *function = vm.frames[i].function;
+        ObjFunction_t *function = vm.frames[i].closure->function;
         unsigned instruction = vm.frames[i].ip - function->chunk.code - 1;    // -1 since ip points to instr after current instr
         int line = getLine(&function->chunk, instruction);
         
@@ -454,7 +455,8 @@ void updateObjList(Obj_t *obj) {
     obj->next = NULL;
 }
 
-static bool call(ObjFunction_t *function, unsigned argCount) {
+static bool call(ObjClosure_t *closure, unsigned argCount) {
+    ObjFunction_t *function = closure->function;
     if (function->arity != argCount) {
         runtimeError("Expected %d args for %.*s but received %d.", 
             function->arity, function->name->length, function->name->chars, argCount);
@@ -467,7 +469,9 @@ static bool call(ObjFunction_t *function, unsigned argCount) {
     }
 
     CallFrame_t *frame = &vm.frames[vm.frameCount++];
-    frame->function = function;
+    frame->closure = closure;
+    frame->ip = function->chunk.code;
+    // frame->function = function;
     frame->ip = function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;
     return true;
@@ -480,8 +484,9 @@ static bool wasError(Value_t value) {
 static bool callValue(Value_t callee, unsigned argCount) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
-            case OBJ_FUNCTION:
-               return call(AS_FUNCTION(callee), argCount);
+            // case OBJ_FUNCTION:
+            case OBJ_CLOSURE:
+               return call(AS_CLOSURE(callee), argCount);
             case OBJ_NATIVE: {
                 ObjNative_t *func = (ObjNative_t *)(callee.as.obj);
                 if (func->arity != argCount) {
@@ -493,8 +498,7 @@ static bool callValue(Value_t callee, unsigned argCount) {
                 if (wasError(result)) {
                     return false;
                 }
-                //vm.stackTop -= argCount + 1;    // reset stack pointer
-                vm.stackTop = vm.stackTop - argCount + 1;    // reset stack pointer
+                vm.stackTop -= argCount + 1;    // reset stack pointer
                 push(result);
                 return true;
             }
@@ -526,7 +530,7 @@ static InterpResult_t run(void) {
         uint16_t bytes = (byte1 << 8) | byte0; \
         bytes; \
     })
-    #define READ_CONSTANT() (frame->function->chunk.constants.values[READ_BYTE()])
+    #define READ_CONSTANT() (frame->closure->function->chunk.constants.values[READ_BYTE()])
     //#define READ_CONSTANT() (vm.topLevel->chunk.constants.values[READ_BYTE()])
     /**
      * NOTE: below is a "statement expression"
@@ -541,7 +545,7 @@ static InterpResult_t run(void) {
         uint8_t byte2 = READ_BYTE(); \
         uint8_t byte1 = READ_BYTE(); \
         uint8_t byte0 = READ_BYTE(); \
-        frame->function->chunk.constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
+        frame->closure->function->chunk.constants.values[(byte2 << 16) | (byte1 << 8) | byte0]; \
     })
     #define READ_STRING() (AS_STRING(READ_CONSTANT()))
     #define READ_STRING_LONG() (AS_STRING(READ_CONSTANT_LONG()))
@@ -562,7 +566,7 @@ static InterpResult_t run(void) {
             printf(" ] ");
         }
         puts("\n");
-        disassembleInstruction(&frame->function->chunk, (unsigned)(ip - frame->function->chunk.code));
+        disassembleInstruction(&frame->closure->function->chunk, (unsigned)(ip - frame->closure->function->chunk.code));
         appendNewline = true;
         #endif
         switch (instruction = READ_BYTE()) {
@@ -587,6 +591,18 @@ static InterpResult_t run(void) {
             case OP_CONSTANT_LONG: {
                 Value_t constant = READ_CONSTANT_LONG();
                 push(constant);
+                break;
+            }
+            case OP_CLOSURE: {
+                ObjFunction_t *function = AS_FUNCTION(READ_CONSTANT());
+                ObjClosure_t *closure = newClosure(function);
+                push(OBJ_VAL(closure));
+                break;
+            }
+            case OP_CLOSURE_LONG: {
+                ObjFunction_t *function = AS_FUNCTION(READ_CONSTANT_LONG());
+                ObjClosure_t *closure = newClosure(function);
+                push(OBJ_VAL(closure));
                 break;
             }
             case OP_TRUE: {
@@ -890,7 +906,10 @@ InterpResult_t interpret(const char *source) {
     }
 
     push(OBJ_VAL(function));
-    call(function, 0);
+    ObjClosure_t *closure = newClosure(function);
+    pop();  // pop off what we just pushed..
+    push(OBJ_VAL(closure));
+    call(closure, 0);
     // CallFrame_t *frame = &vm.frames[vm.frameCount++];
     // frame->function = function;
     // frame->ip = function->chunk.code;

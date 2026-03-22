@@ -1,0 +1,12 @@
+var x = "global";
+
+fun outer() {
+    var x = "local";
+    fun inner() {
+        print x;
+    }
+    return inner;
+}
+
+var callable = outer();
+callable();  // should print "local"

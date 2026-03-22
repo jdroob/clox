@@ -1319,7 +1319,9 @@ static void function(FunctionType_e type) {
     block();    // TOKEN_RIGHT_BRACE consumed in block()
 
     ObjFunction_t *function = endCompiler();
-    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
+//    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CLOSURE, OP_CLOSURE_LONG);
+//    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
     
     // No endScope() b/c compiler's lifetime ends when this function returns
 }
