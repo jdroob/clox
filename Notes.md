@@ -1784,3 +1784,30 @@ callable();  // should print "local"
 - [FIXED] - needed to reset native code in OBJ_NATIVE in callValue to
 - `vm.stackTop -= argCount + 1`
 - just remember we eval the right then assign to the left :)
+
+3/28/2026:
+## UpValues
+- Part of the problem we need to solve can be illustrated by the following:
+```
+fun outer() {
+    var x = 1; // (1)
+    x = 2; // (2)
+    fun inner() { // (3)
+        print x;
+    }
+    inner();
+}
+```
+- clox compiles the declAssign at (1), the assignment at (2), before discovering x is a closed-over variable at (3)
+- This means `x` will be in `outer`'s stack window
+- So how can `inner` access `x`?
+- Moreover, we saw in above examples, there are cases where a closed-over variable must outlive the function invocation in which it's lifetime began
+- This implies closed-over vars must live on the heap
+- SO, the fundamental question here is: how can we treat vars normally **until the point they become "closed over vars"**? And at this point, how can we treat them differently?
+- This is where an idea from Lua's implementation comes in: **upvalues**
+- **upvalue** - a reference to a local variable in an enclosing function
+- Each closure will maintain an array of upavalues
+- A single upvalue will point back into the stack to the variable being captured
+- When a closure needs to access a closed over variable, it goes through the upvalue to access it
+- The compiler creates a closure for each function declaration
+- The VM creates the **capture** - a collection of all upvalues needed by the closure

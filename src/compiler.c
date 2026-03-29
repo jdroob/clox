@@ -86,6 +86,7 @@ typedef struct {
     uint8_t switchDepth;
     size_t capacity;
     MutableTable_t localIsFinals;
+    Upvalue_t *upvalues;
 } Compiler_t;
 
 // GLOBALS (uh-oh!!)
@@ -280,6 +281,7 @@ static void initLocals(void) {
 }
 
 static void addLocal(Token_t *);
+static void initUpvalues(void);
 static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     if (compilerLinkedListLen >= COMPILER_LL_LEN_MAX) {
         error("Exceeded maximum depth of nested function declarations");
@@ -315,6 +317,7 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     // ... we'll learn more later about why this is useful
     current->locals = NULL;
     initLocals();
+    initUpvalues();
     Local_t *local = &current->locals[current->localCount++];
     local->depth = 0;
     local->name.start = "";
@@ -355,6 +358,7 @@ static bool identifiersEqual(Token_t *a, Token_t *b) {
 
 static int resolveLocal(Compiler_t *compiler, Token_t *name) {
     // Important that we walk back to preserve expected shadowing semantics
+    // NOTE: Each function has its own Compiler_t; we're only looking at scopes within a single function
     for (int i=compiler->localCount - 1; i>=0; --i) {
         Local_t *local = &compiler->locals[i];
         if (identifiersEqual(name, &local->name)) {
@@ -368,6 +372,48 @@ static int resolveLocal(Compiler_t *compiler, Token_t *name) {
     return -1;
 }
 
+static void initUpvalues(void) {
+    size_t oldCapacity = current->function->upvalueCapacity;
+    current->upvalues = GROW_ARRAY(Upvalue_t, current->upvalues, oldCapacity, current->function->upvalueCapacity);
+    for (unsigned i=0; i < current->function->upvalueCapacity; ++i) {
+        current->upvalues[i].index = -1;
+        current->upvalues[i].isLocal = false;
+    }
+}
+
+static int addUpvalue(Compiler_t *compiler, unsigned index, bool isLocal) {
+    int upvalueCount = compiler->function->upvalueCount;
+    for (int i=0; i<upvalueCount; ++i) {
+        Upvalue_t *upvalue = &compiler->upvalues[i];
+        if (upvalue->index == index && upvalue ->isLocal == isLocal) {
+            return i;
+        }
+    }
+    if (compiler->function->upvalueCapacity < compiler->function->upvalueCount + 1) {
+        size_t oldCapacity = current->function->upvalueCapacity;
+        current->function->upvalueCapacity = GROW_CAPACITY(oldCapacity);
+        current->upvalues = GROW_ARRAY(Upvalue_t, current->upvalues, oldCapacity, current->function->upvalueCapacity);
+
+        // Initialize 'unused' upvalues
+        for (unsigned i=oldCapacity; i<current->function->upvalueCapacity; ++i) {
+            current->upvalues[i].index = -1;
+            current->upvalues[i].isLocal = false;
+        }
+    }
+
+    compiler->upvalues[upvalueCount].index = index;
+    compiler->upvalues[upvalueCount].isLocal = isLocal;
+    return compiler->function->upvalueCount++;
+}
+
+static int resolveUpvalue(Compiler_t *compiler, Token_t *name) {
+    if (compiler->enclosing == NULL) return -1; // At top level
+
+    int local = resolveLocal(compiler->enclosing, name);
+    if (local != -1) return addUpvalue(compiler, local, true);
+    return -1;
+}
+
 static unsigned identifierConstant(Token_t *identifier, bool isFinal);
 static void namedVariable(Token_t name, bool canAssign) {
     uint8_t getOp, setOp;
@@ -378,6 +424,10 @@ static void namedVariable(Token_t name, bool canAssign) {
         idx = (unsigned)arg;
         getOp = OP_ACCESS_LOCAL;
         setOp = OP_SET_LOCAL;
+    } else if ((arg = resolveUpvalue(current, &name)) != -1) {
+        idx = (unsigned)arg;
+        getOp = OP_ACCESS_UPVALUE;
+        setOp = OP_SET_UPVALUE;
     } else {
         idx = identifierConstant(&name, false);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
         getOp = OP_ACCESS_GLOBAL;
@@ -390,9 +440,9 @@ static void namedVariable(Token_t name, bool canAssign) {
             return;
         }
         expression();
-        emitVarLenInstr(idx, setOp, setOp == OP_SET_LOCAL ? OP_SET_LOCAL_LONG : OP_SET_GLOBAL_LONG);
+        emitVarLenInstr(idx, setOp, setOp == OP_SET_LOCAL ? OP_SET_LOCAL_LONG : setOp == OP_SET_UPVALUE ? OP_SET_UPVALUE_LONG : OP_SET_GLOBAL_LONG);
     } else {
-        emitVarLenInstr(idx, getOp, getOp == OP_ACCESS_LOCAL ? OP_ACCESS_LOCAL_LONG : OP_ACCESS_GLOBAL_LONG);
+        emitVarLenInstr(idx, getOp, getOp == OP_ACCESS_LOCAL ? OP_ACCESS_LOCAL_LONG : getOp == OP_ACCESS_UPVALUE ? OP_ACCESS_UPVALUE_LONG : OP_ACCESS_GLOBAL_LONG);
     }
 }
 

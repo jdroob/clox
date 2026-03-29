@@ -31,6 +31,8 @@ typedef struct {
     int arity;
     Chunk_t chunk;
     ObjString_t *name;
+    int upvalueCount;
+    size_t upvalueCapacity;
 } ObjFunction_t;
 
 typedef struct {
@@ -51,6 +53,11 @@ typedef struct {
     const char *accessType;
     FILE *fh;
 } ObjFileHandle_t;
+
+typedef struct {
+    int index;
+    bool isLocal;
+} Upvalue_t;
 
 #define OBJ_TYPE(value)       (AS_OBJ(value)->type)
 #define IS_STRING(value)      isObjType(value, OBJ_STRING)

@@ -49,6 +49,8 @@ ObjFunction_t *newFunction(void) {
     function->arity = 0;
     function->name = NULL;
     initChunk(&function->chunk);
+    function->upvalueCount = 0;
+    function->upvalueCapacity = 0;
     return function;
 }
 
