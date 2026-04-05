@@ -137,6 +137,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SWITCH:
         case OP_CASE:
         case OP_DEFAULTCASE:
+        case OP_ACCESS_UPVALUE:
+        case OP_SET_UPVALUE:
         return simpleInstruction(name, offset);
         case OP_CONSTANT:
         case OP_ACCESS_LOCAL:
@@ -151,6 +153,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_CONSTANT_LONG:
         case OP_ACCESS_LOCAL_LONG:
         case OP_SET_LOCAL_LONG:
+        case OP_ACCESS_UPVALUE_LONG:
+        case OP_SET_UPVALUE_LONG:
         case OP_BREAK:
         case OP_BREAKALL:
         case OP_CALL_LONG:
@@ -172,6 +176,16 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
             printf("%-16s %4d", "OP_CLOSURE", idxOfConstant);
             printValue(chunk->constants.values[idxOfConstant]);
             printf("\n");
+
+            ObjFunction_t *function = AS_FUNCTION(chunk->constants.values[idxOfConstant]);
+            for (int j=0; j<function->upvalueCount; ++j) {
+                int isLocal = chunk->code[offset++];
+                int index = chunk->code[offset++];
+                printf("%04d | %s %d\n",
+                    offset - 2, isLocal ? "local" : "upvalue",
+                    index);
+            }
+
             return offset;
         }
         case OP_CLOSURE_LONG: {
@@ -182,6 +196,16 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
             printf("%-16s %4d", "OP_CLOSURE", idxOfConstant);
             printValue(chunk->constants.values[idxOfConstant]);
             printf("\n");
+
+            ObjFunction_t *function = AS_FUNCTION(chunk->constants.values[idxOfConstant]);
+            for (int j=0; j<function->upvalueCount; ++j) {
+                int isLocal = chunk->code[offset++];
+                int index = chunk->code[offset++];
+                printf("%04d | %s %d\n",
+                    offset - 2, isLocal ? "local" : "upvalue",
+                    index);
+            }
+            
             return offset + 4;
         }
         default:

@@ -1,7 +1,7 @@
 fun makeClosure() {
  var local = "local";
  fun closure() {
- print local;
+    print local;
  }
  return closure;
 }

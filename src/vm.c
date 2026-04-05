@@ -510,6 +510,11 @@ static bool callValue(Value_t callee, unsigned argCount) {
     return false;
 }
 
+static ObjUpvalue_t *captureUpvalue(Value_t *slot) {
+    ObjUpvalue_t *createdUpvalue = newUpvalue(slot);
+    return createdUpvalue;
+}
+
 static InterpResult_t run(void) {
     CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
     register uint8_t *ip = frame->ip;
@@ -593,18 +598,50 @@ static InterpResult_t run(void) {
                 push(constant);
                 break;
             }
-            case OP_CLOSURE: {
-                ObjFunction_t *function = AS_FUNCTION(READ_CONSTANT());
-                ObjClosure_t *closure = newClosure(function);
-                push(OBJ_VAL(closure));
-                break;
-            }
+            case OP_CLOSURE: 
             case OP_CLOSURE_LONG: {
-                ObjFunction_t *function = AS_FUNCTION(READ_CONSTANT_LONG());
+                ObjFunction_t *function = (instruction == OP_CLOSURE) ? 
+                                          AS_FUNCTION(READ_CONSTANT()) :
+                                          AS_FUNCTION(READ_CONSTANT_LONG());
                 ObjClosure_t *closure = newClosure(function);
                 push(OBJ_VAL(closure));
+                /**
+                 * fun outer() {
+                 *    var x = 0;
+                 *    fun inner() { <-- Imagine you're here
+                 *       print x;
+                 *    }
+                 * }
+                 */
+                for (int i=0; i<closure->upvalueCount; ++i) {
+                    uint8_t isLocal = READ_BYTE();
+                    uint8_t index = READ_BYTE();
+                    if (isLocal) {
+                        closure->upvalues[i] = captureUpvalue(frame->slots + index);    // frame->slots points to beginning of outer's stack window
+                    } else {
+                        closure->upvalues[i] = frame->closure->upvalues[index];         // point to ObjUpvalue_t object that enclosing function points to 
+                    }
+                }
                 break;
             }
+            case OP_ACCESS_UPVALUE:
+            case OP_ACCESS_UPVALUE_LONG: {
+                unsigned slot = (instruction == OP_ACCESS_UPVALUE) ? READ_BYTE() : READ_BYTES();
+                push(*frame->closure->upvalues[slot]->location);
+                break;
+            }
+            case OP_SET_UPVALUE:
+            case OP_SET_UPVALUE_LONG: {
+                unsigned idx = (instruction == OP_SET_UPVALUE) ? READ_BYTE() : READ_BYTES();
+                *frame->closure->upvalues[idx]->location = peek(0);
+                break;
+            }
+            // case OP_CLOSURE_LONG: {
+            //     ObjFunction_t *function = AS_FUNCTION(READ_CONSTANT_LONG());
+            //     ObjClosure_t *closure = newClosure(function);
+            //     push(OBJ_VAL(closure));
+            //     break;
+            // }
             case OP_TRUE: {
                 push(BOOL_VAL(true));
                 break;
@@ -907,7 +944,7 @@ InterpResult_t interpret(const char *source) {
 
     push(OBJ_VAL(function));
     ObjClosure_t *closure = newClosure(function);
-    pop();  // pop off what we just pushed..
+    pop();  // pop off what we just pushed (GC reasons)..
     push(OBJ_VAL(closure));
     call(closure, 0);
     // CallFrame_t *frame = &vm.frames[vm.frameCount++];

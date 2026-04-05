@@ -315,7 +315,11 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
 
     // For this Compiler_t struct, current->locals[0] refers to the stack location storing this function's corresponding ObjFunction_t
     // ... we'll learn more later about why this is useful
+
+    // UPDATE: On the stack, we're always going to push the function object corresponding to the function being called
+    // Even for the top-level function, we compile it to a function and it's the first thing pushed to the stack
     current->locals = NULL;
+    current->upvalues = NULL;
     initLocals();
     initUpvalues();
     Local_t *local = &current->locals[current->localCount++];
@@ -374,6 +378,7 @@ static int resolveLocal(Compiler_t *compiler, Token_t *name) {
 
 static void initUpvalues(void) {
     size_t oldCapacity = current->function->upvalueCapacity;
+    current->function->upvalueCapacity = GROW_CAPACITY(oldCapacity);
     current->upvalues = GROW_ARRAY(Upvalue_t, current->upvalues, oldCapacity, current->function->upvalueCapacity);
     for (unsigned i=0; i < current->function->upvalueCapacity; ++i) {
         current->upvalues[i].index = -1;
@@ -394,7 +399,7 @@ static int addUpvalue(Compiler_t *compiler, unsigned index, bool isLocal) {
         current->function->upvalueCapacity = GROW_CAPACITY(oldCapacity);
         current->upvalues = GROW_ARRAY(Upvalue_t, current->upvalues, oldCapacity, current->function->upvalueCapacity);
 
-        // Initialize 'unused' upvalues
+        // Initialize 'not yet used' upvalues
         for (unsigned i=oldCapacity; i<current->function->upvalueCapacity; ++i) {
             current->upvalues[i].index = -1;
             current->upvalues[i].isLocal = false;
@@ -406,11 +411,35 @@ static int addUpvalue(Compiler_t *compiler, unsigned index, bool isLocal) {
     return compiler->function->upvalueCount++;
 }
 
+/**
+ * fun outer() {
+ *    var x = "hi";
+ *    fun mid() {
+ *       fun inner() {
+ *          print x;
+ *       }  
+ *    }
+ * }
+ * 
+ * resolveUpvalue(inner, x)                                            return addUpvalue(inner, upvalue, false) *add upvalue to inner.upvalues *
+ *         |                                                                             ^
+ *         V                                                                             |
+ * resolveUpvalue(mid, x)                               *in inner*: upvalue = <index of outer.x upvalue in mid.upvalues>
+ *         |                                                                             ^
+ *         V                                                                             |
+ * resolveLocal(outer, x)  --> |local = <index of x in outer.locals>| --> return addUpvalue(mid, local, true)
+ * 
+ * NOTE: the boolean arg to `addUpvalue` specifies whether the upvalue being added is from the enclosing function's locals (true) or upvalues (false)
+ * 
+ */
+
 static int resolveUpvalue(Compiler_t *compiler, Token_t *name) {
     if (compiler->enclosing == NULL) return -1; // At top level
 
     int local = resolveLocal(compiler->enclosing, name);
     if (local != -1) return addUpvalue(compiler, local, true);
+    int upvalue = resolveUpvalue(compiler->enclosing, name);
+    if (upvalue != -1) return addUpvalue(compiler, upvalue, false);
     return -1;
 }
 
@@ -1371,6 +1400,10 @@ static void function(FunctionType_e type) {
     ObjFunction_t *function = endCompiler();
 //    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
     emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CLOSURE, OP_CLOSURE_LONG);
+    for (int i=0; i<function->upvalueCount; ++i) {  // <-- this makes OP_CLOSURE variable length
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);       // <-- TODO: Modify this s.t. # indexes can be >= 256
+    }
 //    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
     
     // No endScope() b/c compiler's lifetime ends when this function returns

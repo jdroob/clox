@@ -6,4 +6,9 @@
 
 ObjFunction_t *compile(const char *source);
 
+typedef struct {
+    int index;
+    bool isLocal;
+} Upvalue_t;
+
 #endif // CLOX_COMPILER_H

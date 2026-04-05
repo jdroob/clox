@@ -10,7 +10,8 @@ typedef enum {
     OBJ_FUNCTION,
     OBJ_NATIVE,
     OBJ_FILEHANDLE,
-    OBJ_CLOSURE
+    OBJ_CLOSURE,
+    OBJ_UPVALUE
 } Obj_e;
 
 struct Obj_t {
@@ -35,9 +36,19 @@ typedef struct {
     size_t upvalueCapacity;
 } ObjFunction_t;
 
+typedef struct ObjUpvalue_t ObjUpvalue_t;
 typedef struct {
     Obj_t obj;
     ObjFunction_t *function;
+
+    /**
+     * Each (ObjUpvalue_t *) points to an ObjUpvalue_t object containing the
+     * stack location of the upvalue.
+     * 
+     * Here, we declare a pointer to a dynamic array of of ObjUpvalue_t pointers. 
+     */
+    ObjUpvalue_t **upvalues;
+    int upvalueCount;
 } ObjClosure_t;
 
 typedef Value_t (*NativeFn_t)(int argCount, Value_t *args);
@@ -54,10 +65,11 @@ typedef struct {
     FILE *fh;
 } ObjFileHandle_t;
 
-typedef struct {
-    int index;
-    bool isLocal;
-} Upvalue_t;
+typedef struct ObjUpvalue_t {
+    Obj_t obj;
+    Value_t *location;
+} ObjUpvalue_t;
+
 
 #define OBJ_TYPE(value)       (AS_OBJ(value)->type)
 #define IS_STRING(value)      isObjType(value, OBJ_STRING)
@@ -71,6 +83,8 @@ typedef struct {
 #define AS_NATIVE(value)      ((ObjNative_t *)AS_OBJ(value))->function
 #define IS_FILEHANDLE(value)  isObjType(value, OBJ_FILEHANDLE)
 #define AS_FILEHANDLE(value)  (((ObjFileHandle_t *)AS_OBJ(value)))
+#define IS_UPVALUE(value)     isObjType(value, OBJ_UPVALUE);
+#define AS_UPVALUE(value)     (((ObjUpvalue_t *)AS_OBJ(value)))
 
 static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
@@ -80,6 +94,7 @@ ObjClosure_t *newClosure(ObjFunction_t *);
 ObjFunction_t *newFunction(void);
 ObjNative_t *newNative(NativeFn_t function, int arity);
 ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType);
+ObjUpvalue_t *newUpvalue(Value_t *value);
 ObjString_t *makeString(char *chars, int length);
 void printObject(Value_t val);
 // ObjString_t *takeString(char *chars, int length);   // create dynamic string

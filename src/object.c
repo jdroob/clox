@@ -41,6 +41,14 @@ static uint32_t hashString(const char *key, int length) {
 ObjClosure_t *newClosure(ObjFunction_t *function) {
     ObjClosure_t *closure = ALLOCATE_OBJ(ObjClosure_t, sizeof(ObjClosure_t), OBJ_CLOSURE);
     closure->function = function;
+    
+    ObjUpvalue_t **upvalues = ALLOCATE(ObjUpvalue_t*, function->upvalueCount);
+    for (int i=0; i<function->upvalueCount; ++i) {
+        upvalues[i] = NULL;
+    }
+
+    closure->upvalueCount = function->upvalueCount;
+    closure->upvalues = upvalues;
     return closure;
 }
 
@@ -69,6 +77,13 @@ ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessTyp
     fileHandle->name = name;
     fileHandle->accessType = accessType;
     return fileHandle;
+}
+
+ObjUpvalue_t *newUpvalue(Value_t *slot) {
+    ObjUpvalue_t *upvalue = ALLOCATE_OBJ(ObjUpvalue_t, sizeof(ObjUpvalue_t), OBJ_UPVALUE);
+    upvalue->obj.type = OBJ_UPVALUE;
+    upvalue->location = slot;
+    return upvalue;
 }
 
 ObjString_t *makeString(char *chars, int length) {
@@ -110,6 +125,11 @@ void printObject(Value_t val) {
         }
         case OBJ_CLOSURE: {
             printFunction(AS_CLOSURE(val)->function);
+            break;
+        }
+        case OBJ_UPVALUE: {
+            printf("<upvalue %p>", AS_UPVALUE(val)->location);
+            if (appendNewline) printf("\n");
             break;
         }
     }

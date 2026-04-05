@@ -54,8 +54,15 @@ static void freeObject(Obj_t *object) {
         }
         case OBJ_CLOSURE: {
             ObjClosure_t *closure = (ObjClosure_t *)object;
+            FREE_ARRAY(ObjUpvalue_t*, closure->upvalues, closure->upvalueCount);
             // freeObject(closure->function);   // don't free function b/c multiple closures may enclose function
             FREE(ObjClosure_t, object);
+            break;
+        }
+        case OBJ_UPVALUE: {
+            // ObjUpvalue_t *upvalue = (ObjUpvalue_t *)object;
+            FREE(ObjUpvalue_t, object);
+            break;
         }
     }
 }

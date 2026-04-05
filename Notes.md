@@ -1811,3 +1811,7 @@ fun outer() {
 - When a closure needs to access a closed over variable, it goes through the upvalue to access it
 - The compiler creates a closure for each function declaration
 - The VM creates the **capture** - a collection of all upvalues needed by the closure
+- Add `Upvalue_t` type
+- This type stores location of upvalue
+- Each closure maintains an array of Upvalue_t
+- Array is used to resolve names defined in outer functions
