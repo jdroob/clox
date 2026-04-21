@@ -1,0 +1,10 @@
+fun outer() {
+    var rememberMe = "outer";
+    fun inner() {
+        print rememberMe;
+    }
+    return inner;
+}
+
+var f = outer();
+f();    // Should print "outer" but outer() already returned (rememberMe no longer on stack)

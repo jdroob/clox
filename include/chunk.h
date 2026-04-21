@@ -30,6 +30,7 @@ typedef enum {
     OP_MODULO,
     OP_PRINT,
     OP_POP,
+    OP_CLOSE_UPVALUE,
     OP_DEFINE_GLOBAL,
     OP_DEFINE_GLOBAL_LONG,
     OP_ACCESS_LOCAL,

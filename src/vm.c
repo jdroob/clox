@@ -423,6 +423,7 @@ void initVM(void) {
     initValueArray(&vm.globalValues);
     initIsFinalsArray(&vm.globalIsFinals);
     resetStack();
+    vm.openUpvalues = NULL;
     
     // define native functions
     defineNative("clock", clockNative, 0);
@@ -510,9 +511,62 @@ static bool callValue(Value_t callee, unsigned argCount) {
     return false;
 }
 
-static ObjUpvalue_t *captureUpvalue(Value_t *slot) {
-    ObjUpvalue_t *createdUpvalue = newUpvalue(slot);
+static ObjUpvalue_t *captureUpvalue(Value_t *local) {
+    ObjUpvalue_t *prevUpvalue = NULL;
+    ObjUpvalue_t *upvalue = vm.openUpvalues;
+    while (upvalue != NULL && upvalue->location > local) {
+        prevUpvalue = upvalue;
+        upvalue = upvalue->nextUpvalue;
+    }
+
+    if (upvalue != NULL && upvalue->location == local) {
+        return upvalue;
+    }
+
+    ObjUpvalue_t *createdUpvalue = newUpvalue(local);
+    createdUpvalue->nextUpvalue = upvalue;
+    if (prevUpvalue == NULL) {
+        vm.openUpvalues = createdUpvalue;
+    } else {
+        prevUpvalue->nextUpvalue = createdUpvalue;
+    }
+
     return createdUpvalue;
+}
+
+// This would save every single upvalue even if not needed
+//static void saveUpvalues(CallFrame_t *frame) {
+//    // Memory leak?
+//    for (int i=0; i<frame->closure->upvalueCount; ++i) {
+//        Value_t *valToSave = ALLOCATE(Value_t, 1);
+//        *valToSave = *frame->closure->upvalues[i]->location;
+//        frame->closure->upvalues[i]->location = valToSave;
+//    }
+//}
+
+// static void closeUpvalues(Value_t *slot) {
+//    ObjUpvalue_t *curr;
+//    while (curr) {
+//        if (curr->location == slot) {
+//            Value_t *closedValue = (Value_t *)malloc(sizeof(Value_t));
+//            *closedValue = *slot;
+//            return;
+//        }
+//        curr = curr->nextUpvalue;
+//    }
+//    if (!curr) {
+//        fprintf(stderr, "closeUpvalues: something went very wrong");
+//        exit(EXIT_FAILURE);
+//    }
+// }
+//
+static void closeUpvalues(Value_t *last) {
+    while (vm.openUpvalues != NULL && vm.openUpvalues->location >= last) {
+        ObjUpvalue_t *upvalue = vm.openUpvalues;
+        upvalue->closed = *upvalue->location;
+        upvalue->location = &upvalue->closed;
+        vm.openUpvalues = upvalue->nextUpvalue;
+    }
 }
 
 static InterpResult_t run(void) {
@@ -577,6 +631,7 @@ static InterpResult_t run(void) {
         switch (instruction = READ_BYTE()) {
             case OP_RETURN: {
                 Value_t retVal = pop(); // grab return value
+                closeUpvalues(frame->slots);
                 vm.frameCount--;        // pop off frame
                 if (vm.frameCount == 0) {
                     pop(); // pop off <script>
@@ -615,10 +670,10 @@ static InterpResult_t run(void) {
                  */
                 for (int i=0; i<closure->upvalueCount; ++i) {
                     uint8_t isLocal = READ_BYTE();
-                    uint8_t index = READ_BYTE();
+                    uint8_t index = READ_BYTE(); // TODO: Need to allow for 3-byte indices as well
                     if (isLocal) {
                         closure->upvalues[i] = captureUpvalue(frame->slots + index);    // frame->slots points to beginning of outer's stack window
-                    } else {
+                    } else {  // nested closure referring to upvalue
                         closure->upvalues[i] = frame->closure->upvalues[index];         // point to ObjUpvalue_t object that enclosing function points to 
                     }
                 }
@@ -714,6 +769,11 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_POP: {
+                pop();
+                break;
+            }
+            case OP_CLOSE_UPVALUE: {
+                closeUpvalues(vm.stackTop - 1);
                 pop();
                 break;
             }

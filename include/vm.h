@@ -46,6 +46,7 @@ typedef struct {
     MutableTable_t  globalIsFinals;
     Obj_t           *objects;
     int             switchCounter;  // HACK - ensure stack is in proper state after switch
+    ObjUpvalue_t    *openUpvalues;
 } VM_t;
 
 extern VM_t vm;

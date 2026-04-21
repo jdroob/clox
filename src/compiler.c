@@ -53,6 +53,7 @@ typedef struct {
  */
 typedef struct {
     Token_t name;
+    bool isCaptured;
     int depth;
 } Local_t;
 
@@ -61,7 +62,7 @@ typedef enum {
     TYPE_FUNCTION
 } FunctionType_e;
 
-typedef struct {
+typedef struct Compiler_t {
     struct Compiler_t *enclosing;  // pointer to compiler for function enclosing function this compiler object is associated with
     ObjFunction_t *function;
     FunctionType_e type;
@@ -275,6 +276,7 @@ static void initLocals(void) {
     current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
     for (unsigned i=0; i < current->capacity; ++i) {
         current->locals[i].depth = -1;
+        current->locals[i].isCaptured = false;
     }
     initIsFinalsArray(&current->localIsFinals);
     writeIsFinalsArray(&current->localIsFinals, true);
@@ -324,6 +326,7 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     initUpvalues();
     Local_t *local = &current->locals[current->localCount++];
     local->depth = 0;
+    local->isCaptured = false;
     local->name.start = "";
     local->name.length = 0;
 }
@@ -437,7 +440,10 @@ static int resolveUpvalue(Compiler_t *compiler, Token_t *name) {
     if (compiler->enclosing == NULL) return -1; // At top level
 
     int local = resolveLocal(compiler->enclosing, name);
-    if (local != -1) return addUpvalue(compiler, local, true);
+    if (local != -1) {
+        compiler->enclosing->locals[local].isCaptured = true;   // compiler->enclosing's local knows it has been captured
+        return addUpvalue(compiler, local, true);
+    }
     int upvalue = resolveUpvalue(compiler->enclosing, name);
     if (upvalue != -1) return addUpvalue(compiler, upvalue, false);
     return -1;
@@ -830,9 +836,10 @@ static void addLocal(Token_t *name) {
         current->capacity = GROW_CAPACITY(oldCapacity);
         current->locals = GROW_ARRAY(Local_t, current->locals, oldCapacity, current->capacity);
 
-        // Initialize 'unused' locals to depth -1
+        // Initialize 'unused' locals to depth -1, isCaptured to false
         for (unsigned i=oldCapacity; i<current->capacity; ++i) {
             current->locals[i].depth = -1;
+            current->locals[i].isCaptured = false;
         }
     }
 
@@ -946,7 +953,11 @@ static void endScope(void) {
     // > 1 due to reserved slot for script
     while (current->localCount > 1 &&
            current->locals[current->localCount - 1].depth > current->scopeDepth) {
-        emitByte(OP_POP);
+        if (current->locals[current->localCount - 1].isCaptured) {
+            emitByte(OP_CLOSE_UPVALUE);
+        } else {
+            emitByte(OP_POP);
+        }
         current->localCount--;
 
         // Assumption: # finalPops == # finals in scope

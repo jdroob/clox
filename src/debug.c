@@ -50,6 +50,7 @@
      (instruction) == OP_ENDSWITCH ? "OP_ENDSWITCH" : \
      (instruction) == OP_CLOSURE ? "OP_CLOSURE" : \
      (instruction) == OP_CLOSURE_LONG ? "OP_CLOSURE_LONG" : \
+     (instruction) == OP_CLOSE_UPVALUE ? "OP_CLOSE_UPVALUE" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -134,6 +135,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_NOT:
         case OP_PRINT:
         case OP_POP:
+        case OP_CLOSE_UPVALUE:
         case OP_SWITCH:
         case OP_CASE:
         case OP_DEFAULTCASE:

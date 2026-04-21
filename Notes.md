@@ -1815,3 +1815,166 @@ fun outer() {
 - This type stores location of upvalue
 - Each closure maintains an array of Upvalue_t
 - Array is used to resolve names defined in outer functions
+
+4/12/2026: 
+- Still plugging away - just had to learn some C++ real quick lol
+- At this point, we've emitted `OP_CLOSURE` instructions
+- In these instrs, a closure object is eventually pushed to the stack
+- This object contains number of upvalues in closure
+- The next operands will be a sequence of `isLocal`, `index` pairs
+- When `OP_CLOSURE` is executed in the VM, this sequence will be iterated over
+`if (isLocal) { closure->upvalues[i] = captureUpvalue(frame->slots + index);  // frame->slots points to stack window of enclosing function }`
+`...`
+`else { closure->upvalues[i]->location = frame->closure->upvalues[index];   // point to where enclosing function's upvalue pointer points }`
+
+- what happens when the closure (function + env) outlives the function in which the upvalue was created?
+- we can't lose it... :'(
+- we must move it to the heap from the value stack
+- **Terminology Alert:**
+    - *open upvalue* - upvalue that points to a local variable on the value stack
+    - *closed upvalue* - upvalue that points to a value that now lives on the heap
+- We can still refer to this value through `closure->upvalues[i]`
+- **When do we close the upvalue?**
+- When the local variable referring to said value goes out of scope
+- To keep track of these values, instead of emitting an `OP_POP` when the local goes out of scope, emit `OP_CLOSE_UPVALUE`
+- We added an `isCaptured` field to all Local_t types to track which ones are captured by inner closures
+- Only `isCaptured == true` locals are closed
+
+- Book mentions how sibling closures would have separate ObjUpvalue_t pointers
+
+```
+fun outest() {
+    var x = 42;
+    fun inner1() {
+        print "inner1" + x;
+    }
+    fun inner2() {
+        print "inner2" + x;
+    }
+}
+```
+- Here, the inner1 and inner2 closures would each execute the 
+
+`if (isLocal) closure->upvalues[i] = captureUpvalue(frame->slots + index);  // frame->slots points to stack window of enclosing function`
+
+branch
+
+- Therefore, they each call
+```
+static ObjUpvalue_t *captureUpvalue(Value_t *slot) {
+    ObjUpvalue_t *createdUpvalue = newUpvalue(slot);
+    return createdUpvalue;
+}
+```
+
+and create a unique ObjUpvalue_t object
+- NOTE: Despite there being 2 ObjUpvalue_t objects, both of them refer to the same location (`slot`)
+
+- I think the idea here is: while we *could* simply copy the Value_t on the value stack to the heap and just fix up all the upvalues that referred to the closed upvalue, that'd be inefficient. Instead, we should make it so all ObjUpvalues referencing the same variable, themselves, are the same
+
+- So in prevous example, we'd want `inner1` and `inner2` upvalue pointer to refer to the same ObjUpvalue_t object
+
+- NOTE: Again, the nested case works correctly (nested closure points to same ObjUpvalue_t object as enclosing closure) - it's the sibling case that needs work
+
+- **SOLUTION** - When calling `captureUpvalue`, search to see if a closure already refers to an ObjUpvalue_t for the variable that needs to be captured
+- **IMMEDIATE PROBLEM** How can we search for this? Once we're inside a nested closure, we have no way of knowing if a sibling closure already captured (and created) an ObjUpvalue_t object referring to the variable in question
+
+4/19/2026
+- This chapter will be finished! ..eventually!
+- We discussed the sibling closures pointing to separate ObjUpvalue_t objects (which themselves point to the *same* Value_t on the value stack) above, right? Good.
+- Part of the fix for this is going to be to maintain a list of all ObjUpvalue_t's that've been created. This way, when a closure is being created and one of its upvalues are local (local to the enclosing function) - then there will first be a check to see if another closure has already created an ObjUpvalue_t for this purpose
+- The way we'll do this is by having the VM maintain a linked list of ObjUpvalue_t's
+- The head of the list will point to whatever's higher up on the stack (closures tend to capture vars near the top of the stack)
+- This allows us to abort the list lookup early too - if begin looking at locations on the value stack that are below where the local is located, then that local must not've been added to the `openUpvalues` list yet
+- The reason we choose a linked list here is b/c we're going to have to support fast insertions in the middle of the list to maintain list order
+- Following example should produce linked list like: c -> b -> a -> NULL since c will be closer to top of stack after VM executes below snippet:
+```
+{
+ var a = 1;
+ fun f() {
+ print a;
+ }
+ var b = 2;
+ fun g() {
+ print b;
+ }
+ var c = 3;
+ fun h() {
+ print c;
+ }
+}
+```
+- Impl:
+    - We add `ObjValue_t *next` to the ObjValue_t structure (object.h)
+    - We init ^ to NULL in object.c::newUpvalue()
+    - We add an `openUpvalues` list to the vm structure
+    - `vm.openUpvalues = NULL` in `resetStack`
+    - Modify `captureUpvalue` as follows
+
+    ```C
+    static ObjUpvalue_t *captureUpvalue(Value_t *local) {
+        ObjUpvalue_t *prevUpvalue = NULL;
+        ObjUpvalue_t *upvalue = vm.openUpvalues;
+        // Iterate through openUpvalues till end OR when local to (maybe) be added is higher up in stack than upvalue->location
+        while (upvalue != NULL && upvalue->location > local) {
+            prevUpvalue = upvalue;
+            upvalue = upvalue->next;
+        }
+
+        // If we found a matching ObjUpvalue_t, return reference to it
+        if (upvalue != NULL && upvalue->location == local) {
+            return upvalue;
+        }
+
+        ObjUpvalue_t *createdUpvalue = newUpvalue(local);
+        createdUpvalue->next = upvalue;
+        if (prevUpvalue == NULL) {
+            // Either list was empty or we're adding an ObjUpvalue_t whose Value_t is higher in the value stack than anything else in openUpvalues list
+            vm.openUpvalues = createdUpvalue;
+        } else {
+            // Insert new ObjUpvalue_t into middle of openUpvalues
+            prevUpvalue->next = createdUpvalue;
+        }
+
+        return createdUpvalue;
+    }
+    ```
+- From the book:
+```
+There are three reasons we can exit the loop:
+1. The local slot we stopped at is the slot we’re looking for. We found an existing upvalue capturing the variable, so we reuse that upvalue.
+2. We ran out of upvalues to search. When upvalue is NULL, it means every open upvalue in the list points to locals above the slot we’re looking for, or (more likely) the upvalue list is empty. Either way, we didn’t find an upvalue for our slot.
+3. We found an upvalue whose local slot is below the one we’re looking for. Since the list is sorted, that means we’ve gone past the slot we are closing over, and thus there must not be an existing upvalue
+for it.
+```
+
+4/20/2026;
+- Added rest closing upvalues logic - will discuss shortly
+- Hit ugly C bug
+
+```
+
+void freeObjects(void) { 
+    Obj_t *next; 
+    Obj_t *object = vm.objects; 
+    while (object) { 
+        next = object->next; 
+        freeObject(object); 
+        object = next; 
+    } 
+}
+
+I accidentally forgot to get rid of `isSaved` in this struct:
+
+typedef struct ObjUpvalue_t { 
+    bool isSaved; 
+    Obj_t obj; 
+    Value_t *location; 
+    Value_t closed; 
+    struct ObjUpvalue_t *nextUpvalue; 
+} ObjUpvalue_t;
+
+this was causing above freeObjects function to have invalid read on object = object->next. object->next would be garbage
+```
+
+- Don't know how long bug has been there but `freeObjects` assumed first member of object was always Obj_t (remember we're using type punning). Instead, I somehow added isSaved first - causing total chaos.
