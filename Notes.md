@@ -1971,7 +1971,7 @@ typedef struct ObjUpvalue_t {
     Obj_t obj; 
     Value_t *location; 
     Value_t closed; 
-    struct ObjUpvalue_t *nextUpvalue; 
+    struct ObjUpvalue_t *next; 
 } ObjUpvalue_t;
 
 this was causing above freeObjects function to have invalid read on object = object->next. object->next would be garbage

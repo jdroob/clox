@@ -69,7 +69,7 @@ typedef struct ObjUpvalue_t {
     Obj_t obj;
     Value_t *location;
     Value_t closed;
-    struct ObjUpvalue_t *nextUpvalue;
+    struct ObjUpvalue_t *next;
 } ObjUpvalue_t;
 
 

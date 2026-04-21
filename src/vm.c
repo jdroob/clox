@@ -516,7 +516,7 @@ static ObjUpvalue_t *captureUpvalue(Value_t *local) {
     ObjUpvalue_t *upvalue = vm.openUpvalues;
     while (upvalue != NULL && upvalue->location > local) {
         prevUpvalue = upvalue;
-        upvalue = upvalue->nextUpvalue;
+        upvalue = upvalue->next;
     }
 
     if (upvalue != NULL && upvalue->location == local) {
@@ -524,11 +524,11 @@ static ObjUpvalue_t *captureUpvalue(Value_t *local) {
     }
 
     ObjUpvalue_t *createdUpvalue = newUpvalue(local);
-    createdUpvalue->nextUpvalue = upvalue;
+    createdUpvalue->next = upvalue;
     if (prevUpvalue == NULL) {
         vm.openUpvalues = createdUpvalue;
     } else {
-        prevUpvalue->nextUpvalue = createdUpvalue;
+        prevUpvalue->next = createdUpvalue;
     }
 
     return createdUpvalue;
@@ -552,7 +552,7 @@ static ObjUpvalue_t *captureUpvalue(Value_t *local) {
 //            *closedValue = *slot;
 //            return;
 //        }
-//        curr = curr->nextUpvalue;
+//        curr = curr->next;
 //    }
 //    if (!curr) {
 //        fprintf(stderr, "closeUpvalues: something went very wrong");
@@ -565,7 +565,7 @@ static void closeUpvalues(Value_t *last) {
         ObjUpvalue_t *upvalue = vm.openUpvalues;
         upvalue->closed = *upvalue->location;
         upvalue->location = &upvalue->closed;
-        vm.openUpvalues = upvalue->nextUpvalue;
+        vm.openUpvalues = upvalue->next;
     }
 }
 

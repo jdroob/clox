@@ -83,7 +83,7 @@ ObjUpvalue_t *newUpvalue(Value_t *slot) {
     ObjUpvalue_t *upvalue = ALLOCATE_OBJ(ObjUpvalue_t, sizeof(ObjUpvalue_t), OBJ_UPVALUE);
     upvalue->obj.type = OBJ_UPVALUE;
     upvalue->location = slot;
-    upvalue->nextUpvalue = NULL;
+    upvalue->next = NULL;
     upvalue->closed = NIL_VAL;
     return upvalue;
 }
