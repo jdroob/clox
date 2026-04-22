@@ -187,7 +187,8 @@ static void emitLongConstant(int idx) {
     //    3 least significant bytes of idx must be written to bytecode chunk
     //    e.g. index = 257
     //         index =    0000 0000 0000 0001 0000 0001
-    //         index =       0    0    0    1    0    1
+    //         index =      00   00   00   01   00   01
+    //                                      ^    ^    ^    (^ = to be written to bytecode)
 
     emitByte(OP_CONSTANT_LONG);
     emitByte(((unsigned)idx >> 16) & MASK);
@@ -307,7 +308,7 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     compiler->ba_localCount_SnapShot = -1;
     compiler->loopDepth = 0;
     compiler->switchDepth = 0;
-    compiler->capacity = 0; // TEST THIS
+    compiler->capacity = 0; // TODO: TEST THIS
     compiler->function = newFunction();
     current = compiler;
 
@@ -364,7 +365,7 @@ static bool identifiersEqual(Token_t *a, Token_t *b) {
 }
 
 static int resolveLocal(Compiler_t *compiler, Token_t *name) {
-    // Important that we walk back to preserve expected shadowing semantics
+    // Important that we walk backward to preserve expected shadowing semantics
     // NOTE: Each function has its own Compiler_t; we're only looking at scopes within a single function
     for (int i=compiler->localCount - 1; i>=0; --i) {
         Local_t *local = &compiler->locals[i];
@@ -424,7 +425,7 @@ static int addUpvalue(Compiler_t *compiler, unsigned index, bool isLocal) {
  *    }
  * }
  * 
- * resolveUpvalue(inner, x)                                            return addUpvalue(inner, upvalue, false) *add upvalue to inner.upvalues *
+ * resolveUpvalue(inner, x)                                            return addUpvalue(inner, upvalue, false) *add upvalue to inner.upvalues*
  *         |                                                                             ^
  *         V                                                                             |
  * resolveUpvalue(mid, x)                               *in inner*: upvalue = <index of outer.x upvalue in mid.upvalues>
