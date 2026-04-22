@@ -1,9 +1,11 @@
-fun makeClosure() {
+// simpleClosure2.lox
+fun makeClosure(param) {
  var local = "local";
  fun closure() {
     print local;
+    print param;
  }
  return closure;
 }
-var closure = makeClosure();
+var closure = makeClosure("john");
 closure();

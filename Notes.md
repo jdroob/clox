@@ -1862,7 +1862,7 @@ branch
 - Therefore, they each call
 ```
 static ObjUpvalue_t *captureUpvalue(Value_t *slot) {
-    ObjUpvalue_t *createdUpvalue = newUpvalue(slot);
+    ObjUpvalue_t *createdUpvalue = newUpvalue(slot);   // <-- new ObjUpvalue_t object alloc'd here
     return createdUpvalue;
 }
 ```
@@ -1877,7 +1877,7 @@ and create a unique ObjUpvalue_t object
 - NOTE: Again, the nested case works correctly (nested closure points to same ObjUpvalue_t object as enclosing closure) - it's the sibling case that needs work
 
 - **SOLUTION** - When calling `captureUpvalue`, search to see if a closure already refers to an ObjUpvalue_t for the variable that needs to be captured
-- **IMMEDIATE PROBLEM** How can we search for this? Once we're inside a nested closure, we have no way of knowing if a sibling closure already captured (and created) an ObjUpvalue_t object referring to the variable in question
+- **IMMEDIATE PROBLEM** How can we search for this? Once we're inside a closure (exetuting an `OP_CLOSURE` instr), we have no way of knowing if a sibling closure already captured (and created) an ObjUpvalue_t object referring to the variable in question
 
 4/19/2026
 - This chapter will be finished! ..eventually!
@@ -1926,6 +1926,7 @@ and create a unique ObjUpvalue_t object
             return upvalue;
         }
 
+        // Otherwise, there's a new upvalue that needs to be added
         ObjUpvalue_t *createdUpvalue = newUpvalue(local);
         createdUpvalue->next = upvalue;
         if (prevUpvalue == NULL) {
@@ -1953,7 +1954,7 @@ for it.
 - Hit ugly C bug
 
 ```
-
+// in memory.c
 void freeObjects(void) { 
     Obj_t *next; 
     Obj_t *object = vm.objects; 
@@ -1978,3 +1979,70 @@ this was causing above freeObjects function to have invalid read on object = obj
 ```
 
 - Don't know how long bug has been there but `freeObjects` assumed first member of object was always Obj_t (remember we're using type punning). Instead, I somehow added isSaved first - causing total chaos.
+
+4/21/2026:
+- So how did we close upvalues whose enclosing functions are about to return?
+
+```C
+static void closeUpvalues(Value* last) {
+ while (vm.openUpvalues != NULL &&
+ vm.openUpvalues->location >= last) {
+ ObjUpvalue* upvalue = vm.openUpvalues;
+ upvalue->closed = *upvalue->location;
+ upvalue->location = &upvalue->closed;
+ vm.openUpvalues = upvalue->next;
+ }
+}
+```
+
+called here
+
+```C
+case OP_CLOSE_UPVALUE:
+ closeUpvalues(vm.stackTop - 1);
+ pop();
+ break;
+```
+
+- Idea is for each open upvalue that is higher up or equal location (on value stack) to last, close it
+- closing means:
+    - copying value at upvalue->location to upvalue->closed
+        - upvalue->closed is a Value_t added to ObjUpvalue_t struct
+    - Modifying location to point to *ObjUpvalue_t's own* `closed`
+    - Bumping `vm.openUpvalues` to point to next ObjUpvalue_t (which is still open)
+
+- Book also mentions following edge case:
+
+```
+// simpleClosure2.lox
+fun makeClosure(param) {
+ var local = "local";
+ fun closure() {
+    print local;
+    print param;
+ }
+ return closure;
+}
+var closure = makeClosure("john");
+closure();
+```
+```shell
+$ bin/lox test/ch25/simpleClosure2.lox 
+"local"
+"local"
+$ 
+```
+
+- ... what the heck?
+- the issue is that closed over values at outer-most function parameter scope will not have `OP_CLOSE_UPVALUE`'s emitted
+    - stare at function() in compiler.c for details
+- To fix this, we add `closeUpvalues(frame->slots)` to `OP_RETURN`
+- This ensures all "to-be-closed" upvalues in this edge case are closed over
+
+```shell
+$ bin/lox test/ch25/simpleClosure2.lox 
+"local"
+"john"
+$ 
+```
+
