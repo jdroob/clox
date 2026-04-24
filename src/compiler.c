@@ -47,9 +47,10 @@ typedef struct {
 } ParseRule_t;
 
 /**
- * Each local variable has a name and a depth.
+ * Each local variable has a name, isCaptured flag, and depth.
  * The depth is simply its scope depth.
  * This allows us to know which vars to discard when a scope ends.
+ * isCaptured indicates whether the var is closed over.
  */
 typedef struct {
     Token_t name;

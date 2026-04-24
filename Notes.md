@@ -2046,3 +2046,5 @@ $ bin/lox test/ch25/simpleClosure2.lox
 $ 
 ```
 
+4/24/2026:
+- TODO: Do ch 25 exercises 2 & 3
