@@ -224,6 +224,7 @@ static ObjFunction_t *endCompiler(void) {
         return;
     }
     FREE_ARRAY(Local_t, current->locals, current->capacity);
+    // FREE_ARRAY(Upvalue_t, current->upvalues, current->function->upvalueCapacity);
     freeIsFinalsArray(&current->localIsFinals);
     freeBreakJumpArray(&current->breakJumps);
     freeBreakJumpArray(&current->breakAllJumps);
@@ -314,7 +315,9 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     current = compiler;
 
     if (type != TYPE_SCRIPT) {
-        current->function->name = makeString(parser.previous.start, parser.previous.length);
+        ObjString_t *funcName = makeString(parser.previous.start, parser.previous.length);
+        turnOffProtectMode((Obj_t *)funcName);
+        current->function->name = funcName;
     }
 
     // For this Compiler_t struct, current->locals[0] refers to the stack location storing this function's corresponding ObjFunction_t
@@ -356,8 +359,10 @@ static void number(bool canAssign) {
 }
 
 static void string(bool canAssign) {
-    emitConstant(OBJ_VAL(makeString(parser.previous.start + 1, 
-                                     parser.previous.length - 2)));
+    ObjString_t *string = makeString(parser.previous.start + 1, 
+                                     parser.previous.length - 2);
+    emitConstant(OBJ_VAL(string));
+    turnOffProtectMode((Obj_t *)string);
 }
 
 static bool identifiersEqual(Token_t *a, Token_t *b) {
@@ -815,7 +820,8 @@ static void markInitialized(void) {
 static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
     Value_t idxVal;
     unsigned idx;
-    Value_t key = OBJ_VAL(makeString(identifier->start, identifier->length));
+    ObjString_t *strIdentifier = makeString(identifier->start, identifier->length);
+    Value_t key = OBJ_VAL(strIdentifier);
     if (tableGet(&vm.globalNames, key, &idxVal)) {
         // TODO: fix memory leak here... if key already exists in table, it should be freed
         idx = (unsigned)AS_NUMBER(idxVal);
@@ -825,6 +831,7 @@ static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
         writeValueArray(&vm.globalValues, UNDEFINED_VAL);
         writeIsFinalsArray(&vm.globalIsFinals, isFinal);
     }
+    turnOffProtectMode((Obj_t *)strIdentifier);
     return idx;
 }
 
@@ -1389,6 +1396,17 @@ static void switchStatement(void) {
     // current->breakTarget = breakTarget;
 }
 
+static void protectFunction(ObjFunction_t *function) {
+    function->obj.isProtected = true; 
+    function->name->obj.isProtected = true;
+    markArray(&function->chunk.constants);
+}
+
+static void turnOffFunctionProtection(ObjFunction_t *function) {
+    function->obj.isProtected = false; 
+    function->name->obj.isProtected = false;
+}
+
 static void function(FunctionType_e type) {
     Compiler_t compiler;    // track compilation data  for this function
     initCompiler(&compiler, TYPE_FUNCTION);
@@ -1410,13 +1428,18 @@ static void function(FunctionType_e type) {
     consume(TOKEN_LEFT_BRACE, "Expect a '{' before function body.");
     block();    // TOKEN_RIGHT_BRACE consumed in block()
 
+    Compiler_t *compiledFunction = current;
     ObjFunction_t *function = endCompiler();
+    protectFunction(function);
 //    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
     emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CLOSURE, OP_CLOSURE_LONG);
     for (int i=0; i<function->upvalueCount; ++i) {  // <-- this makes OP_CLOSURE variable length
         emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
         emitByte(compiler.upvalues[i].index);       // <-- TODO: Modify this s.t. # indexes can be >= 256
     }
+    turnOffFunctionProtection(function);
+
+    FREE_ARRAY(Upvalue_t, compiledFunction->upvalues, compiledFunction->function->upvalueCapacity);
 //    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
     
     // No endScope() b/c compiler's lifetime ends when this function returns
@@ -1546,8 +1569,9 @@ ObjFunction_t *compile(const char *source) {
         declaration();
     }
 
-    // freeTable(&vm.globalNames);
+    FREE_ARRAY(Upvalue_t, compiler.upvalues, compiler.function->upvalueCapacity);
     freeTable(&literals);
+    
     ObjFunction_t *function = endCompiler();
 
     // #ifdef DEBUG_CHUNK
@@ -1556,4 +1580,21 @@ ObjFunction_t *compile(const char *source) {
     // #endif
 
     return parser.hadError ? NULL : function;
+}
+
+static void markConstants(Compiler_t *compiler) {
+    markArray(&compiler->function->chunk.constants);
+}
+
+void markCompilerRoots(void) {
+    /**
+     * Caution: Don't modify current here
+     *          Just initialize compiler to current and walk up closure chain
+     */
+    Compiler_t *compiler = current;
+    while (compiler != NULL) {
+        markObject((Obj_t *)compiler->function);
+        markConstants(compiler);
+        compiler = compiler->enclosing;
+    }
 }

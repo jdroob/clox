@@ -17,12 +17,13 @@ typedef enum {
 struct Obj_t {
     Obj_e type;
     Obj_t *next;
+    bool isMarked;
+    bool isProtected;
 };
 
 struct ObjString_t {
     Obj_t obj;
     int length;
-    bool isConst;
     uint32_t hash;
     char chars[];
 };
@@ -32,7 +33,7 @@ typedef struct {
     int arity;
     Chunk_t chunk;
     ObjString_t *name;
-    int upvalueCount;
+    int upvalueCount;   // TODO: upvalueCount should be in ObjFunction xor ObjClosure?
     size_t upvalueCapacity;
 } ObjFunction_t;
 
@@ -60,6 +61,7 @@ typedef struct {
 
 typedef struct {
     Obj_t obj;
+    bool isOpen;
     const char *name;
     const char *accessType;
     FILE *fh;
@@ -73,20 +75,24 @@ typedef struct ObjUpvalue_t {
 } ObjUpvalue_t;
 
 
-#define OBJ_TYPE(value)       (AS_OBJ(value)->type)
-#define IS_STRING(value)      isObjType(value, OBJ_STRING)
-#define AS_STRING(value)      ((ObjString_t *)AS_OBJ(value))
-#define AS_CSTRING(value)     (((ObjString_t *)AS_OBJ(value))->chars)
-#define IS_CLOSURE(value)     isObjType(value, OBJ_CLOSURE)
-#define AS_CLOSURE(value)     ((ObjClosure_t *)AS_OBJ(value))
-#define IS_FUNCTION(value)    isObjType(value, OBJ_FUNCTION)
-#define AS_FUNCTION(value)    ((ObjFunction_t *)AS_OBJ(value))
-#define IS_NATIVE(value)      isObjType(value, OBJ_NATIVE)
-#define AS_NATIVE(value)      ((ObjNative_t *)AS_OBJ(value))->function
-#define IS_FILEHANDLE(value)  isObjType(value, OBJ_FILEHANDLE)
-#define AS_FILEHANDLE(value)  (((ObjFileHandle_t *)AS_OBJ(value)))
-#define IS_UPVALUE(value)     isObjType(value, OBJ_UPVALUE);
-#define AS_UPVALUE(value)     (((ObjUpvalue_t *)AS_OBJ(value)))
+#define OBJ_TYPE(value)            (AS_OBJ(value)->type)
+#define IS_MARKED(value)           (AS_OBJ(value)->isMarked)
+#define IS_STRING(value)           isObjType(value, OBJ_STRING)
+#define AS_STRING(value)           ((ObjString_t *)AS_OBJ(value))
+#define AS_CSTRING(value)          (((ObjString_t *)AS_OBJ(value))->chars)
+#define IS_PROTECTED(value)        (AS_OBJ(value)->isProtected)
+#define IS_CLOSURE(value)          isObjType(value, OBJ_CLOSURE)
+#define AS_CLOSURE(value)          ((ObjClosure_t *)AS_OBJ(value))
+#define IS_FUNCTION(value)         isObjType(value, OBJ_FUNCTION)
+#define AS_FUNCTION(value)         ((ObjFunction_t *)AS_OBJ(value))
+#define IS_NATIVE(value)           isObjType(value, OBJ_NATIVE)
+#define AS_NATIVE(value)           ((ObjNative_t *)AS_OBJ(value))->function
+#define IS_FILEHANDLE(value)       isObjType(value, OBJ_FILEHANDLE)
+#define AS_FILEHANDLE(value)       (((ObjFileHandle_t *)AS_OBJ(value)))
+#define CLOSE_FILEHANDLE(value)    (AS_FILEHANDLE(value)->isOpen = false)
+#define IS_FILEHANDLE_OPEN(value)  (AS_FILEHANDLE(value)->isOpen == true)
+#define IS_UPVALUE(value)          isObjType(value, OBJ_UPVALUE);
+#define AS_UPVALUE(value)          (((ObjUpvalue_t *)AS_OBJ(value)))
 
 static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
@@ -98,6 +104,8 @@ ObjNative_t *newNative(NativeFn_t function, int arity);
 ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType);
 ObjUpvalue_t *newUpvalue(Value_t *value);
 ObjString_t *makeString(char *chars, int length);
+void turnOnProtectMode(Obj_t *object);
+void turnOffProtectMode(Obj_t *object);
 void printObject(Value_t val);
 // ObjString_t *takeString(char *chars, int length);   // create dynamic string
 // ObjString_t *copyString(const char *chars, int length); // copy string from source

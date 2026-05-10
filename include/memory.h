@@ -5,6 +5,10 @@
 #include "object.h"
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize);
+void collectGarbage(void);
+void markObject(Obj_t *object);
+void markValue(Value_t value);
+void markArray(ValueArray_t *array);
 void freeObjects(void);
 
 #define GROW_CAPACITY(capacity) \

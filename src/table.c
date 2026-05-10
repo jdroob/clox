@@ -33,6 +33,7 @@ uint32_t hashDouble(double value) {
 static uint32_t getHash(Value_t key) {
     switch (key.type) {
         case VAL_BOOL: return key.as.boolean ? 3 : 5;
+        case VAL_EMPTY:
         case VAL_NIL:  return 7;
         case VAL_NUM:  return hashDouble(AS_NUMBER(key));
         case VAL_OBJ: {
@@ -202,5 +203,27 @@ ObjString_t *tableFindString(Table_t *table, const char *chars, int length, uint
                 }
         }
         index = (index + 1) % table->capacity;
+    }
+}
+
+void markTable(Table_t *table) { 
+    for (size_t i=0; i<table->capacity; ++i) {
+        Entry_t *entry = &table->entries[i];
+        markObject(AS_OBJ(entry->key));  // mark ObjString_t (name of var)
+        unsigned idx = (unsigned)AS_NUMBER(entry->value);
+        if (vm.globalValues.values != NULL) {
+            markValue(getValueAt(&vm.globalValues, idx));  // for vm startup edge case
+        }
+    }
+}
+
+void tableRemoveWhite(Table_t *table) {
+    for (size_t i=0; i<table->capacity; ++i) {
+        Entry_t *entry = &table->entries[i];
+        if (AS_OBJ(entry->key) != NULL && 
+            !IS_MARKED(entry->key) &&
+            !IS_PROTECTED(entry->key)) {
+            tableDelete(table, entry->key);   // ensure no dangling pointers to interned strings
+        }
     }
 }

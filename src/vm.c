@@ -64,7 +64,7 @@ static Value_t freadNative(int argCount, Value_t *args) {
     long length = ftell(fh);
     fseek(fh, 0, SEEK_SET);
 
-    char *contents = ALLOCATE(char, length + 1);
+    char contents[length + 1];
     size_t bytesRead = fread(contents, 1, length, fh);
     if (bytesRead != length) {
         runtimeError(
@@ -104,7 +104,8 @@ static Value_t fwriteNative(int argCount, Value_t *args) {
 
 static Value_t fcloseNative(int argCount, Value_t *args) {
     // return 0 on success? ERR_VAL on failure?
-    if (!IS_FILEHANDLE(args[0])) {
+    Value_t fhVal = args[0];
+    if (!IS_FILEHANDLE(fhVal)) {
         runtimeError("close requires file handle argument type");
         return ERR_VAL;
     }
@@ -114,6 +115,8 @@ static Value_t fcloseNative(int argCount, Value_t *args) {
         runtimeError("Error closing file");
         return ERR_VAL;
     }
+    // AS_FILEHANDLE(fhVal)->isOpen = false;
+    CLOSE_FILEHANDLE(fhVal);
     return NUMBER_VAL(0);
 }
 
@@ -186,14 +189,18 @@ static void defineNative(const char *funcName, NativeFn_t function, int arity) {
     /**
      * Pushing then immediately popping for GC purposes
      */
-    push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
-    push(OBJ_VAL(newNative(function, arity)));
+    ObjString_t *objStrFuncName = makeString(funcName, (int)strlen(funcName));
+    ObjNative_t *objNativeFunc = newNative(function, arity);
+    push(OBJ_VAL(objStrFuncName));
+    push(OBJ_VAL(objNativeFunc));
     // write function name to global names table
     tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));
     // write function object to global values table (function name --> function object)
     writeValueArray(&vm.globalValues, vm.stack[1]);
     pop();
     pop();
+    turnOffProtectMode((Obj_t *)objStrFuncName);
+    turnOffProtectMode((Obj_t *)objNativeFunc);
 }
 
 void initIsFinalsArray(MutableTable_t *array) {
@@ -225,6 +232,11 @@ void writeIsFinalsArray(MutableTable_t *array, bool flag) {
 void writeIsFinalsArrayAt(MutableTable_t *array, bool flag, unsigned idx) {
     // PRECONDITION: idx < array->count
     //   This function should only ever be called to update an existing isFinals flag
+    if (array->capacity <= idx) {
+        size_t oldCapacity = array->capacity;
+        array->capacity = GROW_CAPACITY(oldCapacity);
+        array->isFinalFlags = GROW_ARRAY(bool, array->isFinalFlags, oldCapacity, array->capacity);
+    }
     array->isFinalFlags[idx] = flag;
 }
 
@@ -314,18 +326,20 @@ bool valuesEqual(Value_t a, Value_t b) {
 }
 
 static void concatenate(void) {
-    ObjString_t *b = AS_STRING(pop());
-    ObjString_t *a = AS_STRING(pop());
+    ObjString_t *b = AS_STRING(pop()); turnOnProtectMode((Obj_t *)b);
+    ObjString_t *a = AS_STRING(pop()); turnOnProtectMode((Obj_t *)a);
 
     size_t length = a->length + b->length;
-    char *chars = ALLOCATE(char, length + 1);
+    char chars[length + 1];
     memcpy(chars, a->chars, a->length);
     memcpy(chars + a->length, b->chars, b->length);
     chars[length] = '\0';
 
     ObjString_t *string = makeString(chars, length);
-    FREE(char, chars);
     push(OBJ_VAL(string));
+    turnOffProtectMode((Obj_t *)string);
+    turnOffProtectMode((Obj_t *)b);
+    turnOffProtectMode((Obj_t *)a);
 }
 
 static void concatenateNum(void) {
@@ -337,8 +351,8 @@ static void concatenateNum(void) {
     bool bIsString;
     str = IS_STRING(b) ? (bIsString = true, num = AS_NUMBER(a), AS_STRING(b)) : \ 
         (bIsString = false, num = AS_NUMBER(b), AS_STRING(a));
+    turnOnProtectMode((Obj_t *)str);
 
-    char *result = NULL;
     size_t len = str->length;
     #include <math.h>
     bool hasDecimalPart = fmod(num, 1.0) != 0.0;
@@ -351,12 +365,7 @@ static void concatenateNum(void) {
         len += snprintf(NULL, 0, "%d", truncated) + 1;
     }
 
-    result = (char *)malloc(len);
-    if (!result) {
-        runtimeError("Memory allocation failed for concatenation.\n");
-        return;
-    }
-
+    char result[len];
     if (hasDecimalPart) {
         // No decimal part
         if (bIsString) {
@@ -372,9 +381,10 @@ static void concatenateNum(void) {
         }
     }
 
-    // TODO: Confirm no memory leak
-    push(OBJ_VAL(makeString(result, len - 1)));
-    free(result);
+    ObjString_t *concatenated = makeString(result, len - 1);
+    push(OBJ_VAL(concatenated));
+    turnOffProtectMode((Obj_t *)concatenated);
+    turnOffProtectMode((Obj_t *)str);
 }
 
 void push(Value_t value) {
@@ -405,6 +415,7 @@ Value_t pop(void) {
 }
 
 void initVM(void) {
+    vm.isInitialized = false;
     #ifdef JRMALLOC
     init(); // init jrmalloc
     #endif
@@ -412,6 +423,9 @@ void initVM(void) {
     // vm.ip = 0;
     vm.capacity = STACK_MAX;
     vm.switchCounter = 0;
+    vm.grayCount = 0;
+    vm.grayCapacity = 0;
+    vm.grayStack = NULL;
     #ifdef JRMALLOC
     vm.stack = jrmalloc(STACK_MAX * sizeof(Value_t));
     #else
@@ -433,6 +447,7 @@ void initVM(void) {
     defineNative("write", fwriteNative, 2);
     defineNative("getline", getlineNative, 1);
     defineNative("len", lenNative, 1);
+    vm.isInitialized = true;
 }
 
 void freeVM(void) {
@@ -501,6 +516,7 @@ static bool callValue(Value_t callee, unsigned argCount) {
                 }
                 vm.stackTop -= argCount + 1;    // reset stack pointer
                 push(result);
+                if (IS_STRING(result)) turnOffProtectMode(AS_OBJ(result));
                 return true;
             }
             default:
@@ -530,36 +546,10 @@ static ObjUpvalue_t *captureUpvalue(Value_t *local) {
     } else {
         prevUpvalue->next = createdUpvalue;
     }
-
+    turnOffProtectMode((Obj_t *)createdUpvalue);
     return createdUpvalue;
 }
 
-// This would save every single upvalue even if not needed
-//static void saveUpvalues(CallFrame_t *frame) {
-//    // Memory leak?
-//    for (int i=0; i<frame->closure->upvalueCount; ++i) {
-//        Value_t *valToSave = ALLOCATE(Value_t, 1);
-//        *valToSave = *frame->closure->upvalues[i]->location;
-//        frame->closure->upvalues[i]->location = valToSave;
-//    }
-//}
-
-// static void closeUpvalues(Value_t *slot) {
-//    ObjUpvalue_t *curr;
-//    while (curr) {
-//        if (curr->location == slot) {
-//            Value_t *closedValue = (Value_t *)malloc(sizeof(Value_t));
-//            *closedValue = *slot;
-//            return;
-//        }
-//        curr = curr->next;
-//    }
-//    if (!curr) {
-//        fprintf(stderr, "closeUpvalues: something went very wrong");
-//        exit(EXIT_FAILURE);
-//    }
-// }
-//
 static void closeUpvalues(Value_t *last) {
     while (vm.openUpvalues != NULL && vm.openUpvalues->location >= last) {
         ObjUpvalue_t *upvalue = vm.openUpvalues;
@@ -663,7 +653,7 @@ static InterpResult_t run(void) {
                 /**
                  * fun outer() {
                  *    var x = 0;
-                 *    fun inner() { <-- Imagine you're here
+                 *    fun inner() { <-- Imagine you're here (outer has been called - executing **function declaration** `inner`)
                  *       print x;
                  *    }
                  * }
@@ -677,6 +667,8 @@ static InterpResult_t run(void) {
                         closure->upvalues[i] = frame->closure->upvalues[index];         // point to ObjUpvalue_t object that enclosing function points to 
                     }
                 }
+                turnOffProtectMode((Obj_t *)closure);
+                turnOffProtectMode((Obj_t *)function);
                 break;
             }
             case OP_ACCESS_UPVALUE:
@@ -1006,6 +998,7 @@ InterpResult_t interpret(const char *source) {
     ObjClosure_t *closure = newClosure(function);
     pop();  // pop off what we just pushed (GC reasons)..
     push(OBJ_VAL(closure));
+    turnOffProtectMode((Obj_t *)closure);
     call(closure, 0);
     // CallFrame_t *frame = &vm.frames[vm.frameCount++];
     // frame->function = function;

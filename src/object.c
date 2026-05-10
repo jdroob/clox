@@ -14,14 +14,18 @@ static Obj_t *allocateObject(size_t size, Obj_e objectType) {
     Obj_t *obj = (Obj_t *)reallocate(NULL, 0, size);
     obj->type = objectType;
     obj->next = vm.objects;
+    obj->isMarked = false;
+    obj->isProtected = true;
     vm.objects = obj;
+    #ifdef DEBUG_LOG_GC
+    printf("%p allocate %zu for %d\n", (void *)obj, size, objectType);
+    #endif
     return obj;
 }        
 
-static ObjString_t *allocateString(char *chars, int length, bool isConst, uint32_t hash) {
+static ObjString_t *allocateString(char *chars, int length, uint32_t hash) {
     ObjString_t *string = ALLOCATE_OBJ(ObjString_t, sizeof(ObjString_t) + length + 1, OBJ_STRING);
     string->length = length;
-    string->isConst = isConst;  // TODO: remove isConst - no longer needed
     string->hash = hash;
     memcpy(string->chars, chars, string->length);
     string->chars[length] = '\0';
@@ -76,6 +80,7 @@ ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessTyp
     fileHandle->obj.type = OBJ_FILEHANDLE;
     fileHandle->name = name;
     fileHandle->accessType = accessType;
+    fileHandle->isOpen = true;
     return fileHandle;
 }
 
@@ -92,7 +97,15 @@ ObjString_t *makeString(char *chars, int length) {
     uint32_t hash = hashString(chars, length);
     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
     if (interned != NULL) return interned;
-    return allocateString(chars, length, false, hash);
+    return allocateString(chars, length, hash);
+}
+
+void turnOnProtectMode(Obj_t *object) {
+    object->isProtected = true;
+}
+
+void turnOffProtectMode(Obj_t *object) {
+    object->isProtected = false;
 }
 
 static void printFunction(ObjFunction_t *function) {
@@ -100,7 +113,7 @@ static void printFunction(ObjFunction_t *function) {
     printf("<script>");
         return;
     }
-    printf("<fn %s>", function->name->chars);
+    printf("<fn %.*s>", function->name->length, function->name->chars);
 }
 
 void printObject(Value_t val) {
@@ -127,6 +140,7 @@ void printObject(Value_t val) {
         }
         case OBJ_CLOSURE: {
             printFunction(AS_CLOSURE(val)->function);
+            if (appendNewline) printf("\n");
             break;
         }
         case OBJ_UPVALUE: {

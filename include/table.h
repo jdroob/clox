@@ -21,5 +21,7 @@ bool tableSet(Table_t *table, Value_t key, Value_t value);
 bool tableDelete(Table_t *table, Value_t key);
 bool tableGet(Table_t *table, Value_t key, Value_t *value);
 ObjString_t *tableFindString(Table_t *table, const char *chars, int length, uint32_t hash);
+void markTable(Table_t *table);
+void tableRemoveWhite(Table_t *table);
 
 #endif // CLOX_TABLE_H

@@ -5,6 +5,7 @@
 #define ARITY_MAX 0x1000000
 
 ObjFunction_t *compile(const char *source);
+void markCompilerRoots(void);
 
 typedef struct {
     int index;

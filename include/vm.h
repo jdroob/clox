@@ -35,9 +35,13 @@ typedef struct {
 } BreakJump_t;
 
 typedef struct {
-    CallFrame_t     frames[FRAMES_MAX];     // Fine w/ doing this for now - stack overflows are an expected limitation
+    bool            isInitialized;
+    int             switchCounter;  // HACK - ensure stack is in proper state after switch
     int             frameCount;
+    CallFrame_t     frames[FRAMES_MAX];     // Fine w/ doing this for now - stack overflows are an expected limitation
     uint32_t        capacity;
+    size_t          grayCapacity;
+    size_t          grayCount;
     Value_t         *stack;
     Value_t         *stackTop;
     Table_t         strings;
@@ -45,7 +49,7 @@ typedef struct {
     ValueArray_t    globalValues;
     MutableTable_t  globalIsFinals;
     Obj_t           *objects;
-    int             switchCounter;  // HACK - ensure stack is in proper state after switch
+    Obj_t           **grayStack;
     ObjUpvalue_t    *openUpvalues;
 } VM_t;
 

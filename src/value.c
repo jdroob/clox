@@ -40,6 +40,11 @@ void writeValueArrayAt(ValueArray_t *array, Value_t value, unsigned idx) {
 }
 
 Value_t getValueAt(ValueArray_t *array, unsigned idx) {
+    if (array->capacity < array->count + 1) {
+        size_t oldCapacity = array->capacity;
+        array->capacity = GROW_CAPACITY(oldCapacity);
+        array->values = GROW_ARRAY(Value_t, array->values, oldCapacity, array->capacity);
+    }
     boundsCheck(array, idx);
     return array->values[idx];
 }

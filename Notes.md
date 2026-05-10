@@ -2048,3 +2048,324 @@ $
 
 4/24/2026:
 - TODO: Do ch 25 exercises 2 & 3
+
+
+5/6/2026:
+- Working on Garbage collection at the moment
+- Hit a startup issue
+
+```
+static void defineNative(const char *funcName, NativeFn_t function, int arity) {
+    /**
+     * Pushing then immediately popping for GC purposes
+     */
+    push(OBJ_VAL(makeString(funcName, (int)strlen(funcName))));
+    push(OBJ_VAL(newNative(function, arity)));
+    // write function name to global names table
+    tableSet(&vm.globalNames, vm.stack[0], NUMBER_VAL(vm.globalValues.count));
+```
+
+- `defineNative` is called by `initVM` at program start
+- We create a string object for the native name
+- Then we try storing that name in the globalNames table
+
+```
+void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
+    if (newSize > oldSize) {
+        #ifdef DEBUG_STRESS_GC
+        collectGarbage();
+        #endif
+    }
+```
+
+- But table is currently empty so we need to allocate for table, so we call garbage collection again...
+
+- So then we end up cleaning up the ObjString_t object created to hold the function name
+
+- Then we get a key error because we're trying to set a garbage key in the table
+
+- Need to find a way to avoid cleaning up an object that's about to be added to a table... Might need to init tables to non-zero size before any strings are created?
+
+5/7/2026:
+- After wasting a bunch of time, just had to add 1 line to collectGarbage :)
+
+```
+void collectGarbage(void) {
+    if (!vm.isInitialized) return;  // <-- added an initialization flag to vm struct
+    #ifdef DEBUG_LOG_GC
+    printf("-- gc begin\n");
+    #endif
+```
+- garbage collecting while making initial requests for memory for VM's constituent data structures was turning into a dependency nightmare
+- Also fell for the following gotcha (again...)
+
+```
+if (vm.grayCapacity < vm.grayCount + 1) {
+    vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
+    vm.grayStack = (Obj_t **)realloc(vm.grayStack, vm.grayCapacity);
+}
+```
+- hmm... what's missing here John?!?! (sizeof!!!!)
+
+```
+if (vm.grayCapacity < vm.grayCount + 1) {
+    vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
+    vm.grayStack = (Obj_t **)realloc(vm.grayStack, vm.grayCapacity * sizeof(Obj_t *));
+}
+```
+
+5/8/2026:
+- In compiler.c, was running into similar issue above where garbage collection was being triggered while I was allocating memory for an object's container that needed to be stored in *that* container
+
+```
+static void string(bool canAssign) {
+    ObjString_t *string = makeString(parser.previous.start + 1, 
+                                     parser.previous.length - 2);
+    emitConstant(OBJ_VAL(string));
+    turnOffProtectMode(string);
+}
+```
+
+- Simplified above code to add support for ObjString_t `protectMode` bit
+- Goal is to never clean up a string while in protectMode
+
+```
+void tableRemoveWhite(Table_t *table) {
+    for (size_t i=0; i<table->capacity; ++i) {
+        Entry_t *entry = &table->entries[i];
+        if (AS_OBJ(entry->key) != NULL && 
+            !IS_MARKED(entry->key) &&
+            !IS_PROTECTED(entry->key)) {
+            tableDelete(table, entry->key);   // ensure no dangling pointers to interned strings
+        }
+    }
+}
+```
+
+- Since vm.strings is an interned table whose lifetime is static (duration of program), using vm.strings as a source of roots wouldn't result in any cleanup happening (and extra work)
+    - Above is a bit confusing - basically, the only way to ever modify vm.strings is if we decide to only ever hold on to strings that are reachable through a reference
+- Problem I was running into was:
+    (i) I'm trying to create a string in vm.strings
+    (ii) I need to allocate storage for it's container (e.g., constant pool)
+    (iii) While allocating memory, GC runs (b/c I'm in stress mode)
+    (iv) At this point, `protectMode` bit did not exist - so I justhad an unmarked string hanging around and it'd be deleted leading to chaos
+- Solution was to add the `protectMode` bit, check for protectMode during GC, and turn off protectMode bit once container has been alloc'd
+
+```
+static void string(bool canAssign) {
+    ObjString_t *string = makeString(parser.previous.start + 1, 
+                                     parser.previous.length - 2);
+    emitConstant(OBJ_VAL(string));
+    turnOffProtectMode(string);
+}
+```
+
+- if memory is needed for constantPool in emitConstant, a GC triggered
+- again, this led to a stranded ObjString_t being killed off
+- I had to implement equivalent above logic in all calls to `makeString`
+
+```
+  current = compiler;
+
+    if (type != TYPE_SCRIPT) {
+        //current->function->name = 
+        ObjString_t *funcName = makeString(parser.previous.start, parser.previous.length);
+        turnOffProtectMode(current->function->name);
+    }
+```
+- Need to add isProtected to all objects I think...
+- Bug above was from not updating compiler to compiler->enclosing in markCompilerRoots (was accidentally doing current->enclosing)
+
+```
+void markCompilerRoots(void) {
+    /**
+     * Caution: Don't modify current here
+     *          Just initialize compiler to current and walk up closure chain
+     */
+    Compiler_t *compiler = current;
+    while (compiler != NULL) {
+        markObject((Obj_t *)compiler->function);
+        markConstants(compiler);
+        compiler = compiler->enclosing; printf("compiler address: %p\n enclosing address: %p\n", compiler, current->enclosing);
+    }
+}
+```
+
+- TODO: Fix invalid reads and writes (see deleteMe)
+5/9/2026:
+^^update:
+
+- another wild debug - here's the relevant code (which contains fix)
+
+```c
+// compiler.c
+
+static void protectFunction(ObjFunction_t *function) {
+    function->obj.isProtected = true; 
+    function->name->obj.isProtected = true;
+    markArray(&function->chunk.constants);
+}
+
+static void turnOffFunctionProtection(ObjFunction_t *function) {
+    function->obj.isProtected = false; 
+    function->name->obj.isProtected = false;
+}
+
+static void function(FunctionType_e type) {
+    Compiler_t compiler;    // track compilation data  for this function
+    initCompiler(&compiler, TYPE_FUNCTION);
+    beginScope();   // This function's parameter scope
+
+    consume(TOKEN_LEFT_PAREN, "Expect a '(' after function name.");
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            current->function->arity++;
+            if (current->function->arity > ARITY_MAX) {
+                // TODO: make variadic
+                errorAtCurrent("Too many parameters in function.");
+            }
+            unsigned param = parseVariableName("Expect parameter name.");
+            defineVariable(param);
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_PAREN, "Expect a ')' after function name.");
+    consume(TOKEN_LEFT_BRACE, "Expect a '{' before function body.");
+    block();    // TOKEN_RIGHT_BRACE consumed in block()
+
+    Compiler_t *compiledFunction = current;
+    ObjFunction_t *function = endCompiler();
+    protectFunction(function);
+//    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CLOSURE, OP_CLOSURE_LONG);
+    for (int i=0; i<function->upvalueCount; ++i) {  // <-- this makes OP_CLOSURE variable length
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);       // <-- TODO: Modify this s.t. # indexes can be >= 256
+    }
+    turnOffFunctionProtection(function);
+
+    FREE_ARRAY(Upvalue_t, compiledFunction->upvalues, compiledFunction->function->upvalueCapacity);
+//    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
+    
+    // No endScope() b/c compiler's lifetime ends when this function returns
+}
+```
+
+- situation was function declarion was compiled, the function object was created, and function object was to be added to constant pool
+- addition to constant pool triggered GC
+- function object being compiled was not yet a root so all constants objects it referenced were being cleaned up
+- fix was to mark constants prior to triggering GC
+
+- TODO: Fix up `isProtected` logic (used in all objects now - turn off where appropriate)
+    - start by checking out new* functions (e.g. newFunction)
+^^ took stab at this - need to test further to see if latent issues persist
+
+- **random thought:** I suspect part of the reason I've run into so many issues where
+    (i) I'm creating Obj* object
+    (ii) Obj* object is stored in X data structure
+    (iii) Writing to X triggers GC
+    (iv) Eighter Obj* itself, or something Obj* refers to are inadvertently cleaned up prior to Obj* being written to X
+
+is due to my converting so many static arrays from the book to dynamic arrays in this implementation lol
+
+5/10/2026:
+- Another weird one:
+
+```c
+static void concatenate(void) {
+    ObjString_t *b = AS_STRING(pop()); turnOnProtectMode((Obj_t *)b);
+    ObjString_t *a = AS_STRING(pop()); turnOnProtectMode((Obj_t *)a);
+
+    size_t length = a->length + b->length;
+    // char *chars = ALLOCATE(char, length + 1);
+    char chars[length + 1];
+    memcpy(chars, a->chars, a->length);
+    memcpy(chars + a->length, b->chars, b->length);
+    chars[length] = '\0';
+
+    ObjString_t *string = makeString(chars, length);
+    // FREE(char, chars);
+    push(OBJ_VAL(string));
+    turnOffProtectMode((Obj_t *)string);
+    turnOffProtectMode((Obj_t *)b);
+    turnOffProtectMode((Obj_t *)a);
+}
+
+static void concatenateNum(void) {
+    Value_t b = pop();
+    Value_t a = pop();
+
+    ObjString_t *str;
+    double num;
+    bool bIsString;
+    str = IS_STRING(b) ? (bIsString = true, num = AS_NUMBER(a), AS_STRING(b)) : \ 
+        (bIsString = false, num = AS_NUMBER(b), AS_STRING(a));
+    turnOnProtectMode((Obj_t *)str);
+
+    // char *result = NULL;
+    size_t len = str->length;
+    #include <math.h>
+    bool hasDecimalPart = fmod(num, 1.0) != 0.0;
+    int truncated = (int)num;
+
+    // Calculate total length
+    if (hasDecimalPart) {
+        len += snprintf(NULL, 0, "%g", num) + 1;
+    } else {
+        len += snprintf(NULL, 0, "%d", truncated) + 1;
+    }
+
+    // result = (char *)malloc(len);
+    char result[len];
+    // if (!result) {
+    //     runtimeError("Memory allocation failed for concatenation.\n");
+    //     return;
+    // }
+
+    if (hasDecimalPart) {
+        // No decimal part
+        if (bIsString) {
+            snprintf(result, len, "%g%s", num, str->chars);
+        } else {
+            snprintf(result, len, "%s%g", str->chars, num);
+        }
+    } else {
+        if (bIsString) {
+            snprintf(result, len, "%d%s", truncated, str->chars);
+        } else {
+            snprintf(result, len, "%s%d", str->chars, truncated);
+        }
+    }
+
+    // TODO: Confirm no memory leak
+    ObjString_t *concatenated = makeString(result, len - 1);
+    push(OBJ_VAL(concatenated));
+    // free(result);
+    turnOffProtectMode((Obj_t *)concatenated);
+    turnOffProtectMode((Obj_t *)str);
+}
+```
+
+- in `concatenate*` functions, `a` and `b` were being popped, the (I was) calling ALLOCATE - triggering a GC, leaving `a` and `b` exposed (as they were no longer safe on the value stack)
+- Added protection for them
+- Also just removed allocations altogether b/c the concatenated result is scoped to its enclosing concatenate function before its contents are memcpy'd to the new string object - so there was no point in dynamically allocating this guy in the first place :)
+
+
+- Was also hitting memory corruption issues when trying to access invalid (already closed) file descriptors in `freeObject`
+- ended up adding an `isOpen` flag to ObjFileHandle_t types to avoid invalid reads
+
+```c
+case OBJ_FILEHANDLE: {
+            ObjFileHandle_t *objFH = (ObjFileHandle_t *)object; 
+            FILE *fh = objFH->fh;
+            // int fd = fileno(fh);
+            // if (fd != -1) { // valid file descriptor
+            //     fclose(fh);
+            // }
+            if (IS_FILEHANDLE_OPEN(OBJ_VAL(objFH))) {
+                fclose(objFH->fh);
+                CLOSE_FILEHANDLE(OBJ_VAL(objFH));
+            }
+            FREE(ObjFileHandle_t, object);
+            break;
+        }
+```

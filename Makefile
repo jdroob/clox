@@ -38,6 +38,15 @@ debug_scanner: default
 debug_chunk: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_CHUNK
 debug_chunk: default
 
+debug_gc: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_STRESS_GC -DDEBUG_LOG_GC
+debug_gc: default
+
+debug_stress_gc: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_STRESS_GC
+debug_stress_gc: default
+
+debug_log_gc: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_LOG_GC
+debug_log_gc: default
+
 debug_chunk_jrmalloc: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_CHUNK -DJRMALLOC
 debug_chunk_jrmalloc: default
 
