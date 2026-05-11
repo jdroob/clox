@@ -426,6 +426,8 @@ void initVM(void) {
     vm.grayCount = 0;
     vm.grayCapacity = 0;
     vm.grayStack = NULL;
+    vm.bytesAllocated = 0;
+    vm.nextGC = INIT_NEXT_GC;
     #ifdef JRMALLOC
     vm.stack = jrmalloc(STACK_MAX * sizeof(Value_t));
     #else
@@ -504,7 +506,7 @@ static bool callValue(Value_t callee, unsigned argCount) {
             case OBJ_CLOSURE:
                return call(AS_CLOSURE(callee), argCount);
             case OBJ_NATIVE: {
-                ObjNative_t *func = (ObjNative_t *)(callee.as.obj);
+                ObjNative_t *func = (ObjNative_t *)AS_OBJ(callee);
                 if (func->arity != argCount) {
                     runtimeError("native function expected %d arguments but received %u", func->arity, argCount);
                     return false;

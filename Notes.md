@@ -2369,3 +2369,9 @@ case OBJ_FILEHANDLE: {
             break;
         }
 ```
+
+- The bugs I faced were intentional lol
+- The easy way to address them was to push and pop these from the value stack like we've seen in other places in the codebase
+- Instead I turned on and turned off the protection bit
+- Result is the same :)
+- TODO: remove protection logic and use push + pop to value stack to preserve "not-yet-saved" objects instead

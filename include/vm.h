@@ -8,6 +8,8 @@
 
 #define FRAMES_MAX 64
 #define STACK_MAX (FRAMES_MAX * (UINT8_MAX  + 1))
+#define GC_HEAP_GROW_FACTOR 2
+#define INIT_NEXT_GC (1024 * 1024)
 
 typedef struct {
     ObjClosure_t *closure;
@@ -42,6 +44,8 @@ typedef struct {
     uint32_t        capacity;
     size_t          grayCapacity;
     size_t          grayCount;
+    size_t          bytesAllocated;
+    size_t          nextGC;
     Value_t         *stack;
     Value_t         *stackTop;
     Table_t         strings;

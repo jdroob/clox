@@ -10,10 +10,15 @@
 
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize) {
+    vm.bytesAllocated += newSize - oldSize;
+    #ifdef DEBUG_STRESS_GC
     if (newSize > oldSize) {
-        #ifdef DEBUG_STRESS_GC
         collectGarbage();
-        #endif
+    }
+    #endif
+
+    if (vm.bytesAllocated > vm.nextGC) {
+        collectGarbage();
     }
 
     if (!newSize) {
@@ -199,6 +204,7 @@ void collectGarbage(void) {
     if (!vm.isInitialized) return;
     #ifdef DEBUG_LOG_GC
     printf("-- gc begin\n");
+    size_t before = vm.bytesAllocated;
     #endif
 
     markRoots();
@@ -206,8 +212,13 @@ void collectGarbage(void) {
     tableRemoveWhite(&vm.strings);
     sweep();
 
+    vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;
+
     #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");
+    printf(" collected %zu bytes (%zu -> %zu) next GC at %zu\n",
+            before - vm.bytesAllocated, before, vm.bytesAllocated,
+            vm.nextGC);
     #endif
 }
 
@@ -217,12 +228,6 @@ void freeObjects(void) {
     while (object) {
         next = object->next;
         freeObject(object);
-        // if (IS_CLOSURE(OBJ_VAL(object))) {
-        //     ObjClosure_t *closure = AS_CLOSURE(OBJ_VAL(object));
-        //     for (size_t i=0; i<closure->upvalueCount; ++i) {
-        //         FREE(ObjUpvalue_t, closure->upvalues[i]);
-        //     }
-        // }
         object = next;
     }
     free(vm.grayStack);

@@ -823,7 +823,6 @@ static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
     ObjString_t *strIdentifier = makeString(identifier->start, identifier->length);
     Value_t key = OBJ_VAL(strIdentifier);
     if (tableGet(&vm.globalNames, key, &idxVal)) {
-        // TODO: fix memory leak here... if key already exists in table, it should be freed
         idx = (unsigned)AS_NUMBER(idxVal);
     } else {
         idx = (unsigned)vm.globalValues.count;
