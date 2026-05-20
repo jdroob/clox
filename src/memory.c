@@ -47,6 +47,12 @@ static void freeObject(Obj_t *object) {
     printf("%p free type %d\n", (void *)object, object->type);
     #endif
     switch (object->type) {
+        case OBJ_CLASS: {
+            // ObjClass_t *klass = (ObjClass_t *)object;
+            // GC and freeObjects take care of klass->name
+            FREE(ObjString_t, object);
+            break;
+        }
         case OBJ_STRING: {
             ObjString_t *string = (ObjString_t *)object;
             FREE(ObjString_t, object);
@@ -145,6 +151,11 @@ static void blackenObject(Obj_t *ref) {
     #endif
 
     switch (ref->type) {
+        case OBJ_CLASS: {
+            ObjClass_t *klass = (ObjClass_t *)ref;
+            markObject(klass->name);
+            break;
+        }
         case OBJ_CLOSURE: {
             ObjClosure_t *closure = (ObjClosure_t *)ref;
             markObject(closure->function);

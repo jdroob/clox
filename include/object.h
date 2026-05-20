@@ -11,7 +11,8 @@ typedef enum {
     OBJ_NATIVE,
     OBJ_FILEHANDLE,
     OBJ_CLOSURE,
-    OBJ_UPVALUE
+    OBJ_UPVALUE,
+    OBJ_CLASS
 } Obj_e;
 
 struct Obj_t {
@@ -74,11 +75,19 @@ typedef struct ObjUpvalue_t {
     struct ObjUpvalue_t *next;
 } ObjUpvalue_t;
 
+typedef struct {
+    Obj_t obj;
+    ObjString_t *name;
+    ObjClosure_t *methods;
+} ObjClass_t;
+
 
 #define OBJ_TYPE(value)            (AS_OBJ(value)->type)
 #define IS_MARKED(value)           (AS_OBJ(value)->isMarked)
 #define IS_STRING(value)           isObjType(value, OBJ_STRING)
 #define AS_STRING(value)           ((ObjString_t *)AS_OBJ(value))
+#define IS_CLASS(value)            isObjType(value, OBJ_CLASS)
+#define AS_CLASS(value)            ((ObjClass_t *)AS_OBJ(value))
 #define AS_CSTRING(value)          (((ObjString_t *)AS_OBJ(value))->chars)
 #define IS_PROTECTED(value)        (AS_OBJ(value)->isProtected)
 #define IS_CLOSURE(value)          isObjType(value, OBJ_CLOSURE)
@@ -104,6 +113,7 @@ ObjNative_t *newNative(NativeFn_t function, int arity);
 ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessType);
 ObjUpvalue_t *newUpvalue(Value_t *value);
 ObjString_t *makeString(char *chars, int length);
+ObjClass_t *newClass(ObjString_t *name);
 void turnOnProtectMode(Obj_t *object);
 void turnOffProtectMode(Obj_t *object);
 void printObject(Value_t val);

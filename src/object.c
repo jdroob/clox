@@ -93,7 +93,16 @@ ObjUpvalue_t *newUpvalue(Value_t *slot) {
     return upvalue;
 }
 
+ObjClass_t *newClass(ObjString_t *name) {
+    ObjClass_t *klass = ALLOCATE_OBJ(ObjClass_t, sizeof(ObjClass_t), OBJ_CLASS);
+    klass->obj.type = OBJ_CLASS;
+    klass->methods = NULL;
+    klass->name = name;
+}
+
 ObjString_t *makeString(char *chars, int length) {
+    // NOTE: makeString expects length == strlen(s)
+    //       +1 for null byte accounted for in allocateString
     uint32_t hash = hashString(chars, length);
     ObjString_t *interned = tableFindString(&vm.strings, chars, length, hash);
     if (interned != NULL) return interned;
@@ -110,7 +119,7 @@ void turnOffProtectMode(Obj_t *object) {
 
 static void printFunction(ObjFunction_t *function) {
     if (function->name == NULL) {
-    printf("<script>");
+        printf("<script>");
         return;
     }
     printf("<fn %.*s>", function->name->length, function->name->chars);
@@ -118,6 +127,11 @@ static void printFunction(ObjFunction_t *function) {
 
 void printObject(Value_t val) {
     switch (OBJ_TYPE(val)) {
+        case OBJ_CLASS: {
+            printf("<class: %s>", AS_CLASS(val)->name->chars);
+            if (appendNewline) printf("\n");
+            break;
+        }
         case OBJ_STRING: {
             printf("\"%s\"", AS_CSTRING(val));
             if (appendNewline) printf("\n");
