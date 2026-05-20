@@ -1945,12 +1945,12 @@ and create a unique ObjUpvalue_t object
 There are three reasons we can exit the loop:
 1. The local slot we stopped at is the slot we’re looking for. We found an existing upvalue capturing the variable, so we reuse that upvalue.
 2. We ran out of upvalues to search. When upvalue is NULL, it means every open upvalue in the list points to locals above the slot we’re looking for, or (more likely) the upvalue list is empty. Either way, we didn’t find an upvalue for our slot.
-3. We found an upvalue whose local slot is below the one we’re looking for. Since the list is sorted, that means we’ve gone past the slot we are closing over, and thus there must not be an existing upvalue
+3. We found an upvalue whose local slot is below the one we’re looking for. Since the list is sorted (by default since we're comparing memory addresses), that means we’ve gone past the slot we are closing over, and thus there must not be an existing upvalue
 for it.
 ```
 
 4/20/2026;
-- Added rest closing upvalues logic - will discuss shortly
+- Added rest of closing upvalues logic - will discuss shortly
 - Hit ugly C bug
 
 ```
@@ -2142,13 +2142,19 @@ void tableRemoveWhite(Table_t *table) {
 }
 ```
 
+- Above basically does following:
+    - suppose "john" was interned for some reason
+    - then suppose later, there were no remaining references to "john"
+    - before deleting the Value_t::ObjString_t of "john" from strings table, we want to remove the key "john" from strings table
+    - otherwise, we would (i) not mark "john", (ii) free "john" string while not removing key "john" from strings table. Then, suppose at runtime, the string "john" shows up (for sake of argument, through concatenation), then `makeString` would be called, we'd look up "john" in `vm.string` and BAM! seg fault due to dangling pointer 
+
 - Since vm.strings is an interned table whose lifetime is static (duration of program), using vm.strings as a source of roots wouldn't result in any cleanup happening (and extra work)
     - Above is a bit confusing - basically, the only way to ever modify vm.strings is if we decide to only ever hold on to strings that are reachable through a reference
 - Problem I was running into was:
     (i) I'm trying to create a string in vm.strings
-    (ii) I need to allocate storage for it's container (e.g., constant pool)
+    (ii) I need to allocate storage for it's container (e.g., constant pool needed to grow)
     (iii) While allocating memory, GC runs (b/c I'm in stress mode)
-    (iv) At this point, `protectMode` bit did not exist - so I justhad an unmarked string hanging around and it'd be deleted leading to chaos
+    (iv) At this point, `protectMode` bit did not exist - so I just had an unmarked string floating around and it'd be deleted leading to chaos
 - Solution was to add the `protectMode` bit, check for protectMode during GC, and turn off protectMode bit once container has been alloc'd
 
 ```
@@ -2255,6 +2261,25 @@ static void function(FunctionType_e type) {
 - function object being compiled was not yet a root so all constants objects it referenced were being cleaned up
 - fix was to mark constants prior to triggering GC
 
+```C
+static void markConstants(Compiler_t *compiler) {
+    markArray(&compiler->function->chunk.constants);
+}
+
+void markCompilerRoots(void) {
+    /**
+     * Caution: Don't modify current here
+     *          Just initialize compiler to current and walk up closure chain
+     */
+    Compiler_t *compiler = current;
+    while (compiler != NULL) {
+        markObject((Obj_t *)compiler->function);
+        markConstants(compiler);
+        compiler = compiler->enclosing;
+    }
+}
+```
+
 - TODO: Fix up `isProtected` logic (used in all objects now - turn off where appropriate)
     - start by checking out new* functions (e.g. newFunction)
 ^^ took stab at this - need to test further to see if latent issues persist
@@ -2263,7 +2288,7 @@ static void function(FunctionType_e type) {
     (i) I'm creating Obj* object
     (ii) Obj* object is stored in X data structure
     (iii) Writing to X triggers GC
-    (iv) Eighter Obj* itself, or something Obj* refers to are inadvertently cleaned up prior to Obj* being written to X
+    (iv) Eihter Obj* itself, or something Obj* refers to are inadvertently cleaned up prior to Obj* being written to X
 
 is due to my converting so many static arrays from the book to dynamic arrays in this implementation lol
 

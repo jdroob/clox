@@ -326,6 +326,7 @@ bool valuesEqual(Value_t a, Value_t b) {
 }
 
 static void concatenate(void) {
+    // TODO: eventually replace protectMode approach with push / pop
     ObjString_t *b = AS_STRING(pop()); turnOnProtectMode((Obj_t *)b);
     ObjString_t *a = AS_STRING(pop()); turnOnProtectMode((Obj_t *)a);
 
@@ -366,11 +367,10 @@ static void concatenateNum(void) {
     }
 
     char result[len];
-    if (hasDecimalPart) {
-        // No decimal part
-        if (bIsString) {
+    if (hasDecimalPart) {  // do not chop off decimal part
+        if (bIsString) {   // a is num, b is string
             snprintf(result, len, "%g%s", num, str->chars);
-        } else {
+        } else {           // a is string, b is num
             snprintf(result, len, "%s%g", str->chars, num);
         }
     } else {
@@ -490,7 +490,6 @@ static bool call(ObjClosure_t *closure, unsigned argCount) {
     frame->closure = closure;
     frame->ip = function->chunk.code;
     // frame->function = function;
-    frame->ip = function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;
     return true;
 }
