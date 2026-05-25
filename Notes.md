@@ -2400,3 +2400,146 @@ case OBJ_FILEHANDLE: {
 - Instead I turned on and turned off the protection bit
 - Result is the same :)
 - TODO: remove protection logic and use push + pop to value stack to preserve "not-yet-saved" objects instead
+
+
+5/25/2026:
+- Still working at it! Got a little distracted with openGL and rasterizer
+- Here we go with classes!
+
+```C
+// Define internal representation of classes
+
+// object.h
+typedef struct {
+    Obj_t obj;
+    ObjString_t *name;
+    ObjClosure_t *methods;
+} ObjClass_t;
+
+// ...
+
+#define IS_CLASS(value)            isObjType(value, OBJ_CLASS)
+#define AS_CLASS(value)            ((ObjClass_t *)AS_OBJ(value))
+
+// object.c
+ObjClass_t *newClass(ObjString_t *name) {
+    ObjClass_t *klass = ALLOCATE_OBJ(ObjClass_t, sizeof(ObjClass_t), OBJ_CLASS);
+    klass->obj.type = OBJ_CLASS;
+    klass->name = name;
+    klass->methods = NULL;
+}
+
+// ...
+void printObject(Value_t val) {
+    switch (OBJ_TYPE(val)) {
+        case OBJ_CLASS: {
+            printf("<class: %s>", AS_CLASS(val)->name->chars);
+            if (appendNewline) printf("\n");
+            break;
+        }
+
+// ...
+
+// memory.c
+static void freeObject(Obj_t *object) {
+    #ifdef DEBUG_LOG_GC
+    printf("%p free type %d\n", (void *)object, object->type);
+    #endif
+    switch (object->type) {
+        case OBJ_CLASS: {
+            // ObjClass_t *klass = (ObjClass_t *)object;
+            // GC and freeObjects take care of klass->name
+            FREE(ObjString_t, object);
+            break;
+        }
+```
+
+```C
+// compiler.c
+static void classDeclaration(void) {
+    // Declare class name as global
+    // i.e. add class name to globalNames table
+    consume(TOKEN_IDENTIFIER, "Expect a class name.");
+    ObjString_t *preservedID; // output param
+    unsigned classNameIdx = identifierConstant(&parser.previous, isFinal, &preservedID);
+
+    // push identifier constant to constant pool
+    // emit instruction with constant pool index operand
+    emitVarLenInstr(makeConstant(OBJ_VAL(preservedID)), OP_CLASS, OP_CLASS_LONG);
+
+    // define global variable
+    // this instr will pop name constant from stack
+    //   use that ObjString_t to construct ObjClass_t
+    //   wrap the ObjClass_t in a Value_t
+    //   write that Value_t to vm.globalValues at index `classNameIdx`
+    defineVariable(classNameIdx);
+
+    // verify syntax
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' before class body.");
+}
+```
+
+```C
+// vm.c
+    case OP_CLASS: {
+        push(OBJ_VAL(newClass(READ_STRING())));
+        break;
+    }
+    case OP_CLASS_LONG: {
+        push(OBJ_VAL(newClass(READ_STRING_LONG())));
+        break;
+    }
+```
+
+- Originally, I tried just doing everything at compile time
+- I was pushing the name to the globalNames table
+- and constructing the class object & adding this to the globalValues table
+
+```C
+static void classDeclaration(void) {
+    consume(TOKEN_IDENTIFIER, "Expect a class name.");
+    ObjString_t *preservedID;
+    unsigned classNameIdx = identifierConstant(&parser.previous, isFinal, &preservedID);
+    /**
+     * WARNING: We're breaking late binding in the case of classes here!!
+     */
+    writeValueArrayAt(&vm.globalValues, OBJ_VAL(newClass(preservedID)), classNameIdx);
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' before class body.");
+}
+```
+
+- The problem with this IMO is that this is inconsistent with the rest of the language implementation
+- The rest of the language implementation is dynamic - e.g., function objects are constructed and pushed to globals / locals tables at runtime
+- In this case, it made more sense to me to be consistent and construct class object at runtime and push to globalValues table at runtime
+
+- Perhaps most importantly, binding the class at compile time would break our late-binding design decision when it comes to globals
+
+e.g.,
+
+```C
+// Forward references
+fun assignMyClass() {
+    var MyClass = SomeOtherClass;  // Should work if SomeOtherClass is defined later
+    print MyClass;  // <class: SomeOtherClass>
+}
+// Conditional class creation
+var someCondition = true;
+if (someCondition) {
+    class MyClass { }
+} else {
+    class MyClass { }  // Different implementation
+}
+
+// Classes in different scopes
+{
+    class LocalClass { }
+    // LocalClass should only exist in this scope
+}
+
+class SomeOtherClass { }
+assignMyClass();
+```
+
+- `SomeOtherClass` can only be assigned before being declared in a late-binding world

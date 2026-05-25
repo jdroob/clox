@@ -1,0 +1,21 @@
+// Forward references
+fun assignMyClass() {
+    var MyClass = SomeOtherClass;  // Should work if SomeOtherClass is defined later
+    print MyClass;
+}
+// Conditional class creation
+var someCondition = true;
+if (someCondition) {
+    class MyClass { }
+} else {
+    class MyClass { }  // Different implementation
+}
+
+// Classes in different scopes
+{
+    class LocalClass { }
+    // LocalClass should only exist in this scope
+}
+
+class SomeOtherClass { }
+assignMyClass();

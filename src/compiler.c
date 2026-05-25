@@ -456,7 +456,7 @@ static int resolveUpvalue(Compiler_t *compiler, Token_t *name) {
     return -1;
 }
 
-static unsigned identifierConstant(Token_t *identifier, bool isFinal);
+static unsigned identifierConstant(Token_t *identifier, bool isFinal, ObjString_t **preservedID);
 static void namedVariable(Token_t name, bool canAssign) {
     uint8_t getOp, setOp;
     int arg;
@@ -471,7 +471,7 @@ static void namedVariable(Token_t name, bool canAssign) {
         getOp = OP_ACCESS_UPVALUE;
         setOp = OP_SET_UPVALUE;
     } else {
-        idx = identifierConstant(&name, false);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
+        idx = identifierConstant(&name, false, NULL);   // OLD COMMENT: <- all we care about is providing the correct string key to tableGet(); doesn't matter if it's a copy as long as chars are same
         getOp = OP_ACCESS_GLOBAL;
         setOp = OP_SET_GLOBAL;
     }
@@ -817,10 +817,16 @@ static void markInitialized(void) {
     current->locals[current->localCount - 1].depth = current->scopeDepth;
 }
 
-static unsigned identifierConstant(Token_t *identifier, bool isFinal) {
+static unsigned identifierConstant(Token_t *identifier, bool isFinal, ObjString_t **preservedID) {
     Value_t idxVal;
     unsigned idx;
-    ObjString_t *strIdentifier = makeString(identifier->start, identifier->length);
+    ObjString_t *strIdentifier;
+    if (preservedID) {
+        *preservedID = makeString(identifier->start, identifier->length);
+        strIdentifier = *preservedID;
+    } else {
+        strIdentifier = makeString(identifier->start, identifier->length);
+    }
     Value_t key = OBJ_VAL(strIdentifier);
     if (tableGet(&vm.globalNames, key, &idxVal)) {
         idx = (unsigned)AS_NUMBER(idxVal);
@@ -907,10 +913,10 @@ static void declareVariable(void) {
 }
 
 static unsigned parseVariableName(const char *errMsg) {
-    consume(TOKEN_IDENTIFIER, "Expect an indentifier");
+    consume(TOKEN_IDENTIFIER, "Expect an identifier");
     declareVariable();  // if identifier is a local, add to locals
     if (current->scopeDepth > 0) return 0;  // if identifier is local, return
-    return identifierConstant(&parser.previous, isFinal);   // identifier is a global, add to globals, return globals idx
+    return identifierConstant(&parser.previous, isFinal, NULL);   // identifier is a global, add to globals, return globals idx
 }
 
 static void defineVariable(unsigned global) {
@@ -1459,6 +1465,29 @@ static void funDeclaration(void) {
     defineVariable(global);    
 }
 
+static void classDeclaration(void) {
+    // Declare class name as global
+    // i.e. add class name to globalNames table
+    consume(TOKEN_IDENTIFIER, "Expect a class name.");
+    ObjString_t *preservedID; // output param
+    unsigned classNameIdx = identifierConstant(&parser.previous, isFinal, &preservedID);
+
+    // push identifier constant to constant pool
+    // emit instruction with constant pool index operand
+    emitVarLenInstr(makeConstant(OBJ_VAL(preservedID)), OP_CLASS, OP_CLASS_LONG);
+
+    // define global variable
+    // this instr will pop name constant from stack
+    //   use that ObjString_t to construct ObjClass_t
+    //   wrap the ObjClass_t in a Value_t
+    //   write that Value_t to vm.globalValues at index `classNameIdx`
+    defineVariable(classNameIdx);
+
+    // verify syntax
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' before class body.");
+}
+
 /**
  * LOX GRAMMAR RULES:
  *  **NOTE:** This is a little more bare-bones than the jlox grammar doc comment.
@@ -1467,8 +1496,9 @@ static void funDeclaration(void) {
  *            It's easier to write the rules next to the code in a recursive descent
  *            parser (jlox) than it is here with a Pratt Parser (clox).
  * 
- *  declaration      ->  varDecl | ifStmt | whileStmt | forStmt | switchStmt | funStmt | stmt ;
+ *  declaration      ->  varDecl | classDecl | ifStmt | whileStmt | forStmt | switchStmt | funStmt | stmt ;
  *  varDecl          ->  "var" IDENTIFIER ("=" expression)? ";" ;
+ *  classDecl        ->  "class" IDENTIFIER "{" funStmt* "}" ;
  *  ifStmt           ->  "if" "(" condition ")" block ";" ;
  *  whileStmt        ->  "while" "(" condition ")" statement ;
  *  forStmt          ->  "for"   "(" initialization ";" condition ";" update ")" statement ;
@@ -1525,6 +1555,8 @@ static void declaration(void) {
         switchStatement();
     } else if (match(TOKEN_FUN)) {
         funDeclaration();
+    } else if (match(TOKEN_CLASS)) {
+        classDeclaration();
     } else {
         statement();
     }

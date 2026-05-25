@@ -51,6 +51,8 @@
      (instruction) == OP_CLOSURE ? "OP_CLOSURE" : \
      (instruction) == OP_CLOSURE_LONG ? "OP_CLOSURE_LONG" : \
      (instruction) == OP_CLOSE_UPVALUE ? "OP_CLOSE_UPVALUE" : \
+     (instruction) == OP_CLASS ? "OP_CLASS" : \
+     (instruction) == OP_CLASS_LONG ? "OP_CLASS_LONG" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -147,12 +149,14 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SET_LOCAL:
         case OP_ENDSWITCH:
         case OP_CALL:
+        case OP_CLASS:
             return constantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
         case OP_SET_GLOBAL:
             return constantInstruction(name, chunk, offset, true);
         case OP_CONSTANT_LONG:
+        case OP_CLASS_LONG:
         case OP_ACCESS_LOCAL_LONG:
         case OP_SET_LOCAL_LONG:
         case OP_ACCESS_UPVALUE_LONG:

@@ -96,8 +96,9 @@ ObjUpvalue_t *newUpvalue(Value_t *slot) {
 ObjClass_t *newClass(ObjString_t *name) {
     ObjClass_t *klass = ALLOCATE_OBJ(ObjClass_t, sizeof(ObjClass_t), OBJ_CLASS);
     klass->obj.type = OBJ_CLASS;
-    klass->methods = NULL;
     klass->name = name;
+    klass->methods = NULL;
+    return klass;
 }
 
 ObjString_t *makeString(char *chars, int length) {
