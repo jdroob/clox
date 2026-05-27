@@ -502,6 +502,13 @@ static bool callValue(Value_t callee, unsigned argCount) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
             // case OBJ_FUNCTION:
+            case OBJ_CLASS: {
+                ObjInstance_t *instance = newInstance(AS_CLASS(callee));
+                // replace class object with instance object
+                vm.stackTop[-(int)argCount - 1] = OBJ_VAL(instance);
+                turnOffProtectMode((Obj_t *)instance);
+                return true;
+            }
             case OBJ_CLOSURE:
                return call(AS_CLOSURE(callee), argCount);
             case OBJ_NATIVE: {
@@ -645,11 +652,13 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_CLASS: {
-                push(OBJ_VAL(newClass(READ_STRING())));
+                ObjClass_t *klass = newClass(READ_STRING());
+                push(OBJ_VAL(klass)); turnOffProtectMode((Obj_t *)klass);
                 break;
             }
             case OP_CLASS_LONG: {
-                push(OBJ_VAL(newClass(READ_STRING_LONG())));
+                ObjClass_t *klass = newClass(READ_STRING_LONG());
+                push(OBJ_VAL(klass)); turnOffProtectMode((Obj_t *)klass);
                 break;
             }
             case OP_CLOSURE: 

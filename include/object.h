@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "value.h"
+#include "table.h"
 #include "chunk.h"
 
 typedef enum {
@@ -12,7 +13,8 @@ typedef enum {
     OBJ_FILEHANDLE,
     OBJ_CLOSURE,
     OBJ_UPVALUE,
-    OBJ_CLASS
+    OBJ_CLASS,
+    OBJ_INSTANCE
 } Obj_e;
 
 struct Obj_t {
@@ -81,6 +83,12 @@ typedef struct {
     ObjClosure_t *methods;
 } ObjClass_t;
 
+typedef struct {
+    Obj_t obj;
+    ObjClass_t *klass;
+    Table_t fields;
+} ObjInstance_t;
+
 
 #define OBJ_TYPE(value)            (AS_OBJ(value)->type)
 #define IS_MARKED(value)           (AS_OBJ(value)->isMarked)
@@ -88,6 +96,8 @@ typedef struct {
 #define AS_STRING(value)           ((ObjString_t *)AS_OBJ(value))
 #define IS_CLASS(value)            isObjType(value, OBJ_CLASS)
 #define AS_CLASS(value)            ((ObjClass_t *)AS_OBJ(value))
+#define IS_INSTANCE(value)         isObjType(value, OBJ_INSTANCE)
+#define AS_INSTANCE(value)         ((ObjInstance_t *)AS_OBJ(value))
 #define AS_CSTRING(value)          (((ObjString_t *)AS_OBJ(value))->chars)
 #define IS_PROTECTED(value)        (AS_OBJ(value)->isProtected)
 #define IS_CLOSURE(value)          isObjType(value, OBJ_CLOSURE)
@@ -114,6 +124,7 @@ ObjFileHandle_t *newFileHandle(FILE *fh, const char *name, const char *accessTyp
 ObjUpvalue_t *newUpvalue(Value_t *value);
 ObjString_t *makeString(char *chars, int length);
 ObjClass_t *newClass(ObjString_t *name);
+ObjInstance_t *newInstance(ObjClass_t *klass);
 void turnOnProtectMode(Obj_t *object);
 void turnOffProtectMode(Obj_t *object);
 void printObject(Value_t val);

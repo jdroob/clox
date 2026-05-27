@@ -2526,7 +2526,7 @@ fun assignMyClass() {
 }
 // Conditional class creation
 var someCondition = true;
-if (someCondition) {
+t if (someCondition) {
     class MyClass { }
 } else {
     class MyClass { }  // Different implementation
@@ -2543,3 +2543,36 @@ assignMyClass();
 ```
 
 - `SomeOtherClass` can only be assigned before being declared in a late-binding world
+
+- Hit a **sneaky** unsigned overflow bug
+```C
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            // case OBJ_FUNCTION:
+            case OBJ_CLASS: {
+                ObjInstance_t *instance = newInstance(AS_CLASS(callee));
+                // replace class object with instance object
+                vm.stackTop[-argCount - 1] = OBJ_VAL(instance);  // <--
+                turnOffProtectMode((Obj_t *)instance);
+                return true;
+            }
+```
+
+- Hmm.. what's wrong witht he above picture?
+- There it is! You're negating an unsigned variable
+- So rather than -argCount just being treated as a negative int, it was treated as a huge unsigned.. leading to chaos
+- Here is the fix
+```C
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            // case OBJ_FUNCTION:
+            case OBJ_CLASS: {
+                ObjInstance_t *instance = newInstance(AS_CLASS(callee));
+                // replace class object with instance object
+                vm.stackTop[-(int)argCount - 1] = OBJ_VAL(instance);  // <-- FIX
+                turnOffProtectMode((Obj_t *)instance);
+                return true;
+            }
+```

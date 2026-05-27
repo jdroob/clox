@@ -101,6 +101,14 @@ ObjClass_t *newClass(ObjString_t *name) {
     return klass;
 }
 
+ObjInstance_t *newInstance(ObjClass_t *klass) {
+    ObjInstance_t *instance = ALLOCATE_OBJ(ObjInstance_t, sizeof(ObjInstance_t), OBJ_INSTANCE);
+    instance->obj.type = OBJ_INSTANCE;
+    initTable(&instance->fields);
+    instance->klass = klass;
+    return instance;
+}
+
 ObjString_t *makeString(char *chars, int length) {
     // NOTE: makeString expects length == strlen(s)
     //       +1 for null byte accounted for in allocateString
@@ -130,6 +138,11 @@ void printObject(Value_t val) {
     switch (OBJ_TYPE(val)) {
         case OBJ_CLASS: {
             printf("<class: %s>", AS_CLASS(val)->name->chars);
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_INSTANCE: {
+            printf("<class '%s' instance: %p>", AS_INSTANCE(val)->klass->name->chars, AS_OBJ(val));
             if (appendNewline) printf("\n");
             break;
         }

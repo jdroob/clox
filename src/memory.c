@@ -53,6 +53,11 @@ static void freeObject(Obj_t *object) {
             FREE(ObjString_t, object);
             break;
         }
+        case OBJ_INSTANCE: {
+            freeTable(&AS_INSTANCE(OBJ_VAL(object))->fields);
+            FREE(ObjInstance_t, object);
+            break;
+        }
         case OBJ_STRING: {
             ObjString_t *string = (ObjString_t *)object;
             FREE(ObjString_t, object);
@@ -154,6 +159,12 @@ static void blackenObject(Obj_t *ref) {
         case OBJ_CLASS: {
             ObjClass_t *klass = (ObjClass_t *)ref;
             markObject(klass->name);
+            break;
+        }
+        case OBJ_INSTANCE: {
+            ObjInstance_t *instance = (ObjInstance_t *)ref;
+            markObject((Obj_t *)instance->klass);
+            markTable(&instance->fields);
             break;
         }
         case OBJ_CLOSURE: {
