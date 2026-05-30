@@ -689,6 +689,50 @@ static InterpResult_t run(void) {
                 turnOffProtectMode((Obj_t *)function);
                 break;
             }
+            case OP_GET_PROPERTY:
+            case OP_GET_PROPERTY_LONG: {
+                ObjString_t *property;
+                if (instruction == OP_GET_PROPERTY){
+                    property = READ_STRING();
+                } else {
+                    property = READ_STRING_LONG();
+                }
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjInstance_t *instance = AS_INSTANCE(peek(0));
+                Value_t value; 
+                if (tableGet(&instance->fields, OBJ_VAL(property), &value)) {
+                    pop();  // instance
+                    push(value);
+                    break;
+                }
+                runtimeError("Undefined property '%s'.", property->chars);
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            case OP_SET_PROPERTY:
+            case OP_SET_PROPERTY_LONG: {
+                // Read name of property from constant pool
+                ObjString_t *property;
+                if (instruction == OP_SET_PROPERTY) {
+                    property = READ_STRING();
+                } else {
+                    property = READ_STRING_LONG();
+                }
+                // pop value to be assigned from top of stack
+                Value_t value = pop();  // rhs
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                // pop instance containing fields map
+                ObjInstance_t *instance = AS_INSTANCE(pop());
+                // set instance.property = value
+                tableSet(&instance->fields, OBJ_VAL(property), value);
+                push(value);    // since this is an assignment expression
+                break;
+            }
             case OP_ACCESS_UPVALUE:
             case OP_ACCESS_UPVALUE_LONG: {
                 unsigned slot = (instruction == OP_ACCESS_UPVALUE) ? READ_BYTE() : READ_BYTES();

@@ -488,6 +488,16 @@ static void namedVariable(Token_t name, bool canAssign) {
     }
 }
 
+static unsigned makeConstant(Value_t value) {
+    int idx = addConstant(currentChunk(), value);
+    if (idx >= OP_LONG_MAX) {
+        fprintf(stderr, "Constant pool is too large.");
+        exit(EXIT_FAILURE);
+    }
+
+    return (unsigned)idx;
+}
+
 static void variable(bool canAssign) {
     namedVariable(parser.previous, canAssign);
 }
@@ -612,6 +622,24 @@ static void binary(bool canAssign) {
     }
 }
 
+static void dot(bool canAssign) {
+    // LHS has already been compiled
+    // result is at top of stack
+    consume(TOKEN_IDENTIFIER, "Expect property after '.'");
+
+    // create string or retrieve interned string
+    ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
+
+    // push identifier constant to constant pool
+    // emit instruction with constant pool index operand
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression(); // put val to be assigned at top of stack
+        emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_SET_PROPERTY, OP_SET_PROPERTY_LONG);
+    } else {
+        emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_GET_PROPERTY, OP_GET_PROPERTY_LONG);
+    }
+}
+
 static void ternary(bool canAssign) {
     // expression was just evaluated - result at top of stack
     int falseJump = emitJump(OP_JUMP_IF_FALSE);
@@ -675,7 +703,7 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},
-    [TOKEN_DOT]             =  {NULL, NULL, PREC_NONE},
+    [TOKEN_DOT]             =  {NULL, dot, PREC_CALL},
     [TOKEN_MINUS]           =  {unary, binary, PREC_TERM},
     [TOKEN_PLUS]            =  {NULL, binary, PREC_TERM},
     [TOKEN_SEMICOLON]       =  {NULL, NULL, PREC_NONE},
@@ -800,16 +828,6 @@ static void expressionStatement(void) {
     if (!match(TOKEN_COMMA))
         consume(TOKEN_SEMICOLON, "Expected a ';'.");
     emitByte(OP_POP);
-}
-
-static unsigned makeConstant(Value_t value) {
-    int idx = addConstant(currentChunk(), value);
-    if (idx >= OP_LONG_MAX) {
-        fprintf(stderr, "Constant pool is too large.");
-        exit(EXIT_FAILURE);
-    }
-
-    return (unsigned)idx;
 }
 
 static void markInitialized(void) {
@@ -1470,6 +1488,15 @@ static void classDeclaration(void) {
     // i.e. add class name to globalNames table
     consume(TOKEN_IDENTIFIER, "Expect a class name.");
     ObjString_t *preservedID; // output param
+
+    // NOTE: identifierConstant in my implementation varies from the book's
+    //       my identifierConstant:
+    //              (i)   creates (or retrieves) a string via makeString
+    //              (ii)  adds the string to the globalNames table
+    //              (iii) returns the index in the globalValues table the globalName maps to
+    //
+    //       Here, we don't need to  mess with globals since we're dealing with properties
+    //       that are scoped to instances
     unsigned classNameIdx = identifierConstant(&parser.previous, isFinal, &preservedID);
 
     // push identifier constant to constant pool
