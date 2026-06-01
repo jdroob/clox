@@ -691,15 +691,15 @@ static InterpResult_t run(void) {
             }
             case OP_GET_PROPERTY:
             case OP_GET_PROPERTY_LONG: {
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 ObjString_t *property;
                 if (instruction == OP_GET_PROPERTY){
                     property = READ_STRING();
                 } else {
                     property = READ_STRING_LONG();
-                }
-                if (!IS_INSTANCE(peek(0))) {
-                    runtimeError("Left operand to '.' operator must be instance.");
-                    return INTERPRET_RUNTIME_ERROR;
                 }
                 ObjInstance_t *instance = AS_INSTANCE(peek(0));
                 Value_t value; 
@@ -713,6 +713,10 @@ static InterpResult_t run(void) {
             }
             case OP_SET_PROPERTY:
             case OP_SET_PROPERTY_LONG: {
+                if (!IS_INSTANCE(peek(1))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 // Read name of property from constant pool
                 ObjString_t *property;
                 if (instruction == OP_SET_PROPERTY) {
@@ -722,10 +726,6 @@ static InterpResult_t run(void) {
                 }
                 // pop value to be assigned from top of stack
                 Value_t value = pop();  // rhs
-                if (!IS_INSTANCE(peek(0))) {
-                    runtimeError("Left operand to '.' operator must be instance.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
                 // pop instance containing fields map
                 ObjInstance_t *instance = AS_INSTANCE(pop());
                 // set instance.property = value
