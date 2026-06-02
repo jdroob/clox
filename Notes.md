@@ -2739,3 +2739,5 @@ static void dot(bool canAssign) {
 SyntaxError: invalid syntax
 >>>
 ```
+
+- side note: I think the "official" name for this feature is **dynamic attribute access and modification**
