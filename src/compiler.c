@@ -507,6 +507,11 @@ static void grouping(bool canAssign) {
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
+// static void idCtor(bool canAssign) {
+//     expression();
+//     consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
+// }
+
 static void comma(bool canAssign) {
     expression();
     consume(TOKEN_COMMA, "Expect ',' after expression.");
@@ -625,18 +630,30 @@ static void binary(bool canAssign) {
 static void dot(bool canAssign) {
     // LHS has already been compiled
     // result is at top of stack
-    consume(TOKEN_IDENTIFIER, "Expect property after '.'");
-
-    // create string or retrieve interned string
-    ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
-
-    // push identifier constant to constant pool
-    // emit instruction with constant pool index operand
-    if (canAssign && match(TOKEN_EQUAL)) {
-        expression(); // put val to be assigned at top of stack
-        emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_SET_PROPERTY, OP_SET_PROPERTY_LONG);
+    if (match(TOKEN_BACKTICK)) {
+        // idCtor(true);
+        expression();  // must be a string
+        consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression(); // put val to be assigned at top of stack
+            emitByte(OP_SET_PROPERTY_IDCTOR);
+        } else {
+            emitByte(OP_GET_PROPERTY_IDCTOR);
+        }
     } else {
-        emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_GET_PROPERTY, OP_GET_PROPERTY_LONG);
+        consume(TOKEN_IDENTIFIER, "Expect property after '.'");
+
+        // create string or retrieve interned string
+        ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
+        
+        // push identifier constant to constant pool
+        // emit instruction with constant pool index operand
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression(); // put val to be assigned at top of stack
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_SET_PROPERTY, OP_SET_PROPERTY_LONG);
+        } else {
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_GET_PROPERTY, OP_GET_PROPERTY_LONG);
+        }
     }
 }
 
@@ -701,6 +718,7 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACK]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
+    // [TOKEN_BACKTICK]        =  {idCtor, NULL, PREC_CALL},
     [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},
     [TOKEN_DOT]             =  {NULL, dot, PREC_CALL},

@@ -2576,3 +2576,166 @@ static bool callValue(Value_t callee, unsigned argCount) {
                 return true;
             }
 ```
+
+6/1/2026:
+- Have added dynamic fields to object instances
+
+```c
+    // vm.c
+    case OP_GET_PROPERTY_IDCTOR: {
+        if (!IS_STRING(peek(0))) {
+            runtimeError("Constructed identifier must be string type.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        if (!IS_INSTANCE(peek(1))) {
+            runtimeError("Left operand to '.' operator must be instance.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        ObjString_t *property = AS_STRING(pop());
+        ObjInstance_t *instance = AS_INSTANCE(peek(0));
+        Value_t value;
+        if (tableGet(&instance->fields, OBJ_VAL(property), &value)) {
+            pop();  // instance
+            push(value);
+            break;
+        }
+        runtimeError("Undefined property '%s'.", property->chars);
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    case OP_SET_PROPERTY_IDCTOR: {
+        if (!IS_STRING(peek(1))) {
+            runtimeError("Constructed identifier must be string type.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        if (!IS_INSTANCE(peek(2))) {
+            runtimeError("Left operand to '.' operator must be instance.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        Value_t value = pop();
+        ObjString_t *property = AS_STRING(pop());
+        ObjInstance_t *instance = AS_INSTANCE(pop());
+        tableSet(&instance->fields, OBJ_VAL(property), value);
+        push(value);    // since this is an assignment expression
+        break;
+    }
+    case OP_GET_PROPERTY:
+    case OP_GET_PROPERTY_LONG: {
+        if (!IS_INSTANCE(peek(0))) {
+            runtimeError("Left operand to '.' operator must be instance.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        ObjString_t *property;
+        if (instruction == OP_GET_PROPERTY){
+            property = READ_STRING();
+        } else {
+            property = READ_STRING_LONG();
+        }
+        ObjInstance_t *instance = AS_INSTANCE(peek(0));
+        Value_t value;
+        if (tableGet(&instance->fields, OBJ_VAL(property), &value)) {
+            pop();  // instance
+            push(value);
+            break;
+        }
+        runtimeError("Undefined property '%s'.", property->chars);
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    case OP_SET_PROPERTY:
+    case OP_SET_PROPERTY_LONG: {
+        if (!IS_INSTANCE(peek(1))) {
+            runtimeError("Left operand to '.' operator must be instance.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        // Read name of property from constant pool
+        ObjString_t *property;
+        if (instruction == OP_SET_PROPERTY) {
+            property = READ_STRING();
+        } else {
+            property = READ_STRING_LONG();
+        }
+        // pop value to be assigned from top of stack
+        Value_t value = pop();  // rhs
+        // pop instance containing fields map
+        ObjInstance_t *instance = AS_INSTANCE(pop());
+        // set instance.property = value
+        tableSet(&instance->fields, OBJ_VAL(property), value);
+        push(value);    // since this is an assignment expression
+        break;
+    }
+```
+
+```c
+static void dot(bool canAssign) {
+    // LHS has already been compiled
+    // result is at top of stack
+    if (match(TOKEN_BACKTICK)) {
+        expression();  // must be a string
+        consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression(); // put val to be assigned at top of stack
+            emitByte(OP_SET_PROPERTY_IDCTOR);
+        } else {
+            emitByte(OP_GET_PROPERTY_IDCTOR);
+        }
+    } else {
+        consume(TOKEN_IDENTIFIER, "Expect property after '.'");
+
+        // create string or retrieve interned string
+        ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
+        
+        // push identifier constant to constant pool
+        // emit instruction with constant pool index operand
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression(); // put val to be assigned at top of stack
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_SET_PROPERTY, OP_SET_PROPERTY_LONG);
+        } else {
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_GET_PROPERTY, OP_GET_PROPERTY_LONG);
+        }
+    }
+}
+```
+
+- For regular instance field access / writes, we create an ObjString_t constant val and push to consant pool
+- Later, we grab that constant and write it to the instace's fields table
+
+- I also added **dynamic field id construction** :)
+- Now, stuff like below works!
+
+```c
+> class A {}
+> var a = A();
+> a.`"hello " + "world!"` = 4;
+> a.`"hello world!";
+[line 1] Error at ';' : Require a '`' to close id construction      <-- catching a syntax error
+> print a.`"hello world!"`;
+4
+> a.`"class"` = "class as a keyword?!";  <-- can use reserved words as long as they're eval'd as a string literal
+> print a.`"class"`;
+"class as a keyword?!"
+> print a.class;
+[line 1] Error at 'class' : Expect property after '.'       <-- rightfully catching an error
+[line 1] Error at ';' : Expect a class name.
+> var hello = "hello";
+> var world = "world";
+> a.`hello + " " + world` = 4;
+> print a.`hello + " " + world`;    <-- expression using global vars
+4
+```
+
+- Even though on paper it makes sense, still felt cool that this feature actually worked lol
+- Here's how Python3 uses the same feature
+```python
+>>> class Example:
+...     pass
+...
+>>> e = Example()
+>>> setattr(e, "a field", 42)
+>>> getattr(e, "a field")
+42
+>>> e."a field"
+  File "<stdin>", line 1
+    e."a field"
+      ^^^^^^^^^
+SyntaxError: invalid syntax
+>>>
+```

@@ -365,6 +365,7 @@ Token_t scanToken(void) {
         case '|': return makeToken(TOKEN_BITWISE_OR);
         case '^': return makeToken(TOKEN_BITWISE_XOR);
         case '/': return makeToken(TOKEN_SLASH);
+        case '`': return makeToken(TOKEN_BACKTICK);
         case '+': 
             return makeToken(match('+') ? TOKEN_PLUS_PLUS : TOKEN_PLUS);
         case '-': 

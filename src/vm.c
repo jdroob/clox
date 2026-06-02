@@ -689,6 +689,42 @@ static InterpResult_t run(void) {
                 turnOffProtectMode((Obj_t *)function);
                 break;
             }
+            case OP_GET_PROPERTY_IDCTOR: {
+                if (!IS_STRING(peek(0))) {
+                    runtimeError("Constructed identifier must be string type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_INSTANCE(peek(1))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjString_t *property = AS_STRING(pop());
+                ObjInstance_t *instance = AS_INSTANCE(peek(0));
+                Value_t value;
+                if (tableGet(&instance->fields, OBJ_VAL(property), &value)) {
+                    pop();  // instance
+                    push(value);
+                    break;
+                }
+                runtimeError("Undefined property '%s'.", property->chars);
+                return INTERPRET_RUNTIME_ERROR;
+            }
+            case OP_SET_PROPERTY_IDCTOR: {
+                if (!IS_STRING(peek(1))) {
+                    runtimeError("Constructed identifier must be string type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_INSTANCE(peek(2))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t value = pop();
+                ObjString_t *property = AS_STRING(pop());
+                ObjInstance_t *instance = AS_INSTANCE(pop());
+                tableSet(&instance->fields, OBJ_VAL(property), value);
+                push(value);    // since this is an assignment expression
+                break;
+            }
             case OP_GET_PROPERTY:
             case OP_GET_PROPERTY_LONG: {
                 if (!IS_INSTANCE(peek(0))) {
@@ -702,7 +738,7 @@ static InterpResult_t run(void) {
                     property = READ_STRING_LONG();
                 }
                 ObjInstance_t *instance = AS_INSTANCE(peek(0));
-                Value_t value; 
+                Value_t value;
                 if (tableGet(&instance->fields, OBJ_VAL(property), &value)) {
                     pop();  // instance
                     push(value);

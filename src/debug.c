@@ -57,6 +57,8 @@
      (instruction) == OP_SET_PROPERTY_LONG ? "OP_SET_PROPERTY_LONG" : \
      (instruction) == OP_GET_PROPERTY ? "OP_GET_PROPERTY" : \
      (instruction) == OP_GET_PROPERTY_LONG ? "OP_GET_PROPERTY_LONG" : \
+     (instruction) == OP_SET_PROPERTY_IDCTOR ? "OP_SET_PROPERTY_IDCTOR" : \
+     (instruction) == OP_GET_PROPERTY_IDCTOR ? "OP_GET_PROPERTY_IDCTOR" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -147,6 +149,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_DEFAULTCASE:
         case OP_ACCESS_UPVALUE:
         case OP_SET_UPVALUE:
+        case OP_GET_PROPERTY_IDCTOR:
+        case OP_SET_PROPERTY_IDCTOR:
         return simpleInstruction(name, offset);
         case OP_CONSTANT:
         case OP_ACCESS_LOCAL:
