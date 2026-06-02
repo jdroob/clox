@@ -174,7 +174,18 @@ static TokenType_e identifierType(void) {
                         return checkKeyword(1, 7, "ontinue", TOKEN_CONTINUE);
                 }
             }
-        case 'd': return checkKeyword(1, 6, "efault", TOKEN_DEFAULT);
+        case 'd': {
+            if (scanner.current - scanner.start > 2) {
+                /**
+                 * default
+                 * del
+                 */
+                if (scanner.start[2] == 'l' && scanner.current - scanner.start == 3) return TOKEN_DEL;
+                return checkKeyword(1, 6, "efault", TOKEN_DEFAULT);
+            } else {
+                return TOKEN_IDENTIFIER;
+            }
+        }
         case 'e': return checkKeyword(1, 3, "lse", TOKEN_ELSE);
         case 'f':
             if (scanner.current - scanner.start > 1) {

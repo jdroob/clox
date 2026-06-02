@@ -689,6 +689,24 @@ static InterpResult_t run(void) {
                 turnOffProtectMode((Obj_t *)function);
                 break;
             }
+            case OP_DEL_IDCTOR: {
+                if (!IS_STRING(peek(0))) {
+                    runtimeError("Constructed identifier must be string type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_INSTANCE(peek(1))) {
+                    runtimeError("Left operand to '.' operator must be instance.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjString_t *property = AS_STRING(pop());
+                ObjInstance_t *instance = AS_INSTANCE(pop());
+                bool found = tableDelete(&instance->fields, OBJ_VAL(property));
+                // if (!found) {
+                // TODO: implement me :)
+                //     runtimeWarning("attribute %s not found.", property->chars);
+                // }
+                break;
+            }
             case OP_GET_PROPERTY_IDCTOR: {
                 if (!IS_STRING(peek(0))) {
                     runtimeError("Constructed identifier must be string type.");
@@ -723,6 +741,26 @@ static InterpResult_t run(void) {
                 ObjInstance_t *instance = AS_INSTANCE(pop());
                 tableSet(&instance->fields, OBJ_VAL(property), value);
                 push(value);    // since this is an assignment expression
+                break;
+            }
+            case OP_DEL:
+            case OP_DEL_LONG: {
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("'del' operator expects instance attribute as operand.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjString_t *property;
+                if (instruction == OP_DEL){
+                    property = READ_STRING();
+                } else {
+                    property = READ_STRING_LONG();
+                }
+                ObjInstance_t *instance = AS_INSTANCE(pop());
+                bool found = tableDelete(&instance->fields, OBJ_VAL(property));
+                // if (!found) {
+                // TODO: implement me :)
+                //     runtimeWarning("attribute %s not found.", property->chars);
+                // }
                 break;
             }
             case OP_GET_PROPERTY:

@@ -507,11 +507,6 @@ static void grouping(bool canAssign) {
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
 }
 
-// static void idCtor(bool canAssign) {
-//     expression();
-//     consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
-// }
-
 static void comma(bool canAssign) {
     expression();
     consume(TOKEN_COMMA, "Expect ',' after expression.");
@@ -529,6 +524,51 @@ static void unary(bool canAssign) {
         default: return;    // unreachable
     }
 }
+
+static void del(bool canAssign) {
+   // case 1: del inst.`"field" + "Name"`;
+   //   Need to emit OP that looks for string on stack,
+   //   looks up attribute in table, deletes attribute if found
+
+   // case 2: del inst.fieldName
+   //   Need to emit OP that constructs a string constant, pushes
+   //   to constant pool, emits index, then in VM, pulls constant from
+   //   constant pool using index, looks up Name in table,
+   //   deletes attribute if found
+   
+   // step 1: compile instance
+   consume(TOKEN_IDENTIFIER, "Expect identifier after 'del'.");
+   variable(canAssign); // instance on top of stack
+//    advance();
+
+   // step 2: compile dot
+   consume(TOKEN_DOT, "del requires instance field operand.");
+
+   // step 3: compile attribute
+   if (match(TOKEN_BACKTICK)) {
+        expression();  // must be a string
+        consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression(); // put val to be assigned at top of stack
+            emitByte(OP_POP); // throw away since we're del'ing anyway
+        }
+        emitByte(OP_DEL_IDCTOR);
+    } else {
+        consume(TOKEN_IDENTIFIER, "Expect property after '.'");
+
+        // create string or retrieve interned string
+        ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
+        
+        // push identifier constant to constant pool
+        // emit instruction with constant pool index operand
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression(); // put val to be assigned at top of stack
+            emitByte(OP_POP); // throw away since we're del'ing anyway
+        }
+        emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_DEL, OP_DEL_LONG);
+    }
+}
+
 
 static void and_(bool canAssign) {
     /**
@@ -631,7 +671,6 @@ static void dot(bool canAssign) {
     // LHS has already been compiled
     // result is at top of stack
     if (match(TOKEN_BACKTICK)) {
-        // idCtor(true);
         expression();  // must be a string
         consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
         if (canAssign && match(TOKEN_EQUAL)) {
@@ -718,10 +757,10 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACK]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
-    // [TOKEN_BACKTICK]        =  {idCtor, NULL, PREC_CALL},
     [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},
     [TOKEN_DOT]             =  {NULL, dot, PREC_CALL},
+    [TOKEN_DEL]             =  {del, NULL, PREC_PRIMARY},
     [TOKEN_MINUS]           =  {unary, binary, PREC_TERM},
     [TOKEN_PLUS]            =  {NULL, binary, PREC_TERM},
     [TOKEN_SEMICOLON]       =  {NULL, NULL, PREC_NONE},
@@ -757,8 +796,6 @@ ParseRule_t rules[] = {
     [TOKEN_FOR]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
     [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
-    [TOKEN_PRINT]           =  {NULL, NULL, PREC_NONE},
-//    [TOKEN_RETURN]          =  {returnStmt, NULL, PREC_NONE},
     [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
     [TOKEN_THIS]            =  {NULL, NULL, PREC_NONE},
     [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
@@ -825,6 +862,7 @@ static void synchronize(void) {
             case TOKEN_VAR:
             case TOKEN_WHILE:
             case TOKEN_PRINT:
+            case TOKEN_DEL:
             case TOKEN_RETURN:
                 return;
             default:

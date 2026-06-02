@@ -28,6 +28,9 @@
      (instruction) == OP_CONSTANT_LONG ? "OP_CONSTANT_LONG" : \
      (instruction) == OP_PRINT ? "OP_PRINT" : \
      (instruction) == OP_POP ? "OP_POP" : \
+     (instruction) == OP_DEL ? "OP_DEL" : \
+     (instruction) == OP_DEL_LONG ? "OP_DEL_LONG" : \
+     (instruction) == OP_DEL_IDCTOR ? "OP_DEL_IDCTOR" : \
      (instruction) == OP_DEFINE_GLOBAL ? "OP_DEFINE_GLOBAL" : \
      (instruction) == OP_ACCESS_GLOBAL ? "OP_ACCESS_GLOBAL" : \
      (instruction) == OP_ACCESS_LOCAL ? "OP_ACCESS_LOCAL" : \
@@ -151,7 +154,9 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SET_UPVALUE:
         case OP_GET_PROPERTY_IDCTOR:
         case OP_SET_PROPERTY_IDCTOR:
+        case OP_DEL_IDCTOR:
         return simpleInstruction(name, offset);
+        case OP_DEL:
         case OP_CONSTANT:
         case OP_ACCESS_LOCAL:
         case OP_SET_LOCAL:
@@ -165,6 +170,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_ACCESS_GLOBAL:
         case OP_SET_GLOBAL:
             return constantInstruction(name, chunk, offset, true);
+        case OP_DEL_LONG:
         case OP_CONSTANT_LONG:
         case OP_CLASS_LONG:
         case OP_ACCESS_LOCAL_LONG:

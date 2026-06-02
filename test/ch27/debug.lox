@@ -1,0 +1,12 @@
+class A {}
+
+var a = A();
+
+a.field = 2;
+
+print "a.field: " + a.field;
+
+del a.`"fi" + "eld"`;
+
+print "a.field: " + a.field; // error!
+
