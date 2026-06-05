@@ -2741,3 +2741,85 @@ SyntaxError: invalid syntax
 ```
 
 - side note: I think the "official" name for this feature is **dynamic attribute access and modification**
+
+6/5/2026:
+- Added support for `getattr`, `setattr`, `hasattr` just for fun :)
+
+```shell
+$ bin/lox
+> class A {}
+> var a = A();
+> setattr(a, "john", 42);
+> print a.john;
+42
+> print getattr(a, "john");
+42
+> print getattr(a, "joe");
+nil
+> print hasattr(a, "john");
+true
+> print hasattr(a, "joe");
+false
+
+...
+
+$ bin/lox
+> class A {}
+> var a = A();
+> setattr(a, "field with whitespace", "val with whitespace");
+> print a.`"field with whitespace"`;
+"val with whitespace"
+> del a.`"field with whitespace"`;
+> print getattr(a, "field with whitespace");
+nil
+> 
+```
+
+```C
+static Value_t hasattrNative(int argCount, Value_t *args) {
+    if (!IS_INSTANCE(args[0])) {
+        runtimeError("arg0: hasattr requires instance type");
+        return ERR_VAL;
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: hasattr requires string type");
+        return ERR_VAL;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(args[0]);
+    ObjString_t *attr = AS_STRING(args[1]);
+    Value_t val;
+    bool found = tableGet(&instance->fields, OBJ_VAL(attr), &val);
+    return BOOL_VAL(found);
+}
+
+static Value_t getattrNative(int argCount, Value_t *args) {
+    if (!IS_INSTANCE(args[0])) {
+        runtimeError("arg0: getattr requires instance type");
+        return ERR_VAL;
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: getattr requires string type");
+        return ERR_VAL;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(args[0]);
+    ObjString_t *attr = AS_STRING(args[1]);
+    Value_t val;
+    bool found = tableGet(&instance->fields, OBJ_VAL(attr), &val);
+    return found ? val : NIL_VAL;
+}
+
+static Value_t setattrNative(int argCount, Value_t *args) {
+    if (!IS_INSTANCE(args[0])) {
+        runtimeError("arg0: getattr requires instance type");
+        return ERR_VAL;
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: getattr requires string type");
+        return ERR_VAL;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(args[0]);
+    ObjString_t *attr = AS_STRING(args[1]);
+    tableSet(&instance->fields, OBJ_VAL(attr), args[2]);
+    return args[2];
+}
+```

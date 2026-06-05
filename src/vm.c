@@ -147,6 +147,53 @@ static Value_t getlineNative(int argCount, Value_t *args) {
     return OBJ_VAL(lineObj);
 }
 
+static Value_t hasattrNative(int argCount, Value_t *args) {
+    if (!IS_INSTANCE(args[0])) {
+        runtimeError("arg0: hasattr requires instance type");
+        return ERR_VAL;
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: hasattr requires string type");
+        return ERR_VAL;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(args[0]);
+    ObjString_t *attr = AS_STRING(args[1]);
+    Value_t val;
+    bool found = tableGet(&instance->fields, OBJ_VAL(attr), &val);
+    return BOOL_VAL(found);
+}
+
+static Value_t getattrNative(int argCount, Value_t *args) {
+    if (!IS_INSTANCE(args[0])) {
+        runtimeError("arg0: getattr requires instance type");
+        return ERR_VAL;
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: getattr requires string type");
+        return ERR_VAL;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(args[0]);
+    ObjString_t *attr = AS_STRING(args[1]);
+    Value_t val;
+    bool found = tableGet(&instance->fields, OBJ_VAL(attr), &val);
+    return found ? val : NIL_VAL;
+}
+
+static Value_t setattrNative(int argCount, Value_t *args) {
+    if (!IS_INSTANCE(args[0])) {
+        runtimeError("arg0: getattr requires instance type");
+        return ERR_VAL;
+    }
+    if (!IS_STRING(args[1])) {
+        runtimeError("arg1: getattr requires string type");
+        return ERR_VAL;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(args[0]);
+    ObjString_t *attr = AS_STRING(args[1]);
+    tableSet(&instance->fields, OBJ_VAL(attr), args[2]);
+    return args[2];
+}
+
 static Value_t asciiNative(int argCount, Value_t *args) {
     // TODO: Implement me :)
     return ERR_VAL;
@@ -449,6 +496,9 @@ void initVM(void) {
     defineNative("write", fwriteNative, 2);
     defineNative("getline", getlineNative, 1);
     defineNative("len", lenNative, 1);
+    defineNative("hasattr", hasattrNative, 2);
+    defineNative("getattr", getattrNative, 2);
+    defineNative("setattr", setattrNative, 3);
     vm.isInitialized = true;
 }
 
