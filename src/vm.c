@@ -552,6 +552,14 @@ static bool callValue(Value_t callee, unsigned argCount) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
             // case OBJ_FUNCTION:
+            case OBJ_BOUND_METHOD: {
+                // temporary
+                // need to add support for 'this'
+                ObjBoundMethod_t *bound = AS_BOUND_METHOD(callee);
+                vm.stackTop[-(int)argCount - 1] = bound->receiver;  // set 'this' to receiver
+                return call(AS_BOUND_METHOD(callee)->method, argCount);
+                return true;
+            }
             case OBJ_CLASS: {
                 ObjInstance_t *instance = newInstance(AS_CLASS(callee));
                 // replace class object with instance object
@@ -615,6 +623,19 @@ static void closeUpvalues(Value_t *last) {
         upvalue->location = &upvalue->closed;
         vm.openUpvalues = upvalue->next;
     }
+}
+
+static bool bindMethod(ObjClass_t *klass, ObjString_t *name) {
+    Value_t method;
+    if (!tableGet(&klass->methods, OBJ_VAL(name), &method)) {
+        runtimeError("Undefined property %s.", name->chars);
+        return false;
+    }
+
+    ObjBoundMethod_t *boundMethod = newBoundMethod(peek(0), AS_CLOSURE(method));
+    pop(); // instance
+    push(OBJ_VAL(boundMethod));
+    return true;
 }
 
 static InterpResult_t run(void) {
@@ -739,6 +760,21 @@ static InterpResult_t run(void) {
                 turnOffProtectMode((Obj_t *)function);
                 break;
             }
+            case OP_METHOD:
+            case OP_METHOD_LONG: {
+                ObjString_t *methodName;
+                if (instruction == OP_METHOD) {
+                    methodName = READ_STRING();
+                } else {
+                    methodName = READ_STRING_LONG();
+                }
+                // pop ObjClosure from stack
+                ObjClosure_t *closure = AS_CLOSURE(pop());
+                // add to class's methods table
+                ObjClass_t *klass = AS_CLASS(peek(0));
+                tableSet(&klass->methods, OBJ_VAL(methodName), OBJ_VAL(closure));
+                break;
+            }
             case OP_DEL_IDCTOR: {
                 if (!IS_STRING(peek(0))) {
                     runtimeError("Constructed identifier must be string type.");
@@ -774,8 +810,10 @@ static InterpResult_t run(void) {
                     push(value);
                     break;
                 }
-                runtimeError("Undefined property '%s'.", property->chars);
-                return INTERPRET_RUNTIME_ERROR;
+                if (!bindMethod(instance->klass, property)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
             }
             case OP_SET_PROPERTY_IDCTOR: {
                 if (!IS_STRING(peek(1))) {
@@ -832,8 +870,10 @@ static InterpResult_t run(void) {
                     push(value);
                     break;
                 }
-                runtimeError("Undefined property '%s'.", property->chars);
-                return INTERPRET_RUNTIME_ERROR;
+                if (!bindMethod(instance->klass, property)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                break;
             }
             case OP_SET_PROPERTY:
             case OP_SET_PROPERTY_LONG: {

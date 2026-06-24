@@ -2823,3 +2823,87 @@ static Value_t setattrNative(int argCount, Value_t *args) {
     return args[2];
 }
 ```
+
+6/7/2026:
+- Added `OP_METHOD` instruction
+- This instruction simply looks pops closure from top of stack and adds it to class's methods table
+- Class object is always just below closure object in value stack
+
+```C
+// compiler.c::classDeclaration
+// ...
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+        /**
+         * Note: prior to each execution of OP_METHOD,
+         * the top two stack slots will be (<- lower, higher ->)
+         * [ ... ][ <CLASS OBJECT> ][ <CLOSURE OBJECT> ]
+         */
+        method();
+    }
+
+    emitByte(OP_POP);   // pop off class ObjString_t
+// ...
+```
+
+```C
+// compiler.c::method()
+static void method(void) {
+    consume(TOKEN_IDENTIFIER, "Expected a method name.");
+    ObjString_t *methodName = makeString(parser.previous.start, parser.previous.length);
+    unsigned constPoolIdx = makeConstant(OBJ_VAL(methodName));
+    function(TYPE_FUNCTION);
+    emitVarLenInstr(constPoolIdx, OP_METHOD, OP_METHOD_LONG);
+}
+```
+
+```C
+// vm.c::run()
+//...
+    case OP_METHOD:
+    case OP_METHOD_LONG: {
+        ObjString_t *methodName;
+        if (instruction == OP_METHOD) {
+            methodName = READ_STRING();
+        } else {
+            methodName = READ_STRING_LONG();
+        }
+        // pop ObjClosure from stack
+        ObjClosure_t *closure = AS_CLOSURE(pop());
+        // add to class's methods table
+        ObjClass_t *klass = AS_CLASS(peek(0));
+        tableSet(&klass->methods, OBJ_VAL(methodName), OBJ_VAL(closure));
+        break;
+    }
+//...
+```
+
+6/19/2026:
+- Not sure if OP_ACCESS_UPVALUE should be being emitted..
+- ^that's dead (was a copy error)
+- need to OP_POP on `this_` rn
+    - TODO: confirm this makes any sense at all
+
+- found bug!
+
+```C
+static void function(FunctionType_e type) {
+    Compiler_t compiler;    // track compilation data  for this function
+    initCompiler(&compiler, TYPE_FUNCTION);
+    beginScope();   // This function's parameter scope
+```
+
+- ^was hardcoding the above causing below condition in `initCompiler` to never trigger
+```C
+if (type == TYPE_METHOD) {
+        local->name.start = "this";
+        local->name.length = 4;
+    } else {
+```
+
+- fix was simple - debug was not
+```C
+static void function(FunctionType_e type) {
+    Compiler_t compiler;    // track compilation data  for this function
+    initCompiler(&compiler, type);
+    beginScope();   // This function's parameter scope
+```

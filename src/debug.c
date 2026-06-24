@@ -34,6 +34,8 @@
      (instruction) == OP_DEFINE_GLOBAL ? "OP_DEFINE_GLOBAL" : \
      (instruction) == OP_ACCESS_GLOBAL ? "OP_ACCESS_GLOBAL" : \
      (instruction) == OP_ACCESS_LOCAL ? "OP_ACCESS_LOCAL" : \
+     (instruction) == OP_ACCESS_UPVALUE ? "OP_ACCESS_UPVALUE" : \
+     (instruction) == OP_ACCESS_UPVALUE_LONG ? "OP_ACCESS_UPVALUE_LONG" : \
      (instruction) == OP_ACCESS_LOCAL_LONG ? "OP_ACCESS_LOCAL_LONG" : \
      (instruction) == OP_SET_GLOBAL ? "OP_SET_GLOBAL" : \
      (instruction) == OP_SET_LOCAL ? "OP_SET_LOCAL" : \
@@ -53,6 +55,8 @@
      (instruction) == OP_ENDSWITCH ? "OP_ENDSWITCH" : \
      (instruction) == OP_CLOSURE ? "OP_CLOSURE" : \
      (instruction) == OP_CLOSURE_LONG ? "OP_CLOSURE_LONG" : \
+     (instruction) == OP_METHOD ? "OP_METHOD" : \
+     (instruction) == OP_METHOD_LONG ? "OP_METHOD_LONG" : \
      (instruction) == OP_CLOSE_UPVALUE ? "OP_CLOSE_UPVALUE" : \
      (instruction) == OP_CLASS ? "OP_CLASS" : \
      (instruction) == OP_CLASS_LONG ? "OP_CLASS_LONG" : \
@@ -150,7 +154,6 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SWITCH:
         case OP_CASE:
         case OP_DEFAULTCASE:
-        case OP_ACCESS_UPVALUE:
         case OP_SET_UPVALUE:
         case OP_GET_PROPERTY_IDCTOR:
         case OP_SET_PROPERTY_IDCTOR:
@@ -159,12 +162,14 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_DEL:
         case OP_CONSTANT:
         case OP_ACCESS_LOCAL:
+        case OP_ACCESS_UPVALUE:
         case OP_SET_LOCAL:
         case OP_ENDSWITCH:
         case OP_CALL:
         case OP_CLASS:
         case OP_GET_PROPERTY:
         case OP_SET_PROPERTY:
+        case OP_METHOD:
             return constantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
@@ -182,6 +187,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_CALL_LONG:
         case OP_GET_PROPERTY_LONG:
         case OP_SET_PROPERTY_LONG:
+        case OP_METHOD_LONG:
             return longConstantInstruction(name, chunk, offset, false);
         case OP_DEFINE_GLOBAL_LONG:
         case OP_ACCESS_GLOBAL_LONG:

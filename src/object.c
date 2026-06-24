@@ -97,7 +97,7 @@ ObjClass_t *newClass(ObjString_t *name) {
     ObjClass_t *klass = ALLOCATE_OBJ(ObjClass_t, sizeof(ObjClass_t), OBJ_CLASS);
     klass->obj.type = OBJ_CLASS;
     klass->name = name;
-    klass->methods = NULL;
+    initTable(&klass->methods);
     return klass;
 }
 
@@ -118,6 +118,13 @@ ObjString_t *makeString(char *chars, int length) {
     return allocateString(chars, length, hash);
 }
 
+ObjBoundMethod_t *newBoundMethod(Value_t receiver, ObjClosure_t *method) {
+    ObjBoundMethod_t *boundMethod = ALLOCATE_OBJ(ObjBoundMethod_t, sizeof(ObjBoundMethod_t), OBJ_BOUND_METHOD);
+    boundMethod->receiver = receiver;
+    boundMethod->method = method;
+    return boundMethod;
+}
+
 void turnOnProtectMode(Obj_t *object) {
     object->isProtected = true;
 }
@@ -136,6 +143,11 @@ static void printFunction(ObjFunction_t *function) {
 
 void printObject(Value_t val) {
     switch (OBJ_TYPE(val)) {
+        case OBJ_BOUND_METHOD: {
+            printFunction(AS_BOUND_METHOD(val)->method->function);
+            if (appendNewline) printf("\n");
+            break;
+        }
         case OBJ_CLASS: {
             printf("<class: %s>", AS_CLASS(val)->name->chars);
             if (appendNewline) printf("\n");

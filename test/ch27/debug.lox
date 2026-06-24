@@ -1,12 +1,17 @@
-class A {}
-
+class A { f(name) { this.name = name; print this.name; return 42; } }
 var a = A();
+print a.f("john");
+print a.name;
+// print h;
 
-a.field = 2;
-
-print "a.field: " + a.field;
-
-del a.`"fi" + "eld"`;
-
-print "a.field: " + a.field; // error!
-
+//var a = A();
+//
+//a.field = 2;
+//
+//print "a.field: " + a.field;
+//
+//del a.`"fi" + "eld"`;
+//
+//print "a.field: " + a.field; // error!
+//
+//

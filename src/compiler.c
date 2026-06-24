@@ -8,6 +8,7 @@
 #include "debug.h"
 #include "vm.h"
 
+extern Scanner_t scanner;
 
 typedef struct {
     Token_t previous;
@@ -60,7 +61,8 @@ typedef struct {
 
 typedef enum {
     TYPE_SCRIPT,    // Account for globals at top-level, outside of implicit top-level function
-    TYPE_FUNCTION
+    TYPE_FUNCTION,
+    TYPE_METHOD
 } FunctionType_e;
 
 typedef struct Compiler_t {
@@ -329,11 +331,16 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     current->upvalues = NULL;
     initLocals();
     initUpvalues();
-    Local_t *local = &current->locals[current->localCount++];
+    Local_t *local = &current->locals[current->localCount++]; // slot 0
     local->depth = 0;
     local->isCaptured = false;
-    local->name.start = "";
-    local->name.length = 0;
+    if (type == TYPE_METHOD) {
+        local->name.start = "this";
+        local->name.length = 4;
+    } else {
+        local->name.start = "";
+        local->name.length = 0;
+    }
 }
 
 static void expression(void);
@@ -461,7 +468,7 @@ static void namedVariable(Token_t name, bool canAssign) {
     uint8_t getOp, setOp;
     int arg;
     unsigned idx;
-    bool isLocal = (arg = resolveLocal(current, &name)) != -1; 
+    bool isLocal = (arg = resolveLocal(current, &name)) != -1;
     if (isLocal) {
         idx = (unsigned)arg;
         getOp = OP_ACCESS_LOCAL;
@@ -539,7 +546,6 @@ static void del(bool canAssign) {
    // step 1: compile instance
    consume(TOKEN_IDENTIFIER, "Expect identifier after 'del'.");
    variable(canAssign); // instance on top of stack
-//    advance();
 
    // step 2: compile dot
    consume(TOKEN_DOT, "del requires instance field operand.");
@@ -549,6 +555,7 @@ static void del(bool canAssign) {
         expression();  // must be a string
         consume(TOKEN_BACKTICK, "Require a '`' to close id construction");
         if (canAssign && match(TOKEN_EQUAL)) {
+            // TODO: can probs add some expression_throwaway() compiler function at some point
             expression(); // put val to be assigned at top of stack
             emitByte(OP_POP); // throw away since we're del'ing anyway
         }
@@ -568,7 +575,6 @@ static void del(bool canAssign) {
         emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_DEL, OP_DEL_LONG);
     }
 }
-
 
 static void and_(bool canAssign) {
     /**
@@ -709,6 +715,11 @@ static void ternary(bool canAssign) {
     patchJump(exitJump);
 }
 
+static void this_(bool canAssign) {
+    variable(false);
+    // emitByte(OP_POP);
+}
+
 static void literal(bool canAssign) {
     switch (parser.previous.type) {
         case TOKEN_TRUE: emitByte(OP_TRUE); break;
@@ -797,7 +808,7 @@ ParseRule_t rules[] = {
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
     [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
     [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
-    [TOKEN_THIS]            =  {NULL, NULL, PREC_NONE},
+    [TOKEN_THIS]            =  {this_, NULL, PREC_NONE},
     [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
     [TOKEN_VAR]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_WHILE]           =  {NULL, NULL, PREC_NONE},
@@ -985,6 +996,58 @@ static void declareVariable(void) {
 
     addLocal(name);
 }
+
+// static void declareThis(void) {
+//     // REMINDER: global vars are late bound
+//     //           local vars are bound at compile time
+//     if (current->scopeDepth == 0) return;
+//     Token_t name = {
+//         .type = TOKEN_IDENTIFIER,
+//         .start = "this",
+//         .length = 4,
+//         .line = scanner.line,
+//     };
+
+//     /**
+//      * Check:
+//      *      Avoid the following:
+//      *          {
+//      *              var a = 2;
+//      *              var a = 3;
+//      *          }
+//      * 
+//      *      I'm worried that we'll still run into the following false positive:
+//      *          {
+//      *              {
+//      *                  var a = 2;
+//      *              }
+//      *              {
+//      *                  var a = 3;
+//      *              }
+//      *          }
+//      * 
+//      *      aha! but here's something to ALWAYS keep in mind...
+//      *      current->locals contains an array of locals that *only retains locals*
+//      *      while new current->scopeDepth is monotonically increasing in depth.
+//      *      
+//      *      why? because as soon a var goes out of scope (endScope is called)
+//      *      it's popped off the stack (runtime) and removed from locals (compile time) :)
+//      */
+//     for (int i=current->localCount - 1; i >= 0; --i) {
+//         Local_t *local = &current->locals[i];
+//         if (local->depth != -1 &&
+//             local->depth < current->scopeDepth) {
+//                 break;
+//         }
+
+//         if (identifiersEqual(&name, &local->name)) {
+//             error("Cannot re-declare var in same scope.");
+//             return;
+//         }
+//     }
+
+//     addLocal(&name);
+// }
 
 static unsigned parseVariableName(const char *errMsg) {
     consume(TOKEN_IDENTIFIER, "Expect an identifier");
@@ -1488,7 +1551,7 @@ static void turnOffFunctionProtection(ObjFunction_t *function) {
 
 static void function(FunctionType_e type) {
     Compiler_t compiler;    // track compilation data  for this function
-    initCompiler(&compiler, TYPE_FUNCTION);
+    initCompiler(&compiler, type);
     beginScope();   // This function's parameter scope
 
     consume(TOKEN_LEFT_PAREN, "Expect a '(' after function name.");
@@ -1519,10 +1582,20 @@ static void function(FunctionType_e type) {
     turnOffFunctionProtection(function);
 
     FREE_ARRAY(Upvalue_t, compiledFunction->upvalues, compiledFunction->function->upvalueCapacity);
-//    emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
+    // emitVarLenInstr(makeConstant(OBJ_VAL(function)), OP_CONSTANT, OP_CONSTANT_LONG);
     
     // No endScope() b/c compiler's lifetime ends when this function returns
 }
+
+static void method(void) {
+    consume(TOKEN_IDENTIFIER, "Expected a method name.");
+    ObjString_t *methodName = makeString(parser.previous.start, parser.previous.length);
+    unsigned constPoolIdx = makeConstant(OBJ_VAL(methodName));
+    // declareThis();
+    function(TYPE_METHOD);
+    emitVarLenInstr(constPoolIdx, OP_METHOD, OP_METHOD_LONG);
+}
+
 
 static void funDeclaration(void) {
     // Declare function's name as global or local
@@ -1544,6 +1617,7 @@ static void classDeclaration(void) {
     // i.e. add class name to globalNames table
     consume(TOKEN_IDENTIFIER, "Expect a class name.");
     ObjString_t *preservedID; // output param
+    Token_t className = parser.previous;
 
     // NOTE: identifierConstant in my implementation varies from the book's
     //       my identifierConstant:
@@ -1567,8 +1641,19 @@ static void classDeclaration(void) {
     defineVariable(classNameIdx);
 
     // verify syntax
+    namedVariable(className, false);    // put class name ObjString_t on top of stack before compiling methods
     consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
-    consume(TOKEN_RIGHT_BRACE, "Expect '}' before class body.");
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+        /**
+         * Note: prior to each execution of OP_METHOD,
+         * the top two stack slots will be (<- lower, higher ->)
+         * [ ... ][ <CLASS OBJECT> ][ <CLOSURE OBJECT> ]
+         */
+        method();
+    }
+
+    emitByte(OP_POP);   // pop off class ObjString_t
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' at end of class body.");
 }
 
 /**

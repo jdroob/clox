@@ -14,7 +14,8 @@ typedef enum {
     OBJ_CLOSURE,
     OBJ_UPVALUE,
     OBJ_CLASS,
-    OBJ_INSTANCE
+    OBJ_INSTANCE,
+    OBJ_BOUND_METHOD
 } Obj_e;
 
 struct Obj_t {
@@ -80,7 +81,7 @@ typedef struct ObjUpvalue_t {
 typedef struct {
     Obj_t obj;
     ObjString_t *name;
-    ObjClosure_t *methods;
+    Table_t methods;
 } ObjClass_t;
 
 typedef struct {
@@ -88,6 +89,12 @@ typedef struct {
     ObjClass_t *klass;
     Table_t fields;
 } ObjInstance_t;
+
+typedef struct {
+    Obj_t obj;
+    Value_t receiver;
+    ObjClosure_t *method;
+} ObjBoundMethod_t;
 
 
 #define OBJ_TYPE(value)            (AS_OBJ(value)->type)
@@ -112,6 +119,8 @@ typedef struct {
 #define IS_FILEHANDLE_OPEN(value)  (AS_FILEHANDLE(value)->isOpen == true)
 #define IS_UPVALUE(value)          isObjType(value, OBJ_UPVALUE);
 #define AS_UPVALUE(value)          (((ObjUpvalue_t *)AS_OBJ(value)))
+#define IS_BOUND_METHOD(value)     isObjType(value, OBJ_BOUND_METHOD)
+#define AS_BOUND_METHOD(value)     (((ObjBoundMethod_t *)AS_OBJ(value)))
 
 static inline bool isObjType(Value_t value, Obj_e type) {
     return (IS_OBJ(value) && OBJ_TYPE(value) == type);
@@ -125,6 +134,7 @@ ObjUpvalue_t *newUpvalue(Value_t *value);
 ObjString_t *makeString(char *chars, int length);
 ObjClass_t *newClass(ObjString_t *name);
 ObjInstance_t *newInstance(ObjClass_t *klass);
+ObjBoundMethod_t *newBoundMethod(Value_t receiver, ObjClosure_t *method);
 void turnOnProtectMode(Obj_t *object);
 void turnOffProtectMode(Obj_t *object);
 void printObject(Value_t val);
