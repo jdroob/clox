@@ -2907,3 +2907,22 @@ static void function(FunctionType_e type) {
     initCompiler(&compiler, type);
     beginScope();   // This function's parameter scope
 ```
+
+- this is how bound methods are called
+```C
+    switch (OBJ_TYPE(callee)) {
+        // case OBJ_FUNCTION:
+        case OBJ_BOUND_METHOD: {
+            ObjBoundMethod_t *bound = AS_BOUND_METHOD(callee);
+            vm.stackTop[-(int)argCount - 1] = bound->receiver;  // set 'this' to receiver
+            return call(AS_BOUND_METHOD(callee)->method, argCount);
+            return true;
+        }
+```
+- to recap, 'this' works as follows:
+    - when methods are compiled, 'this' is added as a local to slot 0 of the methods stack window
+    - during compilation, 'this' usages result in `OP_SET_LOCAL`, `OP_GET_LOCAL` - just like any other identifier
+    - the `resolveLocal` function will provide the index of `this` in the stack window as the operand to `OP_GET_LOCAL` \ `OP_SET_LOCAL`
+    - finally, when an ObjBoundMethod_t is called, the dispather (the instance that invoked the method) is pushed to the top of the stack and then the method is called. Therefore, the dispatcher will be at slot 0 and `this` will refer to the dispatcher
+
+- TODO: describe how `init` was implemented and how it works with `this` and bound methods

@@ -1,7 +1,15 @@
-class A { f(name) { this.name = name; print this.name; return 42; } }
+//class A { f(name) { this.name = name; print this.name; return 42; } }
+class A { 
+    init() { 
+        print "init";
+        var x = 4;
+        return;
+    } 
+}
 var a = A();
-print a.f("john");
-print a.name;
+print a;
+//print a.f("john");
+//print a.name;
 // print h;
 
 //var a = A();

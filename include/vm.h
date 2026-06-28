@@ -55,6 +55,7 @@ typedef struct {
     Obj_t           *objects;
     Obj_t           **grayStack;
     ObjUpvalue_t    *openUpvalues;
+    ObjString_t     *initString;
 } VM_t;
 
 extern VM_t vm;

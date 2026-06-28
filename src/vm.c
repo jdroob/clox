@@ -487,6 +487,9 @@ void initVM(void) {
     initIsFinalsArray(&vm.globalIsFinals);
     resetStack();
     vm.openUpvalues = NULL;
+
+    vm.initString = NULL;  // in case garbage collection happens in below call to makeSring
+    vm.initString = makeString("init", 4);
     
     // define native functions
     defineNative("clock", clockNative, 0);
@@ -509,6 +512,7 @@ void freeVM(void) {
     freeValueArray(&vm.globalValues);
     freeIsFinalsArray(&vm.globalIsFinals);
     FREE_ARRAY(Value_t, vm.stack, vm.capacity);
+    vm.initString = NULL;
 }
 
 void updateObjList(Obj_t *obj) {
@@ -553,18 +557,24 @@ static bool callValue(Value_t callee, unsigned argCount) {
         switch (OBJ_TYPE(callee)) {
             // case OBJ_FUNCTION:
             case OBJ_BOUND_METHOD: {
-                // temporary
-                // need to add support for 'this'
                 ObjBoundMethod_t *bound = AS_BOUND_METHOD(callee);
                 vm.stackTop[-(int)argCount - 1] = bound->receiver;  // set 'this' to receiver
                 return call(AS_BOUND_METHOD(callee)->method, argCount);
-                return true;
             }
             case OBJ_CLASS: {
                 ObjInstance_t *instance = newInstance(AS_CLASS(callee));
                 // replace class object with instance object
                 vm.stackTop[-(int)argCount - 1] = OBJ_VAL(instance);
                 turnOffProtectMode((Obj_t *)instance);
+                Value_t initMethod;
+                if (tableGet(&instance->klass->methods, OBJ_VAL(vm.initString), &initMethod)) {
+                    return call(AS_CLOSURE(initMethod), argCount);
+                    // push(OBJ_VAL(instance));
+                    // return res;
+                } else if (argCount != 0) {
+                    runtimeError("Expected 0 arguments but received %lu.", argCount);
+                    return false;
+                }
                 return true;
             }
             case OBJ_CLOSURE:

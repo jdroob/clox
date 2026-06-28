@@ -150,6 +150,7 @@ static void markRoots(void) {
     }
     markTable(&vm.globalNames);
     markArray(&vm.globalValues);
+    markObject((Obj_t *)vm.initString);
     markCompilerRoots();
 }
 

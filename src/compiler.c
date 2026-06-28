@@ -62,7 +62,8 @@ typedef struct {
 typedef enum {
     TYPE_SCRIPT,    // Account for globals at top-level, outside of implicit top-level function
     TYPE_FUNCTION,
-    TYPE_METHOD
+    TYPE_METHOD,
+    TYPE_INITIALIZER
 } FunctionType_e;
 
 typedef struct Compiler_t {
@@ -93,9 +94,14 @@ typedef struct Compiler_t {
     Upvalue_t *upvalues;
 } Compiler_t;
 
+typedef struct ClassCompiler_t {
+    struct ClassCompiler_t *enclosing;
+} ClassCompiler_t;
+
 // GLOBALS (uh-oh!!)
 Parser_t parser;
 Compiler_t *current = NULL;
+ClassCompiler_t *currentClass = NULL;
 size_t compilerLinkedListLen = 0;
 // Chunk_t *compilingChunk;
 Table_t literals;
@@ -334,7 +340,7 @@ static void initCompiler(Compiler_t *compiler, FunctionType_e type) {
     Local_t *local = &current->locals[current->localCount++]; // slot 0
     local->depth = 0;
     local->isCaptured = false;
-    if (type == TYPE_METHOD) {
+    if (type == TYPE_METHOD || type == TYPE_INITIALIZER) {
         local->name.start = "this";
         local->name.length = 4;
     } else {
@@ -716,6 +722,10 @@ static void ternary(bool canAssign) {
 }
 
 static void this_(bool canAssign) {
+    if (currentClass == NULL) {
+        error("Cannot use 'this' outside of class.");
+        return;
+    }
     variable(false);
     // emitByte(OP_POP);
 }
@@ -735,8 +745,14 @@ static void returnStmt(void) {
     }
     if (match(TOKEN_SEMICOLON)) {
         // for the `{ stmt0; stmt1; ... stmtN; return; }` case
+        if (current->type == TYPE_INITIALIZER) {
+            return;  // don't want to return nil from an initializer!
+        }
         emitReturn();
     } else {
+        if (current->type == TYPE_INITIALIZER) {
+            error("Cannot return value from initializer.");
+        }
         expression();
         consume(TOKEN_SEMICOLON, "Expect a ';' after return value.");
         emitByte(OP_RETURN);
@@ -1050,6 +1066,10 @@ static void declareVariable(void) {
 // }
 
 static unsigned parseVariableName(const char *errMsg) {
+    // TODO: Generalize for all reserved words
+    if (check(TOKEN_THIS)) {
+        error("'this' is reserved");
+    }
     consume(TOKEN_IDENTIFIER, "Expect an identifier");
     declareVariable();  // if identifier is a local, add to locals
     if (current->scopeDepth > 0) return 0;  // if identifier is local, return
@@ -1569,6 +1589,10 @@ static void function(FunctionType_e type) {
     consume(TOKEN_RIGHT_PAREN, "Expect a ')' after function name.");
     consume(TOKEN_LEFT_BRACE, "Expect a '{' before function body.");
     block();    // TOKEN_RIGHT_BRACE consumed in block()
+    if (type == TYPE_INITIALIZER) {
+        emitVarLenInstr(0, OP_ACCESS_LOCAL, OP_ACCESS_LOCAL_LONG);
+        emitByte(OP_RETURN);
+    }
 
     Compiler_t *compiledFunction = current;
     ObjFunction_t *function = endCompiler();
@@ -1590,9 +1614,14 @@ static void function(FunctionType_e type) {
 static void method(void) {
     consume(TOKEN_IDENTIFIER, "Expected a method name.");
     ObjString_t *methodName = makeString(parser.previous.start, parser.previous.length);
+    bool isInitMethod = strncmp(methodName->chars, "init", 4) == 0;
     unsigned constPoolIdx = makeConstant(OBJ_VAL(methodName));
-    // declareThis();
-    function(TYPE_METHOD);
+    FunctionType_e type = TYPE_METHOD;
+    if (parser.previous.length == 4 && 
+        memcmp(parser.previous.start, "init", 4) == 0) {
+            type = TYPE_INITIALIZER;
+    }
+    function(type);  // sets 'this' to object instance
     emitVarLenInstr(constPoolIdx, OP_METHOD, OP_METHOD_LONG);
 }
 
@@ -1615,6 +1644,10 @@ static void funDeclaration(void) {
 static void classDeclaration(void) {
     // Declare class name as global
     // i.e. add class name to globalNames table
+    ClassCompiler_t classCompiler;
+    classCompiler.enclosing = currentClass;
+    currentClass = &classCompiler;
+
     consume(TOKEN_IDENTIFIER, "Expect a class name.");
     ObjString_t *preservedID; // output param
     Token_t className = parser.previous;
@@ -1654,6 +1687,8 @@ static void classDeclaration(void) {
 
     emitByte(OP_POP);   // pop off class ObjString_t
     consume(TOKEN_RIGHT_BRACE, "Expect '}' at end of class body.");
+
+    currentClass = currentClass->enclosing;
 }
 
 /**
@@ -1738,6 +1773,7 @@ ObjFunction_t *compile(const char *source) {
     parser.panicMode = false;
     // compilingChunk = chunk;
     Compiler_t compiler = { 0 };
+    currentClass = NULL;
     initCompiler(&compiler, TYPE_SCRIPT);
     // initTable(&vm.globalNames);
     initTable(&literals);
@@ -1758,7 +1794,7 @@ ObjFunction_t *compile(const char *source) {
     }
     #endif
 
-    advance();
+    advance();  // parser.previous now points to a token
     while (!match(TOKEN_EOF)) {
         /**
          * Compile Lox script.
