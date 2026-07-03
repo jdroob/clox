@@ -4,10 +4,12 @@ class A {
         print "init";
         var x = 4;
         return;
-    } 
+    }
+    f() { print "f"; }
 }
 var a = A();
 print a;
+a.f();
 //print a.f("john");
 //print a.name;
 // print h;

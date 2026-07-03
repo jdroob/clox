@@ -559,7 +559,7 @@ static bool callValue(Value_t callee, unsigned argCount) {
             case OBJ_BOUND_METHOD: {
                 ObjBoundMethod_t *bound = AS_BOUND_METHOD(callee);
                 vm.stackTop[-(int)argCount - 1] = bound->receiver;  // set 'this' to receiver
-                return call(AS_BOUND_METHOD(callee)->method, argCount);
+                return call(bound->method, argCount);
             }
             case OBJ_CLASS: {
                 ObjInstance_t *instance = newInstance(AS_CLASS(callee));
@@ -569,8 +569,6 @@ static bool callValue(Value_t callee, unsigned argCount) {
                 Value_t initMethod;
                 if (tableGet(&instance->klass->methods, OBJ_VAL(vm.initString), &initMethod)) {
                     return call(AS_CLOSURE(initMethod), argCount);
-                    // push(OBJ_VAL(instance));
-                    // return res;
                 } else if (argCount != 0) {
                     runtimeError("Expected 0 arguments but received %lu.", argCount);
                     return false;
@@ -601,6 +599,27 @@ static bool callValue(Value_t callee, unsigned argCount) {
     }
     runtimeError("Can only call functions and classes.");
     return false;
+}
+
+static bool invokeFromClass(ObjClass_t *klass, ObjString_t *name, unsigned argCount) {
+    Value_t method;
+    bool found = tableGet(&klass->methods, OBJ_VAL(name), &method);
+    if (!found) return false;
+    return callValue(method, argCount);
+}
+
+static bool invoke(ObjString_t *name, unsigned argCount) {
+    Value_t receiver = peek(argCount);
+    if (!IS_INSTANCE(receiver)) {
+        runtimeError("Only instances have methods.");
+        return false;
+    }
+    ObjInstance_t *instance = AS_INSTANCE(receiver);
+    Value_t value;
+    if (tableGet(&instance->fields, OBJ_VAL(name), &value)) {
+        return callValue(value, argCount);
+    }
+    return invokeFromClass(instance->klass, name, argCount);
 }
 
 static ObjUpvalue_t *captureUpvalue(Value_t *local) {
@@ -859,6 +878,23 @@ static InterpResult_t run(void) {
                 // TODO: implement me :)
                 //     runtimeWarning("attribute %s not found.", property->chars);
                 // }
+                break;
+            }
+            case OP_INVOKE:
+            case OP_INVOKE_LONG: {
+                ObjString_t *method;
+                if (instruction == OP_INVOKE) {
+                    method = READ_STRING();
+                } else {
+                    method = READ_STRING_LONG();
+                }
+                unsigned argCount = (unsigned)READ_BYTE();
+                frame->ip = ip;
+                if (!invoke(method, argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1]; // pop method's frame
+                ip = frame->ip;
                 break;
             }
             case OP_GET_PROPERTY:

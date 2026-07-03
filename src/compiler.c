@@ -679,6 +679,7 @@ static void binary(bool canAssign) {
     }
 }
 
+static unsigned argumentList(void);
 static void dot(bool canAssign) {
     // LHS has already been compiled
     // result is at top of stack
@@ -702,6 +703,13 @@ static void dot(bool canAssign) {
         if (canAssign && match(TOKEN_EQUAL)) {
             expression(); // put val to be assigned at top of stack
             emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_SET_PROPERTY, OP_SET_PROPERTY_LONG);
+        } else if (match(TOKEN_LEFT_PAREN)) {
+            unsigned argCount = argumentList();
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_INVOKE, OP_INVOKE_LONG);
+            if (argCount > 255) {
+                error("Function cannot have more than 255 arguments.");
+            }
+            emitByte(argCount);
         } else {
             emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_GET_PROPERTY, OP_GET_PROPERTY_LONG);
         }
@@ -1614,7 +1622,6 @@ static void function(FunctionType_e type) {
 static void method(void) {
     consume(TOKEN_IDENTIFIER, "Expected a method name.");
     ObjString_t *methodName = makeString(parser.previous.start, parser.previous.length);
-    bool isInitMethod = strncmp(methodName->chars, "init", 4) == 0;
     unsigned constPoolIdx = makeConstant(OBJ_VAL(methodName));
     FunctionType_e type = TYPE_METHOD;
     if (parser.previous.length == 4 && 

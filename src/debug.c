@@ -66,6 +66,8 @@
      (instruction) == OP_GET_PROPERTY_LONG ? "OP_GET_PROPERTY_LONG" : \
      (instruction) == OP_SET_PROPERTY_IDCTOR ? "OP_SET_PROPERTY_IDCTOR" : \
      (instruction) == OP_GET_PROPERTY_IDCTOR ? "OP_GET_PROPERTY_IDCTOR" : \
+     (instruction) == OP_INVOKE ? "OP_INVOKE" : \
+     (instruction) == OP_INVOKE_LONG ? "OP_INVOKE_LONG" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -119,6 +121,28 @@ static unsigned int longConstantInstruction(const char *name, Chunk_t *chunk, ui
     return offset + 4;
 }
 
+// TODO: fix output in invoke functions
+static unsigned int longInvokeInstruction(const char *name, Chunk_t *chunk, uint32_t offset) {
+    unsigned constantIdx = 0;
+    constantIdx |= chunk->code[offset + 1] << 16;
+    constantIdx |= chunk->code[offset + 2] << 8;
+    constantIdx |= chunk->code[offset + 3];
+    uint8_t argCount = chunk->code[offset + 4];
+    // printf("%-16s (%d args) %4d '", name, argCount, constantIdx);
+    // printValue(chunk->constants.values[constantIdx]);
+    printf("'\n");
+    return offset + 5;
+}
+
+static unsigned int invokeInstruction(const char *name, Chunk_t *chunk, uint32_t offset) {
+    uint8_t constantIdx = chunk->code[offset + 1];
+    uint8_t argCount = chunk->code[offset + 2];
+    // printf("%-16s (%d args) %4d '", name, argCount, constantIdx);
+    // printValue(chunk->constants.values[constantIdx]);
+    printf("'\n");
+    return offset + 3;
+}
+
 unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
     printf("%04d ", offset);
     if (offset > 0 &&
@@ -170,7 +194,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_GET_PROPERTY:
         case OP_SET_PROPERTY:
         case OP_METHOD:
-            return constantInstruction(name, chunk, offset, false);
+        case OP_INVOKE:
+            return invokeInstruction(name, chunk, offset);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
         case OP_SET_GLOBAL:
@@ -188,7 +213,8 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_GET_PROPERTY_LONG:
         case OP_SET_PROPERTY_LONG:
         case OP_METHOD_LONG:
-            return longConstantInstruction(name, chunk, offset, false);
+        case OP_INVOKE_LONG:
+            return longInvokeInstruction(name, chunk, offset);
         case OP_DEFINE_GLOBAL_LONG:
         case OP_ACCESS_GLOBAL_LONG:
         case OP_SET_GLOBAL_LONG:

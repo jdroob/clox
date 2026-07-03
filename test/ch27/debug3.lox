@@ -1,0 +1,13 @@
+// A class's field is a function pointer
+// ensure runtime supports calling fields (if field is callable)
+class A {
+    init() {
+      fun f()  {
+        print "f";
+      }
+      this.field = f;
+    }
+}
+
+var a = A();
+a.field();

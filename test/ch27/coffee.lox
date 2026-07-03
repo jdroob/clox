@@ -9,4 +9,5 @@ class CoffeeMaker {
     }
 }
 var maker = CoffeeMaker("Espresso martini");
+print maker;
 maker.brew();
