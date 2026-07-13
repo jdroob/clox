@@ -16,6 +16,14 @@ static void resetInterpolationState(void) {
     scanner.stringNestingLevel = scanner.interpolationState = -1;
 }
 
+Token_t syntheticToken(const char *name) {
+    Token_t token;
+    token.type = TOKEN_IDENTIFIER;
+    token.start = name;
+    token.length = (size_t)strlen(name);
+    return token;
+}
+
 static Token_t makeToken(TokenType_e type) {
     Token_t token;
     token.type = type;

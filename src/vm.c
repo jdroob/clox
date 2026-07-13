@@ -29,6 +29,15 @@ static Value_t clockNative(int argCount, Value_t *args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
+static Value_t clockRealNative(int argCount, Value_t *args) {
+    struct timespec tp;
+    if (clock_gettime(CLOCK_REALTIME, &tp) != 0) {
+        runtimeError("clock_gettime failed.");
+        return ERR_VAL;
+    }
+    return NUMBER_VAL((double)(tp.tv_sec + tp.tv_nsec / 1e9));
+}
+
 static Value_t fopenNative(int argCount, Value_t *args) {
     if (!IS_STRING(args[0])) {
        runtimeError("arg0: open requires string argument type");
@@ -493,6 +502,7 @@ void initVM(void) {
     
     // define native functions
     defineNative("clock", clockNative, 0);
+    defineNative("wallclock", clockRealNative, 0);
     defineNative("open", fopenNative, 2);
     defineNative("close", fcloseNative, 1);
     defineNative("read", freadNative, 1);
@@ -880,6 +890,18 @@ static InterpResult_t run(void) {
                 // }
                 break;
             }
+            case OP_INHERIT: {
+                Value_t superclass = peek(1);  // second from top is superclass (OBJ_CLASS)
+                if (!IS_CLASS(superclass)) {
+                    runtimeError("Classes can only inherit from other classes.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjClass_t *subclass = AS_CLASS(peek(0));    // top is subclass (OBJ_CLASS)
+                tableAddAll(&AS_CLASS(superclass)->methods, 
+                            &subclass->methods);
+                pop();  // pop subclass from top of stack; superclass remains at top so we can still reference via super
+                break;
+            }
             case OP_INVOKE:
             case OP_INVOKE_LONG: {
                 ObjString_t *method;
@@ -895,6 +917,65 @@ static InterpResult_t run(void) {
                 }
                 frame = &vm.frames[vm.frameCount - 1]; // pop method's frame
                 ip = frame->ip;
+                break;
+            }
+            case OP_SUPER_INVOKE:
+            case OP_SUPER_INVOKE_LONG: {
+                ObjString_t *methodName;
+                if (instruction == OP_SUPER_INVOKE) {
+                    methodName = READ_STRING();
+                } else {
+                    methodName = READ_STRING_LONG();
+                }
+                unsigned argCount = (unsigned)READ_BYTE();
+                ObjClass_t *superklass = AS_CLASS(pop());  // pop superclass
+                // Value_t method;
+                // if (!tableGet(&superklass->methods, OBJ_VAL(methodName), &method)) {
+                //     runtimeError("No method %s exists in superclass", methodName->chars);
+                //     return INTERPRET_RUNTIME_ERROR;
+                // }
+                frame->ip = ip;
+                if (!invokeFromClass(superklass, methodName, argCount)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                frame = &vm.frames[vm.frameCount - 1]; // pop method's frame
+                ip = frame->ip;
+                break;
+
+            }
+            case OP_GET_SUPER:
+            case OP_GET_SUPER_LONG: {
+                if (!IS_CLASS(peek(0))) {
+                    runtimeError("Corrupt stack - top of stack should be superclass at OP_GET_SUPER execution.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjClass_t *superklass = AS_CLASS(pop());  // pop superclass
+
+                if (!IS_INSTANCE(peek(0))) {
+                    runtimeError("Corrupt stack - stackTop[1] should be instance of 'this' at OP_GET_SUPER execution.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                // ObjInstance_t *receiver = AS_INSTANCE(peek(1));
+
+                ObjString_t *property;
+                if (instruction == OP_GET_SUPER){
+                    property = READ_STRING();
+                } else {
+                    property = READ_STRING_LONG();
+                }
+
+                if (!bindMethod(superklass, property)) {
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                // Value_t supermethod;
+                // if (!tableGet(&superklass->methods, OBJ_VAL(property), &supermethod)) {
+                //     runtimeError("Method %s does not exist in superclass.", property->chars);
+                //     break;
+                // }
+                // pop(); // superclass
+                // pop(); // receiver
+                // push(supermethod);
                 break;
             }
             case OP_GET_PROPERTY:

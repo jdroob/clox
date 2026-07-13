@@ -96,6 +96,7 @@ typedef struct Compiler_t {
 
 typedef struct ClassCompiler_t {
     struct ClassCompiler_t *enclosing;
+    bool hasSuperClass;
 } ClassCompiler_t;
 
 // GLOBALS (uh-oh!!)
@@ -502,6 +503,7 @@ static void namedVariable(Token_t name, bool canAssign) {
 }
 
 static unsigned makeConstant(Value_t value) {
+    // TODO: to avoid constant pool increasing in size for duplicate constant expressions, search else addConstant
     int idx = addConstant(currentChunk(), value);
     if (idx >= OP_LONG_MAX) {
         fprintf(stderr, "Constant pool is too large.");
@@ -729,6 +731,33 @@ static void ternary(bool canAssign) {
     patchJump(exitJump);
 }
 
+static void super_(bool canAssign) {
+    if (currentClass == NULL) {
+        error("Cannot use 'super' outside of class.");
+    } else if (!currentClass->hasSuperClass) {
+        error("Attempting to use 'super' on class without superclass.");
+    }
+    consume(TOKEN_DOT, "Expect a '.' after 'super'.");
+    consume(TOKEN_IDENTIFIER, "Expect a method after 'super.'.");
+    ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
+    unsigned nameIdx = makeConstant(OBJ_VAL(property));
+
+    namedVariable(syntheticToken("this"), false);   // method's receiver on top of stack
+
+    if (match(TOKEN_LEFT_PAREN)) {
+        unsigned argCount = argumentList();
+        namedVariable(syntheticToken("super"), false);  // method's class's superclass on top of stack
+        emitVarLenInstr(nameIdx, OP_SUPER_INVOKE, OP_SUPER_INVOKE_LONG);
+        if (argCount > 255) {
+            error("Function cannot have more than 255 arguments.");
+        }
+        emitByte(argCount);
+    } else {
+        namedVariable(syntheticToken("super"), false);  // method's class's superclass on top of stack
+        emitVarLenInstr(nameIdx, OP_GET_SUPER, OP_GET_SUPER_LONG);
+    }
+}
+
 static void this_(bool canAssign) {
     if (currentClass == NULL) {
         error("Cannot use 'this' outside of class.");
@@ -831,7 +860,7 @@ ParseRule_t rules[] = {
     [TOKEN_FOR]             =  {NULL, NULL, PREC_NONE},
     [TOKEN_FOREACH]         =  {NULL, NULL, PREC_NONE},
     [TOKEN_NIL]             =  {literal, NULL, PREC_NONE},
-    [TOKEN_SUPER]           =  {NULL, NULL, PREC_NONE},
+    [TOKEN_SUPER]           =  {super_, NULL, PREC_NONE},
     [TOKEN_THIS]            =  {this_, NULL, PREC_NONE},
     [TOKEN_TRUE]            =  {literal, NULL, PREC_NONE},
     [TOKEN_VAR]             =  {NULL, NULL, PREC_NONE},
@@ -1654,6 +1683,8 @@ static void classDeclaration(void) {
     ClassCompiler_t classCompiler;
     classCompiler.enclosing = currentClass;
     currentClass = &classCompiler;
+    // currentClass->hasSuperClass = false;
+    classCompiler.hasSuperClass = false;  // '.' is faster than '->'
 
     consume(TOKEN_IDENTIFIER, "Expect a class name.");
     ObjString_t *preservedID; // output param
@@ -1680,6 +1711,32 @@ static void classDeclaration(void) {
     //   write that Value_t to vm.globalValues at index `classNameIdx`
     defineVariable(classNameIdx);
 
+    if (match(TOKEN_COLON)) {
+        consume(TOKEN_IDENTIFIER, "Expect a superclass identifier.");
+        variable(false);  // super class must've already been declared; put in on top of stack
+        if (identifiersEqual(&parser.previous, &className)) {
+            error("A class cannot inherit from itself.");
+        }
+
+        beginScope();  // create new scope so we can declare `super` statically
+        Token_t super = syntheticToken("super");
+        addLocal(&super);  // statically assigns super to stack slot where superclass is located
+        defineVariable(0);
+        /* unnecessary since locals are early bound? (aka statically assigned to a stack slot?)*/
+        // unsigned idx = resolveLocal(current, &super);
+        // emitVarLenInstr(, OP_SET_LOCAL, OP_SET_LOCAL_LONG);
+        // currentClass->hasSuperClass = true;
+        classCompiler.hasSuperClass = true;  // '.' is faster than '->'
+
+        namedVariable(className, false);  // put ObjClass_t for subclass on top of stack
+        emitByte(OP_INHERIT);  // define subclass - superclass relationship
+
+        /**
+         * NOTE: Since we emit OP_INHERIT below any OP_METHOD's below,
+         *       superclass methods can be overridden by subclass methods
+         */
+    }
+
     // verify syntax
     namedVariable(className, false);    // put class name ObjString_t on top of stack before compiling methods
     consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
@@ -1695,6 +1752,10 @@ static void classDeclaration(void) {
     emitByte(OP_POP);   // pop off class ObjString_t
     consume(TOKEN_RIGHT_BRACE, "Expect '}' at end of class body.");
 
+    // if (currentClass->hasSuperClass) {
+    if (classCompiler.hasSuperClass) {  // '.' is faster than '->'
+        endScope();
+    }
     currentClass = currentClass->enclosing;
 }
 

@@ -51,5 +51,6 @@ typedef struct {
 
 void initScanner(const char *source);
 Token_t scanToken(void);
+Token_t syntheticToken(const char *name);
 
 #endif // CLOX_SCANNER_H

@@ -60,14 +60,18 @@
      (instruction) == OP_CLOSE_UPVALUE ? "OP_CLOSE_UPVALUE" : \
      (instruction) == OP_CLASS ? "OP_CLASS" : \
      (instruction) == OP_CLASS_LONG ? "OP_CLASS_LONG" : \
+     (instruction) == OP_INHERIT ? "OP_INHERIT" : \
      (instruction) == OP_SET_PROPERTY ? "OP_SET_PROPERTY" : \
      (instruction) == OP_SET_PROPERTY_LONG ? "OP_SET_PROPERTY_LONG" : \
      (instruction) == OP_GET_PROPERTY ? "OP_GET_PROPERTY" : \
+     (instruction) == OP_GET_SUPER ? "OP_GET_SUPER" : \
+     (instruction) == OP_GET_SUPER_LONG ? "OP_GET_SUPER_LONG" : \
      (instruction) == OP_GET_PROPERTY_LONG ? "OP_GET_PROPERTY_LONG" : \
      (instruction) == OP_SET_PROPERTY_IDCTOR ? "OP_SET_PROPERTY_IDCTOR" : \
      (instruction) == OP_GET_PROPERTY_IDCTOR ? "OP_GET_PROPERTY_IDCTOR" : \
      (instruction) == OP_INVOKE ? "OP_INVOKE" : \
-     (instruction) == OP_INVOKE_LONG ? "OP_INVOKE_LONG" : \
+     (instruction) == OP_SUPER_INVOKE ? "OP_SUPER_INVOKE" : \
+     (instruction) == OP_SUPER_INVOKE_LONG ? "OP_SUPER_INVOKE_LONG" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -128,6 +132,7 @@ static unsigned int longInvokeInstruction(const char *name, Chunk_t *chunk, uint
     constantIdx |= chunk->code[offset + 2] << 8;
     constantIdx |= chunk->code[offset + 3];
     uint8_t argCount = chunk->code[offset + 4];
+    printf("%-16s'", name);
     // printf("%-16s (%d args) %4d '", name, argCount, constantIdx);
     // printValue(chunk->constants.values[constantIdx]);
     printf("'\n");
@@ -137,6 +142,7 @@ static unsigned int longInvokeInstruction(const char *name, Chunk_t *chunk, uint
 static unsigned int invokeInstruction(const char *name, Chunk_t *chunk, uint32_t offset) {
     uint8_t constantIdx = chunk->code[offset + 1];
     uint8_t argCount = chunk->code[offset + 2];
+    printf("%-16s'", name);
     // printf("%-16s (%d args) %4d '", name, argCount, constantIdx);
     // printValue(chunk->constants.values[constantIdx]);
     printf("'\n");
@@ -182,6 +188,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_GET_PROPERTY_IDCTOR:
         case OP_SET_PROPERTY_IDCTOR:
         case OP_DEL_IDCTOR:
+        case OP_INHERIT:
         return simpleInstruction(name, offset);
         case OP_DEL:
         case OP_CONSTANT:
@@ -192,10 +199,9 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_CALL:
         case OP_CLASS:
         case OP_GET_PROPERTY:
+        case OP_GET_SUPER:
         case OP_SET_PROPERTY:
         case OP_METHOD:
-        case OP_INVOKE:
-            return invokeInstruction(name, chunk, offset);
         case OP_DEFINE_GLOBAL:
         case OP_ACCESS_GLOBAL:
         case OP_SET_GLOBAL:
@@ -211,10 +217,9 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_BREAKALL:
         case OP_CALL_LONG:
         case OP_GET_PROPERTY_LONG:
+        case OP_GET_SUPER_LONG:
         case OP_SET_PROPERTY_LONG:
         case OP_METHOD_LONG:
-        case OP_INVOKE_LONG:
-            return longInvokeInstruction(name, chunk, offset);
         case OP_DEFINE_GLOBAL_LONG:
         case OP_ACCESS_GLOBAL_LONG:
         case OP_SET_GLOBAL_LONG:
@@ -244,6 +249,12 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
 
             return offset;
         }
+        case OP_INVOKE:
+        case OP_SUPER_INVOKE:
+            return invokeInstruction(name, chunk, offset);
+        case OP_INVOKE_LONG:
+        case OP_SUPER_INVOKE_LONG:
+            return longInvokeInstruction(name, chunk, offset);
         case OP_CLOSURE_LONG: {
             unsigned idxOfConstant = 0;
             idxOfConstant |= chunk->code[offset + 1] << 16;

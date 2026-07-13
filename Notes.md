@@ -2926,3 +2926,428 @@ static void function(FunctionType_e type) {
     - finally, when an ObjBoundMethod_t is called, the dispather (the instance that invoked the method) is pushed to the top of the stack and then the method is called. Therefore, the dispatcher will be at slot 0 and `this` will refer to the dispatcher
 
 - TODO: describe how `init` was implemented and how it works with `this` and bound methods
+```c
+    case OBJ_CLASS: {
+        ObjInstance_t *instance = newInstance(AS_CLASS(callee));
+        // replace class object with instance object
+        vm.stackTop[-(int)argCount - 1] = OBJ_VAL(instance);
+        turnOffProtectMode((Obj_t *)instance);
+        Value_t initMethod;
+        if (tableGet(&instance->klass->methods, OBJ_VAL(vm.initString), &initMethod)) {
+            return call(AS_CLOSURE(initMethod), argCount);
+        } else if (argCount != 0) {
+            runtimeError("Expected 0 arguments but received %lu.", argCount);
+            return false;
+        }
+        return true;
+```
+
+```c
+// compiler.c::initCompiler
+// add `this` to locals at slot 0
+...
+    if (type == TYPE_METHOD || type == TYPE_INITIALIZER) {
+        local->name.start = "this";
+        local->name.length = 4;
+    } else {
+        local->name.start = "";
+        local->name.length = 0;
+    }
+}
+```
+
+```c
+// compiler.c::this_()
+static void this_(bool canAssign) {
+    if (currentClass == NULL) { // <-- ensures 'this' cannot be used outside of class scope
+        error("Cannot use 'this' outside of class.");
+        return;
+    }
+    variable(false);
+    // emitByte(OP_POP);
+}
+// it's just a variable that happens to be named "this"
+```
+
+```c
+static bool callValue(Value_t callee, unsigned argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            // case OBJ_FUNCTION:
+            case OBJ_BOUND_METHOD: {
+                ObjBoundMethod_t *bound = AS_BOUND_METHOD(callee);
+                vm.stackTop[-(int)argCount - 1] = bound->receiver;  // set 'this' to receiver
+                return call(bound->method, argCount);
+            }
+```
+
+```c
+// vm.c
+    case OP_GET_PROPERTY:
+    case OP_GET_PROPERTY_LONG: {
+        if (!IS_INSTANCE(peek(0))) {
+            runtimeError("Left operand to '.' operator must be instance.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        ObjString_t *property;
+        if (instruction == OP_GET_PROPERTY){
+            property = READ_STRING();
+        } else {
+            property = READ_STRING_LONG();
+        }
+        ObjInstance_t *instance = AS_INSTANCE(peek(0));
+        Value_t value;
+        if (tableGet(&instance->fields, OBJ_VAL(property), &value)) {
+            pop();  // instance
+            push(value);
+            break;
+        }
+        if (!bindMethod(instance->klass, property)) {
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        break;
+    }
+```
+- above creates ObjBoundMethod_t
+- real updshot of this object is having reference to the receiver
+```c
+typedef struct {
+    Obj_t obj;
+    Value_t receiver;
+    ObjClosure_t *method;
+} ObjBoundMethod_t;
+```
+
+- in case you didn't see that above, `this` is added to method / init scope in compiler.c::initCompiler
+- when ObjBoundMethod_t is called, value at slot 0 is set to receiver
+
+- to make `object.method()` calls fast (i.e. avoid 2 loops through interpreter loop (OP_GET_*, OP_CALL))
+- we add `OP_INVOKE` for this common case
+```c
+// compiler.c::dot()
+        } else if (match(TOKEN_LEFT_PAREN)) {
+            unsigned argCount = argumentList();
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_INVOKE, OP_INVOKE_LONG);
+            if (argCount > 255) {
+                error("Function cannot have more than 255 arguments.");
+            }
+            emitByte(argCount);
+        } else {
+            emitVarLenInstr(makeConstant(OBJ_VAL(property)), OP_GET_PROPERTY, OP_GET_PROPERTY_LONG);
+        }
+    }
+```
+- format: [OP_INVOKE] [methodIdx] [argCount]
+
+```c
+// vm.c
+    case OP_INVOKE:
+    case OP_INVOKE_LONG: {
+        ObjString_t *method;
+        if (instruction == OP_INVOKE) {
+            method = READ_STRING();
+        } else {
+            method = READ_STRING_LONG();
+        }
+        unsigned argCount = (unsigned)READ_BYTE();
+        frame->ip = ip;
+        if (!invoke(method, argCount)) {
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        frame = &vm.frames[vm.frameCount - 1]; // pop method's frame
+        ip = frame->ip;
+        break;
+    }
+```
+- value stack at time of `OP_INVOKE` execution: [<receiver>] [<arg0>] [...] [<argN>]
+- In other words, no need for `vm.stackTop[-(int)argCount - 1] = bound->receiver` since slot 0 is already the receiver so `this` references will resolve correctly
+
+# Ch 29: Inheritance
+- Need to emit `OP_INHERIT` instruction after parsing `class A : B` syntax
+- `OP_INHERIT` must be executed immediately after `A` is defined but BEFORE `A`'s methods are parsed
+- reason for this is b/c we want `A` to be able to override `B`'s methods
+
+```c
+// compiler.c::classDeclaration
+static void classDeclaration(void) {
+    // Declare class name as global
+    // i.e. add class name to globalNames table
+    ClassCompiler_t classCompiler;
+    classCompiler.enclosing = currentClass;
+    currentClass = &classCompiler;
+    // currentClass->hasSuperClass = false;
+    classCompiler.hasSuperClass = false;  // '.' is faster than '->'
+
+    consume(TOKEN_IDENTIFIER, "Expect a class name.");
+    ObjString_t *preservedID; // output param
+    Token_t className = parser.previous;
+
+    // NOTE: identifierConstant in my implementation varies from the book's
+    //       my identifierConstant:
+    //              (i)   creates (or retrieves) a string via makeString
+    //              (ii)  adds the string to the globalNames table
+    //              (iii) returns the index in the globalValues table the globalName maps to
+    //
+    //       Here, we don't need to  mess with globals since we're dealing with properties
+    //       that are scoped to instances
+    unsigned classNameIdx = identifierConstant(&parser.previous, isFinal, &preservedID);
+
+    // push identifier constant to constant pool
+    // emit instruction with constant pool index operand
+    emitVarLenInstr(makeConstant(OBJ_VAL(preservedID)), OP_CLASS, OP_CLASS_LONG);
+
+    // define global variable
+    // this instr will pop name constant from stack
+    //   use that ObjString_t to construct ObjClass_t
+    //   wrap the ObjClass_t in a Value_t
+    //   write that Value_t to vm.globalValues at index `classNameIdx`
+    defineVariable(classNameIdx);
+
+    if (match(TOKEN_COLON)) {
+        consume(TOKEN_IDENTIFIER, "Expect a superclass identifier.");
+        variable(false);  // super class must've already been declared; put in on top of stack
+        if (identifiersEqual(&parser.previous, &className)) {
+            error("A class cannot inherit from itself.");
+        }
+
+        beginScope();  // create new scope so we can declare `super` statically
+        Token_t super = syntheticToken("super");
+        addLocal(&super);
+        defineVariable(0);
+        /* unnecessary since locals are early bound? (aka statically assigned to a stack slot?)*/
+        // unsigned idx = resolveLocal(current, &super);
+        // emitVarLenInstr(, OP_SET_LOCAL, OP_SET_LOCAL_LONG);
+        // currentClass->hasSuperClass = true;
+        classCompiler.hasSuperClass = true;  // '.' is faster than '->'
+
+        namedVariable(className, false);  // put ObjClass_t for subclass on top of stack
+        emitByte(OP_INHERIT);  // define subclass - superclass relationship
+
+        /**
+         * NOTE: Since we emit OP_INHERIT below any OP_METHOD's below,
+         *       superclass methods can be overridden by subclass methods
+         */
+    }
+
+    // verify syntax
+    namedVariable(className, false);    // put class name ObjString_t on top of stack before compiling methods
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+    while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
+        /**
+         * Note: prior to each execution of OP_METHOD,
+         * the top two stack slots will be (<- lower, higher ->)
+         * [ ... ][ <CLASS OBJECT> ][ <CLOSURE OBJECT> ]
+         */
+        method();
+    }
+
+    emitByte(OP_POP);   // pop off class ObjString_t
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' at end of class body.");
+
+    // if (currentClass->hasSuperClass) {
+    if (classCompiler.hasSuperClass) {  // '.' is faster than '->'
+        endScope();
+    }
+    currentClass = currentClass->enclosing;
+}
+```
+
+- stare at this and note order of operations:
+    - parse `class` keyword and class name
+    - define subclass named `className` in globals
+    - parse `: <superclass>` part
+    - `variable()` call to put superClass ObjClass_t object at top of value stack
+    - put subclass ObjClass_t object on top of value stack via `namedVariable(className, false)` call
+    - `OP_INHERIT` instruction
+        - you'll see that this basically copies all methods from superclass's methods table to subclass's
+    - then subclass's methods are compiled
+        - again, this will override any of superclass's methods
+    - there's also some crap in there to get `super` working
+
+```c
+    case OP_INHERIT: {
+        Value_t superclass = peek(1);  // second from top is superclass (OBJ_CLASS)
+        if (!IS_CLASS(superclass)) {
+            runtimeError("Classes can only inherit from other classes.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        ObjClass_t *subclass = AS_CLASS(peek(0));    // top is subclass (OBJ_CLASS)
+        tableAddAll(&AS_CLASS(superclass)->methods, 
+                    &subclass->methods);
+        pop();  // pop subclass from top of stack; superclass remains at top so we can still reference via super
+        break;
+    }
+```
+
+- TODO: Notes from book (pg 537 - end of ch 29)
+    - discuss OP_SUPER_INVOKE as well
+
+```c
+    beginScope();  // create new scope so we can declare `super` statically
+    Token_t super = syntheticToken("super");
+    addLocal(&super);
+    defineVariable(0);
+```
+- purpose of these lines is to:
+    - define a local var called `super` in its own scope
+    - scope is important for the case of multiple sub-classes in the same scope:
+
+    ```c
+        class A1  {
+            a_method() { print "a1_method"; }
+        }
+        
+        class A2  {
+            a_method() { print "a2_method"; }
+        }
+
+        {
+            class subA1 : A1 {
+                subA1_method() { super.a_method(); }  // A1.a_method();
+            }
+            
+            class subA2 : A2 {
+                subA2_method() { super.a_method(); }  // A2.a_method();
+            }
+        }
+    ```
+
+    - In this example, `subA1` and `subA2` each require their own unique version of the `super` var
+
+```c
+static void super_(bool canAssign) {
+    if (currentClass == NULL) {
+        error("Cannot use 'super' outside of class.");
+    } else if (!currentClass->hasSuperClass) {
+        error("Attempting to use 'super' on class without superclass.");
+    }
+    consume(TOKEN_DOT, "Expect a '.' after 'super'.");
+    consume(TOKEN_IDENTIFIER, "Expect a method after 'super.'.");
+    ObjString_t *property = makeString(parser.previous.start, parser.previous.length);
+    unsigned nameIdx = makeConstant(OBJ_VAL(property));
+
+    namedVariable(syntheticToken("this"), false);   // method's receiver on top of stack
+
+    if (match(TOKEN_LEFT_PAREN)) {
+        unsigned argCount = argumentList();
+        namedVariable(syntheticToken("super"), false);  // method's class's superclass on top of stack
+        emitVarLenInstr(nameIdx, OP_SUPER_INVOKE, OP_SUPER_INVOKE_LONG);
+        if (argCount > 255) {
+            error("Function cannot have more than 255 arguments.");
+        }
+        emitByte(argCount);
+    } else {
+        namedVariable(syntheticToken("super"), false);  // method's class's superclass on top of stack
+        emitVarLenInstr(nameIdx, OP_GET_SUPER, OP_GET_SUPER_LONG);
+    }
+}
+```
+
+- the way `super` usages are compiled is as follows
+    - compile the method name (only supporting methods through super atm)
+    - add method name to constant table
+    - put `this` (receiver) on top of stack
+    - if common case (super.methodName()):
+        - compile the arg list
+        - place `super` (superclass) on top of stack (on top of args mind you)
+        - emit `OP_SUPER_INVOKE` instruction with nameIdx, argCount operands
+    - else (super.MethodName)
+        - place `super` (superclass) on top of stack (just on top of `this`)
+        - emit `OP_GET_SUPER` instruction with nameIdx operand
+
+- semantics of `OP_GET_SUPER`:
+    - use nameIdx operand to get method name ObjString_t type
+    - pass name string and superclass to bindMethod
+    - bindMethod will use `this` to create ObjBoundMethod_t and push that to top of stack
+
+```c
+
+static bool bindMethod(ObjClass_t *klass, ObjString_t *name) {
+    Value_t method;
+    if (!tableGet(&klass->methods, OBJ_VAL(name), &method)) {
+        runtimeError("Undefined property %s.", name->chars);
+        return false;
+    }
+
+    ObjBoundMethod_t *boundMethod = newBoundMethod(peek(0), AS_CLOSURE(method));
+    pop(); // instance
+    push(OBJ_VAL(boundMethod));
+    return true;
+}
+
+    ...
+
+    case OP_GET_SUPER:
+    case OP_GET_SUPER_LONG: {
+        if (!IS_CLASS(peek(0))) {
+            runtimeError("Corrupt stack - top of stack should be superclass at OP_GET_SUPER execution.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        ObjClass_t *superklass = AS_CLASS(pop());  // pop superclass
+
+        if (!IS_INSTANCE(peek(0))) {
+            runtimeError("Corrupt stack - stackTop[1] should be instance of 'this' at OP_GET_SUPER execution.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        // ObjInstance_t *receiver = AS_INSTANCE(peek(1));
+
+        ObjString_t *property;
+        if (instruction == OP_GET_SUPER){
+            property = READ_STRING();
+        } else {
+            property = READ_STRING_LONG();
+        }
+
+        if (!bindMethod(superklass, property)) {
+            return INTERPRET_RUNTIME_ERROR;
+        }
+
+        break;
+    }
+```
+
+- semantics of `OP_SUPER_INVOKE`
+    - grab method name using nameIdx
+    - use method name, argCount, and super class to call `invokeFromClass`
+    - grab the method and call it
+
+```c
+static bool invokeFromClass(ObjClass_t *klass, ObjString_t *name, unsigned argCount) {
+    Value_t method;
+    bool found = tableGet(&klass->methods, OBJ_VAL(name), &method);
+    if (!found) return false;
+    return callValue(method, argCount);
+}
+
+    ...
+
+    case OP_SUPER_INVOKE:
+    case OP_SUPER_INVOKE_LONG: {
+        ObjString_t *methodName;
+        if (instruction == OP_SUPER_INVOKE) {
+            methodName = READ_STRING();
+        } else {
+            methodName = READ_STRING_LONG();
+        }
+        unsigned argCount = (unsigned)READ_BYTE();
+        ObjClass_t *superklass = AS_CLASS(pop());  // pop superclass
+        frame->ip = ip;
+        if (!invokeFromClass(superklass, methodName, argCount)) {
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        frame = &vm.frames[vm.frameCount - 1]; // pop method's frame
+        ip = frame->ip;
+        break;
+
+    }
+```
+
+- recall that at method invokation time, value stack looks like:
+[...] [<receiver>] [arg0] [...] [argN]
+- in `OP_SUPER_INVOKE` case, receiver is already there
+- in case of invokation of method returned from `OP_GET_SUPER`, receiver will be pulled from ObjBoundMethod_t object
+
+# Milestone (!!!)
+- At this point, we've finished the functional requirements portion of the book!!
+- We now have clox implemented with it's full suite of loops, conditionals, closures, classes, and inheritance
+- I have 1 chapter left to finish and that is on how to optimize this thing :)
