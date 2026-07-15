@@ -52,7 +52,23 @@ static uint32_t getHash(Value_t key) {
 }
 
 static Entry_t *findEntry(Entry_t *entries, int capacity, Value_t key) {
-    uint32_t index = getHash(key) % capacity;
+    /**
+     * a % b  == a & (b - 1) iff b is power of two (which it is for us)
+     * 
+     * e.g. 229 mod 64 = 37
+     * 
+     * 229:   1110_0101
+     * % 64:  0100_0000
+     * _________________
+     * 37:    0010_0101
+     * 
+     * 229:   1110_0101
+     * & 63:  0011_1111
+     * _________________
+     * 37:    0010_0101
+     */
+    // uint32_t index = getHash(key) % capacity;
+    uint32_t index = getHash(key) & (capacity - 1);
     Entry_t *tombstone = NULL;
     for (;;) {
         Entry_t *entry = &entries[index];
@@ -187,7 +203,11 @@ ObjString_t *tableFindString(Table_t *table, const char *chars, int length, uint
     if (table->count == 0) return NULL;
 
     Entry_t *entry;
-    int index = hash % table->capacity;
+    /**
+     * a % b  == a & (b - 1) iff b is power of two (which it is for us)
+     */
+    // int index = hash % table->capacity;
+    int index = hash & (table->capacity - 1);
     for (;;) {
         entry = &table->entries[index];
         // Found non-tombstone empty entry
