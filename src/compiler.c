@@ -379,6 +379,16 @@ static void string(bool canAssign) {
     turnOffProtectMode((Obj_t *)string);
 }
 
+static unsigned initializerList(void);
+static void list(bool canAssign) {
+    unsigned listSize = initializerList();
+    emitVarLenInstr(listSize, OP_LIST, OP_LIST_LONG);
+}
+
+static void getIndex(bool canAssign) {
+
+}
+
 static bool identifiersEqual(Token_t *a, Token_t *b) {
     if (a->length != b->length) return false;
     return memcmp(a->start, b->start, a->length) == 0;
@@ -796,6 +806,21 @@ static void returnStmt(void) {
     }
 }
 
+static unsigned initializerList(void) {
+    /**
+     * currently just for ObjList_t types
+     */
+    unsigned itemCount = 0;
+    if (!check(TOKEN_RIGHT_BRACK)) {
+        do {
+            expression();
+            itemCount++;
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_BRACK, "Expect a ']' to close list.");
+    return itemCount;
+}
+
 static unsigned argumentList(void) {
     unsigned argCount = 0;
     if (!check(TOKEN_RIGHT_PAREN)) {
@@ -819,7 +844,7 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_PAREN]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
-    [TOKEN_LEFT_BRACK]      =  {NULL, NULL, PREC_NONE},
+    [TOKEN_LEFT_BRACK]      =  {list, index, PREC_COMMA},
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},

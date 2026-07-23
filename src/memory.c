@@ -51,6 +51,11 @@ static void freeObject(Obj_t *object) {
             FREE(ObjBoundMethod_t, object);
             break;
         }
+        case OBJ_LIST: {
+            freeValueArray(&((ObjList_t *)object)->array);
+            FREE(ObjList_t, object);
+            break;
+        }
         case OBJ_CLASS: {
             // ObjClass_t *klass = (ObjClass_t *)object;
             // GC and freeObjects take care of klass->name
@@ -167,6 +172,12 @@ static void blackenObject(Obj_t *ref) {
             markObject((Obj_t *)bound->method);
             markValue(bound->receiver);
             break;
+        }
+        case OBJ_LIST: {
+            ObjList_t *lis = (ObjList_t *)ref;
+            for (unsigned i=0; i<lis->size; ++i) {
+                markValue(lis->array.values[i]);
+            }
         }
         case OBJ_CLASS: {
             ObjClass_t *klass = (ObjClass_t *)ref;

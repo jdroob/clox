@@ -125,6 +125,15 @@ ObjBoundMethod_t *newBoundMethod(Value_t receiver, ObjClosure_t *method) {
     return boundMethod;
 }
 
+ObjList_t *newList(unsigned initSize) {
+    ObjList_t *lis = ALLOCATE_OBJ(ObjList_t, sizeof(ObjList_t), OBJ_LIST);
+    lis->size = initSize;
+    // allocate actual list
+    initValueArray(&lis->array);
+    reserveValueArray(&lis->array, initSize); // lis->capacity = next power of two > initSize
+    return lis;
+}
+
 void turnOnProtectMode(Obj_t *object) {
     object->isProtected = true;
 }
@@ -141,10 +150,35 @@ static void printFunction(ObjFunction_t *function) {
     printf("<fn %.*s>", function->name->length, function->name->chars);
 }
 
+static void printList(ObjList_t *lis) {
+    if (lis->size == 0) {
+        printf("[ ]");
+        return;
+    }
+
+    bool prevAppendNewLine = appendNewline;
+    appendNewline = false;
+    printf("[ ");
+    for (unsigned i=0; i<lis->size-1; ++i) {
+        printValue(lis->array.values[i]);
+        printf(", ");
+    }
+    printValue(lis->array.values[lis->size - 1]);
+    printf(" ]");
+    appendNewline = prevAppendNewLine;
+
+    return;
+}
+
 void printObject(Value_t val) {
     switch (OBJ_TYPE(val)) {
         case OBJ_BOUND_METHOD: {
             printFunction(AS_BOUND_METHOD(val)->method->function);
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_LIST: {
+            printList(AS_LIST(val));
             if (appendNewline) printf("\n");
             break;
         }

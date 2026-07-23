@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "value.h"
 #include "vm.h"
 #include "object.h"
@@ -10,6 +11,26 @@ void initValueArray(ValueArray_t *array) {
     array->capacity = 0;
     array->count = 0;
     array->values = NULL;
+}
+
+void reserveValueArray(ValueArray_t *array, unsigned initSize) {
+    unsigned oldCapacity = array->capacity;
+    if (initSize == 0) {
+        array->capacity = 1;
+    } else {
+        /**
+         * 1101 -- ... --> 1111
+         * 1111 + 1 -> 10000
+         */
+        unsigned n = initSize - 1;
+        n |= n >> 1;
+        n |= n >> 2;
+        n |= n >> 4;
+        n |= n >> 8;
+        n |= n >> 16;
+        array->capacity = n + 1;
+    }
+    array->values = GROW_ARRAY(Value_t, array->values, oldCapacity, array->capacity);
 }
 
 void writeValueArray(ValueArray_t *array, Value_t value) {

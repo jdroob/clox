@@ -56,6 +56,7 @@ typedef struct {
 } ValueArray_t;
 
 void initValueArray(ValueArray_t *array);
+void reserveValueArray(ValueArray_t *array, unsigned initSize);
 void writeValueArray(ValueArray_t *array, Value_t value);
 void writeValueArrayAt(ValueArray_t *array, Value_t value, unsigned idx);
 void freeValueArray(ValueArray_t *array);

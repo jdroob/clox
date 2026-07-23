@@ -15,7 +15,8 @@ typedef enum {
     OBJ_UPVALUE,
     OBJ_CLASS,
     OBJ_INSTANCE,
-    OBJ_BOUND_METHOD
+    OBJ_BOUND_METHOD,
+    OBJ_LIST
 } Obj_e;
 
 struct Obj_t {
@@ -96,9 +97,17 @@ typedef struct {
     ObjClosure_t *method;
 } ObjBoundMethod_t;
 
+typedef struct {
+    Obj_t obj;
+    unsigned size;
+    ValueArray_t array;
+} ObjList_t;
+
 
 #define OBJ_TYPE(value)            (AS_OBJ(value)->type)
 #define IS_MARKED(value)           (AS_OBJ(value)->isMarked)
+#define IS_LIST(value)             isObjTypoe(value, OBJ_LIST)
+#define AS_LIST(value)             ((ObjList_t *)AS_OBJ(value))
 #define IS_STRING(value)           isObjType(value, OBJ_STRING)
 #define AS_STRING(value)           ((ObjString_t *)AS_OBJ(value))
 #define IS_CLASS(value)            isObjType(value, OBJ_CLASS)
@@ -135,6 +144,7 @@ ObjString_t *makeString(char *chars, int length);
 ObjClass_t *newClass(ObjString_t *name);
 ObjInstance_t *newInstance(ObjClass_t *klass);
 ObjBoundMethod_t *newBoundMethod(Value_t receiver, ObjClosure_t *method);
+ObjList_t *newList(unsigned size);
 void turnOnProtectMode(Obj_t *object);
 void turnOffProtectMode(Obj_t *object);
 void printObject(Value_t val);

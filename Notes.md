@@ -3351,3 +3351,106 @@ static bool invokeFromClass(ObjClass_t *klass, ObjString_t *name, unsigned argCo
 - At this point, we've finished the functional requirements portion of the book!!
 - We now have clox implemented with it's full suite of loops, conditionals, closures, classes, and inheritance
 - I have 1 chapter left to finish and that is on how to optimize this thing :)
+
+TODO: Add ObjList_t
+    - implement newList function    <-- DONE
+```c
+// object.c
+ObjList_t *newList(unsigned initSize) {
+    ObjList_t *lis = ALLOCATE_OBJ(ObjList_t, sizeof(ObjList_t), OBJ_LIST);
+    lis->size = initSize;
+    // allocate actual list
+    initValueArray(&lis->array);
+    reserveValueArray(&lis->array, initSize); // lis->capacity = next power of two > initSize
+    return lis;
+}
+```
+- Creates a newList object with a ValueArray_t member to store items
+- reserveValueArray reserves next power of two >= initSize * sizeof(Value_t) bytes of memory for value array
+    e.g.
+        initSize = 3? --> 4
+        initSize = 4? --> 4
+        initSize = 7? --> 8
+    - update garbage collector for this type    <--DONE
+```c
+// memory.c
+static void freeObject(Obj_t *object) {
+    #ifdef DEBUG_LOG_GC
+    printf("%p free type %d\n", (void *)object, object->type);
+    #endif
+    switch (object->type) {
+        case OBJ_BOUND_METHOD: {
+            FREE(ObjBoundMethod_t, object);
+            break;
+        }
+        case OBJ_LIST: {
+            freeValueArray(&((ObjList_t *)object)->array);
+            FREE(ObjList_t, object);
+            break;
+        }
+
+...
+
+static void blackenObject(Obj_t *ref) {
+    #ifdef DEBUG_LOG_GC
+        printf("%p blacken ", (void *)ref);
+        printValue(OBJ_VAL(ref));
+        printf("\n");
+    #endif
+
+    switch (ref->type) {
+        case OBJ_BOUND_METHOD: {
+            ObjBoundMethod_t *bound = (ObjBoundMethod_t *)ref;
+            markObject((Obj_t *)bound->method);
+            markValue(bound->receiver);
+            break;
+        }
+        case OBJ_LIST: {
+            ObjList_t *lis = (ObjList_t *)ref;
+            for (unsigned i=0; i<lis->size; ++i) {
+                markValue(lis->array.values[i]);
+            }
+        }
+```
+    - implement `OP_LIST[_LONG]` instruction   <-- DONE
+```c
+// vm.c
+    case OP_LIST:
+    case OP_LIST_LONG: {
+        unsigned len;
+        if (instruction == OP_LIST_LONG) {
+            len = (unsigned)READ_BYTES();
+        } else {
+            len = (unsigned) READ_BYTE();
+        }
+
+        ObjList_t *lis = newList(len);
+        for (int i=len-1; i>=0; --i) {
+            writeValueArrayAt(&lis->array, pop(), i);
+        }
+        push(OBJ_VAL(lis)); turnOffProtectMode((Obj_t *)lis);
+        break;
+    }
+```
+- careful add elements to list in same order they were pushed (aka the right way)
+
+```shell
+rubio@MSI ~/clox % bin/lox                              
+> class A { init(name) { this.name = name; } }
+> fun f() { print "f"; }
+> var l = [0, A("john"), f];
+> print l;
+[ 0, <class 'A' instance: 0x611aea9bcf30>, <fn f> ]
+> 
+```
+
+TODO:
+- For ObjList_t, add support for
+    - indexing
+    - push_front(lis, <item>)
+    - push_back(lis, <item>)
+    - insert(lis, <idx>, <item>)
+    - remove(lis, <idx>)
+    - pop_front(lis)
+    - pop_back(lis)
+    - concatenating two lists

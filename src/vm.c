@@ -751,6 +751,22 @@ static InterpResult_t run(void) {
                 ip = frame->ip;
                 break;
             }
+            case OP_LIST:
+            case OP_LIST_LONG: {
+                unsigned len;
+                if (instruction == OP_LIST_LONG) {
+                    len = (unsigned)READ_BYTES();
+                } else {
+                    len = (unsigned) READ_BYTE();
+                }
+
+                ObjList_t *lis = newList(len);
+                for (int i=len-1; i>=0; --i) {
+                    writeValueArrayAt(&lis->array, pop(), i);
+                }
+                push(OBJ_VAL(lis)); turnOffProtectMode((Obj_t *)lis);
+                break;
+            }
             case OP_CONSTANT: {
                 Value_t constant = READ_CONSTANT();
                 push(constant);
@@ -929,11 +945,6 @@ static InterpResult_t run(void) {
                 }
                 unsigned argCount = (unsigned)READ_BYTE();
                 ObjClass_t *superklass = AS_CLASS(pop());  // pop superclass
-                // Value_t method;
-                // if (!tableGet(&superklass->methods, OBJ_VAL(methodName), &method)) {
-                //     runtimeError("No method %s exists in superclass", methodName->chars);
-                //     return INTERPRET_RUNTIME_ERROR;
-                // }
                 frame->ip = ip;
                 if (!invokeFromClass(superklass, methodName, argCount)) {
                     return INTERPRET_RUNTIME_ERROR;
@@ -967,15 +978,6 @@ static InterpResult_t run(void) {
                 if (!bindMethod(superklass, property)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
-
-                // Value_t supermethod;
-                // if (!tableGet(&superklass->methods, OBJ_VAL(property), &supermethod)) {
-                //     runtimeError("Method %s does not exist in superclass.", property->chars);
-                //     break;
-                // }
-                // pop(); // superclass
-                // pop(); // receiver
-                // push(supermethod);
                 break;
             }
             case OP_GET_PROPERTY:

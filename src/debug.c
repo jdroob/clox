@@ -7,7 +7,9 @@
 #define OP2STR(instruction) \
     ((instruction) == OP_RETURN ? "OP_RETURN" : \
      (instruction) == OP_CALL ? "OP_CALL" : \
+     (instruction) == OP_LIST ? "OP_LIST" : \
      (instruction) == OP_CALL_LONG ? "OP_CALL_LONG" : \
+     (instruction) == OP_LIST_LONG ? "OP_LIST_LONG" : \
      (instruction) == OP_NEGATE ? "OP_NEGATE" : \
      (instruction) == OP_ADD ? "OP_ADD" : \
      (instruction) == OP_GT ? "OP_GT" : \
@@ -197,6 +199,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_SET_LOCAL:
         case OP_ENDSWITCH:
         case OP_CALL:
+        case OP_LIST:
         case OP_CLASS:
         case OP_GET_PROPERTY:
         case OP_GET_SUPER:
@@ -216,6 +219,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_BREAK:
         case OP_BREAKALL:
         case OP_CALL_LONG:
+        case OP_LIST_LONG:
         case OP_GET_PROPERTY_LONG:
         case OP_GET_SUPER_LONG:
         case OP_SET_PROPERTY_LONG:
