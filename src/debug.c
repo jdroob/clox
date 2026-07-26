@@ -75,6 +75,7 @@
      (instruction) == OP_SUPER_INVOKE ? "OP_SUPER_INVOKE" : \
      (instruction) == OP_SUPER_INVOKE_LONG ? "OP_SUPER_INVOKE_LONG" : \
      (instruction) == OP_INDEX ? "OP_INDEX" : \
+     (instruction) == OP_SET_INDEX ? "OP_SET_INDEX" : \
      "UNKNOWN_INSTRUCTION")
 
 bool appendNewline = true;
@@ -193,6 +194,7 @@ unsigned int disassembleInstruction(Chunk_t *chunk, unsigned int offset) {
         case OP_DEL_IDCTOR:
         case OP_INHERIT:
         case OP_INDEX:
+        case OP_SET_INDEX:
         return simpleInstruction(name, offset);
         case OP_DEL:
         case OP_CONSTANT:

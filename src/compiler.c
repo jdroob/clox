@@ -388,12 +388,21 @@ static void list(bool canAssign) {
 static void _index(bool canAssign) {
     expression();  // this expression produces a value that will be used to index into list
     /**
-     * Assumptions at this point:
-     * stackTop = indexVal
-     * stackTop - 1 = ObjList_t
+     ** Assumptions for index reads:
+     *      stackTop = indexVal
+     *      stackTop - 1 = ObjList_t
+     ** Assumptions for index writes:
+     *      stackTop = val to be assigned
+     *      stackTop - 1 = indexVal
+     *      stackTop - 2 = ObjList_t
      */
     consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
-    emitByte(OP_INDEX);
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression(); // put val to be assigned at top of stack
+        emitByte(OP_SET_INDEX);
+    } else {
+        emitByte(OP_INDEX);
+    }
 }
 
 static bool identifiersEqual(Token_t *a, Token_t *b) {

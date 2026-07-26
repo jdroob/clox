@@ -3579,9 +3579,68 @@ Index -3 is out of bounds for list of length 2.
 [line 0]: <script>
 > 
 ```
-    - Add support for OP_INDEX_SET (e.g. lis[0] = 4;)
-    - push_front(lis, <item>)
-    - push_back(lis, <item>)
+    - Add support for OP_INDEX_SET (e.g. lis[0] = 4;)   <- donezo
+```
+Added support for index writes
+
+compiler.c
+static void _index(bool canAssign) {
+    expression();  // this expression produces a value that will be used to index into list
+    /**
+     ** Assumptions for index reads:
+     *      stackTop = indexVal
+     *      stackTop - 1 = ObjList_t
+     ** Assumptions for index writes:
+     *      stackTop = val to be assigned
+     *      stackTop - 1 = indexVal
+     *      stackTop - 2 = ObjList_t
+     */
+    consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression(); // put val to be assigned at top of stack
+        emitByte(OP_SET_INDEX);
+    } else {
+        emitByte(OP_INDEX);
+    }
+}
+
+vm.c
+case OP_SET_INDEX: {
+                if (!IS_NUMBER(peek(1))) {
+                    runtimeError("Index expression must be Number type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_LIST(peek(2))) {
+                    runtimeError("Index operand must be list type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                double dblIdx = AS_NUMBER(peek(1));
+                ObjList_t *lis = AS_LIST(peek(2));
+                if (dblIdx != floor(dblIdx)) {
+                    runtimeError("Cannot use fractional indexes.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t val = pop(); // value to be assigned
+                pop(); // index value
+                pop(); // list
+                int idx = (int)dblIdx;
+                if (idx < 0) {
+                    idx += (int)lis->array.count;
+                }
+                if (idx < 0 || idx >= (int)lis->array.count) {
+                    runtimeError("Index %d is out of bounds for list of length %u.",
+                    (int)dblIdx, lis->array.count);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                writeValueArrayAt(&lis->array, val, (unsigned)idx);
+                push(val);
+                break;
+            }
+```
+    - 
+    - Add support for slices
+    - prepend(lis, <item>)
+    - append(lis, <item>)
     - insert(lis, <idx>, <item>)
     - remove(lis, <idx>)
     - pop_front(lis)

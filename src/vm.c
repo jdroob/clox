@@ -782,8 +782,8 @@ static InterpResult_t run(void) {
                     runtimeError("Cannot use fractional indexes.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                pop(); // idx
-                pop(); // lis
+                pop(); // index value
+                pop(); // list
                 int idx = (int)dblIdx;
                 if (idx < 0) {
                     idx += (int)lis->array.count;
@@ -794,6 +794,37 @@ static InterpResult_t run(void) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 push(lis->array.values[idx]);
+                break;
+            }
+            case OP_SET_INDEX: {
+                if (!IS_NUMBER(peek(1))) {
+                    runtimeError("Index expression must be Number type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_LIST(peek(2))) {
+                    runtimeError("Index operand must be list type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                double dblIdx = AS_NUMBER(peek(1));
+                ObjList_t *lis = AS_LIST(peek(2));
+                if (dblIdx != floor(dblIdx)) {
+                    runtimeError("Cannot use fractional indexes.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t val = pop(); // value to be assigned
+                pop(); // index value
+                pop(); // list
+                int idx = (int)dblIdx;
+                if (idx < 0) {
+                    idx += (int)lis->array.count;
+                }
+                if (idx < 0 || idx >= (int)lis->array.count) {
+                    runtimeError("Index %d is out of bounds for list of length %u.",
+                    (int)dblIdx, lis->array.count);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                writeValueArrayAt(&lis->array, val, (unsigned)idx);
+                push(val);
                 break;
             }
             case OP_CONSTANT: {
