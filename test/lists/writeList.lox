@@ -1,0 +1,7 @@
+/* write list at valid index */
+class A { init(name) { this.name = name; } }
+var l1 = [ 1, "two", A("john") ];
+print l1;
+print "Writing '[ 1 ]' to index 0";
+l1[0] = [1];
+print l1;
