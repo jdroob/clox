@@ -127,10 +127,10 @@ ObjBoundMethod_t *newBoundMethod(Value_t receiver, ObjClosure_t *method) {
 
 ObjList_t *newList(unsigned initSize) {
     ObjList_t *lis = ALLOCATE_OBJ(ObjList_t, sizeof(ObjList_t), OBJ_LIST);
-    lis->size = initSize;
     // allocate actual list
     initValueArray(&lis->array);
     reserveValueArray(&lis->array, initSize); // lis->capacity = next power of two > initSize
+    lis->array.count = initSize;
     return lis;
 }
 
@@ -151,7 +151,7 @@ static void printFunction(ObjFunction_t *function) {
 }
 
 static void printList(ObjList_t *lis) {
-    if (lis->size == 0) {
+    if (lis->array.count == 0) {
         printf("[ ]");
         return;
     }
@@ -159,11 +159,11 @@ static void printList(ObjList_t *lis) {
     bool prevAppendNewLine = appendNewline;
     appendNewline = false;
     printf("[ ");
-    for (unsigned i=0; i<lis->size-1; ++i) {
+    for (unsigned i=0; i<lis->array.count - 1; ++i) {
         printValue(lis->array.values[i]);
         printf(", ");
     }
-    printValue(lis->array.values[lis->size - 1]);
+    printValue(lis->array.values[lis->array.count - 1]);
     printf(" ]");
     appendNewline = prevAppendNewLine;
 

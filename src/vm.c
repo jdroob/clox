@@ -767,6 +767,35 @@ static InterpResult_t run(void) {
                 push(OBJ_VAL(lis)); turnOffProtectMode((Obj_t *)lis);
                 break;
             }
+            case OP_INDEX: {
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Index expression must be Number type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_LIST(peek(1))) {
+                    runtimeError("Index operand must be list type.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                double dblIdx = AS_NUMBER(peek(0));
+                ObjList_t *lis = AS_LIST(peek(1));
+                if (dblIdx != floor(dblIdx)) {
+                    runtimeError("Cannot use fractional indexes.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                pop(); // idx
+                pop(); // lis
+                int idx = (int)dblIdx;
+                if (idx < 0) {
+                    idx += (int)lis->array.count;
+                }
+                if (idx < 0 || idx >= (int)lis->array.count) {
+                    runtimeError("Index %d is out of bounds for list of length %u.",
+                    (int)dblIdx, lis->array.count);
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                push(lis->array.values[idx]);
+                break;
+            }
             case OP_CONSTANT: {
                 Value_t constant = READ_CONSTANT();
                 push(constant);

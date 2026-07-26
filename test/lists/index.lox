@@ -1,0 +1,6 @@
+/* Exercise indexing feature */
+class A { init(name) { this.name = name; } }
+fun f(x) { return x * x; }
+var lis = [0, "1", A("John"), f ];
+print lis;
+print lis[3](4);

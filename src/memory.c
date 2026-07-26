@@ -175,9 +175,10 @@ static void blackenObject(Obj_t *ref) {
         }
         case OBJ_LIST: {
             ObjList_t *lis = (ObjList_t *)ref;
-            for (unsigned i=0; i<lis->size; ++i) {
+            for (unsigned i=0; i<lis->array.count; ++i) {
                 markValue(lis->array.values[i]);
             }
+            break;
         }
         case OBJ_CLASS: {
             ObjClass_t *klass = (ObjClass_t *)ref;

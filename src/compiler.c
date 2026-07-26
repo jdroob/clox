@@ -385,8 +385,15 @@ static void list(bool canAssign) {
     emitVarLenInstr(listSize, OP_LIST, OP_LIST_LONG);
 }
 
-static void getIndex(bool canAssign) {
-
+static void _index(bool canAssign) {
+    expression();  // this expression produces a value that will be used to index into list
+    /**
+     * Assumptions at this point:
+     * stackTop = indexVal
+     * stackTop - 1 = ObjList_t
+     */
+    consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+    emitByte(OP_INDEX);
 }
 
 static bool identifiersEqual(Token_t *a, Token_t *b) {
@@ -844,7 +851,7 @@ ParseRule_t rules[] = {
     [TOKEN_RIGHT_PAREN]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACE]      =  {NULL, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
-    [TOKEN_LEFT_BRACK]      =  {list, index, PREC_COMMA},
+    [TOKEN_LEFT_BRACK]      =  {list, _index, PREC_COMMA},
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_COMMA]           =  {NULL, NULL, PREC_COMMA},    // TODO: implement prefix
     [TOKEN_EQUAL]           =  {NULL, NULL, PREC_ASSIGNMENT},

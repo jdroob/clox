@@ -99,14 +99,13 @@ typedef struct {
 
 typedef struct {
     Obj_t obj;
-    unsigned size;
     ValueArray_t array;
 } ObjList_t;
 
 
 #define OBJ_TYPE(value)            (AS_OBJ(value)->type)
 #define IS_MARKED(value)           (AS_OBJ(value)->isMarked)
-#define IS_LIST(value)             isObjTypoe(value, OBJ_LIST)
+#define IS_LIST(value)             isObjType(value, OBJ_LIST)
 #define AS_LIST(value)             ((ObjList_t *)AS_OBJ(value))
 #define IS_STRING(value)           isObjType(value, OBJ_STRING)
 #define AS_STRING(value)           ((ObjString_t *)AS_OBJ(value))

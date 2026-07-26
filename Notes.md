@@ -3446,7 +3446,140 @@ rubio@MSI ~/clox % bin/lox
 
 TODO:
 - For ObjList_t, add support for
-    - indexing
+    - simplify ObjList_t - use ValueArray_t's size, no need for ObjList_t to have its own size  <-- DONEZO
+    - indexing  <- DONEZO
+```c
+// compiler.c
+static void _index(bool canAssign) {
+    expression();  // this expression produces a value that will be used to index into list
+    /**
+     * Assumptions at this point:
+     * stackTop = indexVal
+     * stackTop - 1 = ObjList_t
+     */
+    consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+    emitByte(OP_INDEX);
+}
+```
+
+```c
+// vm.c
+    case OP_INDEX: {
+        if (!IS_NUMBER(peek(0))) {
+            runtimeError("Index expression must be Number type.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        if (!IS_LIST(peek(1))) {
+            runtimeError("Index operand must be list type.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        unsigned idx = (unsigned)AS_NUMBER(pop());
+        ObjList_t *lis = AS_LIST(pop());
+        if (idx >= lis->array.count) {
+            runtimeError("Index out-of-bounds error!"
+            "\nAttempted to access index %u in list of size %u",
+            idx, lis->array.count);
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        push(lis->array.values[idx]);
+        break;
+    }
+```
+
+```c
+/* index.lox */
+class A { init(name) { this.name = name; } }
+fun f(x) { return x * x; }
+var lis = [0, "1", A("John"), f ];
+print lis;
+print lis[3](4);
+```
+
+```shell
+rubio@MSI ~/clox % bin/lox test/lists/index.lox
+[ 0, "1", <class 'A' instance: 0x56b17d52e200>, <fn f> ]
+16
+```
+
+```c
+// out_of_bounds.lox
+
+/* exercise out of bounds detection */
+class A { init(name) { this.name = name; } }
+fun f(x) { return x * x; }
+var lis = [0, "1", A("John"), f ];
+print lis;
+print lis[5]; // ERROR! Out of bounds!
+```
+
+```shell
+rubio@MSI ~/clox % bin/lox test/lists/oob.lox
+[ 0, "1", <class 'A' instance: 0x60246b06e220>, <fn f> ]
+Index out-of-bounds error!
+Attempted to access index 5 in list of size 4
+[line 4]: <script>
+```
+
+- take 2: increased indexing robustness
+```c
+case OP_INDEX: {
+    if (!IS_NUMBER(peek(0))) {
+        runtimeError("Index expression must be Number type.");
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    if (!IS_LIST(peek(1))) {
+        runtimeError("Index operand must be list type.");
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    double dblIdx = AS_NUMBER(pop());
+    ObjList_t *lis = AS_LIST(pop());
+    if (dblIdx != floor(dblIdx)) {
+        runtimeError("Cannot use fractional indexes.");
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    int idx = (int)dblIdx;
+    if (idx < 0) {
+        idx += (int)lis->array.count;
+    }
+    if (idx < 0 || idx >= (int)lis->array.count) {
+        runtimeError("Index %d is out of bounds for list of length %u.",
+        (int)dblIdx, lis->array.count);
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    push(lis->array.values[idx]);
+    break;
+}
+```
+
+```shell
+rubio@MSI ~/clox % bin/lox
+> var l = [1, 2];
+> print l[-1];
+2
+> print l[-2];
+1
+> pirnt l[-3];
+[line 1] Error at 'l' : Expected a ';'.
+> print l[-3];
+Index -3 is out of bounds for list of length 2.
+[line 0]: <script>
+> print l[-0];
+1
+> print l[-1.5];
+Cannot use fractional indexes.
+[line 0]: <script>
+> 
+```
+
+```shell
+rubio@MSI ~/clox % bin/lox
+> var lis = [1, 2];
+> print lis[-3];
+Index -3 is out of bounds for list of length 2.
+[line 0]: <script>
+> 
+```
+    - Add support for OP_INDEX_SET (e.g. lis[0] = 4;)
     - push_front(lis, <item>)
     - push_back(lis, <item>)
     - insert(lis, <idx>, <item>)

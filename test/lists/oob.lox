@@ -1,0 +1,6 @@
+/* exercise out of bounds detection */
+class A { init(name) { this.name = name; } }
+fun f(x) { return x * x; }
+var lis = [0, "1", A("John"), f ];
+print lis;
+print lis[5]; // ERROR! Out of bounds!
