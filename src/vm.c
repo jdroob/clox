@@ -677,6 +677,42 @@ static bool bindMethod(ObjClass_t *klass, ObjString_t *name) {
     return true;
 }
 
+static bool resolveListIndex(ObjList_t **lis, int *outIdx, unsigned offset) {
+    /**
+     * Validate index expression
+     * Retrieve ObjList_t and Index objects
+     */
+    if (!IS_NUMBER(peek(offset))) {
+        runtimeError("Index expression must be Number type.");
+        return false;
+    }
+    if (!IS_LIST(peek(offset + 1))) {
+        runtimeError("Index operand must be list type.");
+        return false;
+    }
+    double dblIdx = AS_NUMBER(peek(offset));
+    *lis = AS_LIST(peek(offset + 1));
+    if (dblIdx < INT_MIN || dblIdx > INT_MAX) {
+        runtimeError("List index (%d) is too large.", dblIdx);
+        return false;
+    }
+    if (dblIdx != floor(dblIdx)) {
+        runtimeError("Cannot use fractional indexes.");
+        return false;
+    }
+    int idx = (int)dblIdx;
+    if (idx < 0) {
+        idx += (int)(*lis)->array.count;
+    }
+    if (idx < 0 || idx >= (int)(*lis)->array.count) {
+        runtimeError("Index %d is out of bounds for list of length %u.",
+        (int)dblIdx, (*lis)->array.count);
+        return false;
+    }
+    *outIdx = idx;
+    return true;
+}
+
 static InterpResult_t run(void) {
     CallFrame_t *frame = &vm.frames[vm.frameCount - 1];
     register uint8_t *ip = frame->ip;
@@ -768,61 +804,25 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_INDEX: {
-                if (!IS_NUMBER(peek(0))) {
-                    runtimeError("Index expression must be Number type.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-                if (!IS_LIST(peek(1))) {
-                    runtimeError("Index operand must be list type.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-                double dblIdx = AS_NUMBER(peek(0));
-                ObjList_t *lis = AS_LIST(peek(1));
-                if (dblIdx != floor(dblIdx)) {
-                    runtimeError("Cannot use fractional indexes.");
+                ObjList_t *lis;
+                int idx;
+                if (!resolveListIndex(&lis, &idx, 0)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 pop(); // index value
                 pop(); // list
-                int idx = (int)dblIdx;
-                if (idx < 0) {
-                    idx += (int)lis->array.count;
-                }
-                if (idx < 0 || idx >= (int)lis->array.count) {
-                    runtimeError("Index %d is out of bounds for list of length %u.",
-                    (int)dblIdx, lis->array.count);
-                    return INTERPRET_RUNTIME_ERROR;
-                }
                 push(lis->array.values[idx]);
                 break;
             }
             case OP_SET_INDEX: {
-                if (!IS_NUMBER(peek(1))) {
-                    runtimeError("Index expression must be Number type.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-                if (!IS_LIST(peek(2))) {
-                    runtimeError("Index operand must be list type.");
-                    return INTERPRET_RUNTIME_ERROR;
-                }
-                double dblIdx = AS_NUMBER(peek(1));
-                ObjList_t *lis = AS_LIST(peek(2));
-                if (dblIdx != floor(dblIdx)) {
-                    runtimeError("Cannot use fractional indexes.");
+                ObjList_t *lis;
+                int idx;
+                if (!resolveListIndex(&lis, &idx, 1)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 Value_t val = pop(); // value to be assigned
                 pop(); // index value
                 pop(); // list
-                int idx = (int)dblIdx;
-                if (idx < 0) {
-                    idx += (int)lis->array.count;
-                }
-                if (idx < 0 || idx >= (int)lis->array.count) {
-                    runtimeError("Index %d is out of bounds for list of length %u.",
-                    (int)dblIdx, lis->array.count);
-                    return INTERPRET_RUNTIME_ERROR;
-                }
                 writeValueArrayAt(&lis->array, val, (unsigned)idx);
                 push(val);
                 break;

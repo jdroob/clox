@@ -3637,7 +3637,65 @@ case OP_SET_INDEX: {
                 break;
             }
 ```
-    - 
+7/26/2026
+- cleaned up OP_INDEX & OP_SET_INDEX code in vm.c
+```c
+// vm.c
+static bool resolveListIndex(ObjList_t **lis, int *outIdx, unsigned offset) {
+    if (!IS_NUMBER(peek(offset))) {
+        runtimeError("Index expression must be Number type.");
+        return false;
+    }
+    if (!IS_LIST(peek(offset + 1))) {
+        runtimeError("Index operand must be list type.");
+        return false;
+    }
+    double dblIdx = AS_NUMBER(peek(offset));
+    *lis = AS_LIST(peek(offset + 1));
+    if (dblIdx != floor(dblIdx)) {
+        runtimeError("Cannot use fractional indexes.");
+        return false;
+    }
+    int idx = (int)dblIdx;
+    if (idx < 0) {
+        idx += (int)(*lis)->array.count;
+    }
+    if (idx < 0 || idx >= (int)(*lis)->array.count) {
+        runtimeError("Index %d is out of bounds for list of length %u.",
+        (int)dblIdx, (*lis)->array.count);
+        return false;
+    }
+    *outIdx = idx;
+    return true;
+}
+
+// ...
+
+case OP_INDEX: {
+    ObjList_t *lis;
+    int idx;
+    if (!resolveListIndex(&lis, &idx, 0)) {
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    pop(); // index value
+    pop(); // list
+    push(lis->array.values[idx]);
+    break;
+}
+case OP_SET_INDEX: {
+    ObjList_t *lis;
+    int idx;
+    if (!resolveListIndex(&lis, &idx, 1)) {
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    Value_t val = pop(); // value to be assigned
+    pop(); // index value
+    pop(); // list
+    writeValueArrayAt(&lis->array, val, (unsigned)idx);
+    push(val);
+    break;
+}
+```
     - Add support for slices
     - prepend(lis, <item>)
     - append(lis, <item>)
