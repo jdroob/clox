@@ -3697,6 +3697,89 @@ case OP_SET_INDEX: {
 }
 ```
     - Add support for slices
+8/4/2026:
+    - Adding support for slices
+    - Brother is over and work is a bit hectic
+```shell
+rubio@MSI ~/clox % bin/lox
+> var lis = [0,1,2];
+> print lis[0:1];
+[ 0 ]
+> 
+``` 
+- Starting with basic `lis[<start> : <end>]
+- Adding start/end omission next
+
+```c
+// in compiler.c
+static void _index(bool canAssign) {
+    if (match(TOKEN_COLON)) { // lis[:<expr>?]
+        if (match(TOKEN_RIGHT_BRACK)) {
+            emitByte(OP_SLICE_WHOLE); // lis[:]
+        } else { // lis[:<expr>]
+            emitBytes(OP_CONSTANT, 0); // start index on stack
+            expression();  // end index (exclusive) on stack
+            emitByte(OP_SLICE_UNTIL);
+            consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+        }
+        return;
+    }
+    expression();  // this expression produces a value that will be used to index into list (could be part of slice expression)
+    /**
+     ** Assumptions for index reads:
+     *      stackTop = indexVal
+     *      stackTop - 1 = ObjList_t
+     ** Assumptions for index writes:
+     *      stackTop = val to be assigned
+     *      stackTop - 1 = indexVal
+     *      stackTop - 2 = ObjList_t
+     */
+    if (match(TOKEN_COLON)) { // lis[<expr> : <expr>?]
+        if (match(TOKEN_RIGHT_BRACK)) {
+            emitByte(OP_SLICE_REST); // lis[<expr>:]
+        } else { // lis[<expr>:<expr>]
+            expression();  // end index (exclusive) on stack
+            emitByte(OP_SLICE);
+            consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+        }
+        return;
+    }
+    consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression(); // put val to be assigned at top of stack
+        emitByte(OP_SET_INDEX);
+    } else {
+        emitByte(OP_INDEX);
+    }
+}
+```
+
+```c
+// in vm.c
+
+    case OP_SLICE: {
+        // lis[<expr1> : <expr2> ]
+        if (!IS_NUMBER(peek(0))) {
+            runtimeError("Slicing expressions require number type inputs.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        if (!IS_NUMBER(peek(1))) {
+            runtimeError("Slicing expressions require number type inputs.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        if (!IS_LIST(peek(2))) {
+            runtimeError("Can only slice list type objects.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        Value_t end = pop(); // expr2 
+        Value_t start = pop(); // expr1
+        Value_t lis = pop(); // list 
+        ObjList_t *slice = newSlice(AS_LIST(lis), (unsigned)AS_NUMBER(start), (unsigned)AS_NUMBER(end));
+        push(OBJ_VAL(slice)); turnOffProtectMode((Obj_t *)slice);
+        break;
+    }
+```
+
     - prepend(lis, <item>)
     - append(lis, <item>)
     - insert(lis, <idx>, <item>)

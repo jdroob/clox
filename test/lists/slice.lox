@@ -1,0 +1,2 @@
+var lis = [0, 1, 2];
+print lis[0:1];

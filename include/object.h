@@ -144,6 +144,7 @@ ObjClass_t *newClass(ObjString_t *name);
 ObjInstance_t *newInstance(ObjClass_t *klass);
 ObjBoundMethod_t *newBoundMethod(Value_t receiver, ObjClosure_t *method);
 ObjList_t *newList(unsigned size);
+ObjList_t *newSlice(ObjList_t *lis, unsigned start, unsigned end);
 void turnOnProtectMode(Obj_t *object);
 void turnOffProtectMode(Obj_t *object);
 void printObject(Value_t val);

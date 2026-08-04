@@ -134,6 +134,15 @@ ObjList_t *newList(unsigned initSize) {
     return lis;
 }
 
+
+ObjList_t *newSlice(ObjList_t *lis, unsigned start, unsigned end) {
+    ObjList_t *slice = newList(end - start);
+    for (unsigned i=start; i<end; ++i) {
+        slice->array.values[i - start] = lis->array.values[i];
+    }
+    return slice;
+} 
+
 void turnOnProtectMode(Obj_t *object) {
     object->isProtected = true;
 }

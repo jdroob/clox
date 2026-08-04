@@ -814,6 +814,36 @@ static InterpResult_t run(void) {
                 push(lis->array.values[idx]);
                 break;
             }
+            case OP_SLICE: {
+                // lis[<expr1> : <expr2> ]
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Slicing expressions require number type inputs.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_NUMBER(peek(1))) {
+                    runtimeError("Slicing expressions require number type inputs.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_LIST(peek(2))) {
+                    runtimeError("Can only slice list type objects.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t end = pop(); // expr2 
+                Value_t start = pop(); // expr1
+                Value_t lis = pop(); // list 
+                ObjList_t *slice = newSlice(AS_LIST(lis), (unsigned)AS_NUMBER(start), (unsigned)AS_NUMBER(end));
+                push(OBJ_VAL(slice)); turnOffProtectMode((Obj_t *)slice);
+                break;
+            }
+            case OP_SLICE_UNTIL: {
+
+            }
+            case OP_SLICE_REST: {
+
+            }
+            case OP_SLICE_WHOLE: {
+
+            }
             case OP_SET_INDEX: {
                 ObjList_t *lis;
                 int idx;

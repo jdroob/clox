@@ -386,7 +386,18 @@ static void list(bool canAssign) {
 }
 
 static void _index(bool canAssign) {
-    expression();  // this expression produces a value that will be used to index into list
+    if (match(TOKEN_COLON)) { // lis[:<expr>?]
+        if (match(TOKEN_RIGHT_BRACK)) {
+            emitByte(OP_SLICE_WHOLE); // lis[:]
+        } else { // lis[:<expr>]
+            emitBytes(OP_CONSTANT, 0); // start index on stack
+            expression();  // end index (exclusive) on stack
+            emitByte(OP_SLICE_UNTIL);
+            consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+        }
+        return;
+    }
+    expression();  // this expression produces a value that will be used to index into list (could be part of slice expression)
     /**
      ** Assumptions for index reads:
      *      stackTop = indexVal
@@ -396,6 +407,16 @@ static void _index(bool canAssign) {
      *      stackTop - 1 = indexVal
      *      stackTop - 2 = ObjList_t
      */
+    if (match(TOKEN_COLON)) { // lis[<expr> : <expr>?]
+        if (match(TOKEN_RIGHT_BRACK)) {
+            emitByte(OP_SLICE_REST); // lis[<expr>:]
+        } else { // lis[<expr>:<expr>]
+            expression();  // end index (exclusive) on stack
+            emitByte(OP_SLICE);
+            consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
+        }
+        return;
+    }
     consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
     if (canAssign && match(TOKEN_EQUAL)) {
         expression(); // put val to be assigned at top of stack
