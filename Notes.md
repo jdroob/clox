@@ -3779,11 +3779,13 @@ static void _index(bool canAssign) {
         break;
     }
 ```
-
+    - OP_SLICE_UNTIL, OP_SLICE_REST, OP_SLICE_WHOLE  <-- done
+    - memcpy for copying to slice?
+    - concatenating two lists
+        - lis3 = lis1 + lis2
     - prepend(lis, <item>)
     - append(lis, <item>)
     - insert(lis, <idx>, <item>)
     - remove(lis, <idx>)
     - pop_front(lis)
     - pop_back(lis)
-    - concatenating two lists

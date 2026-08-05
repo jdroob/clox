@@ -390,8 +390,7 @@ static void _index(bool canAssign) {
         if (match(TOKEN_RIGHT_BRACK)) {
             emitByte(OP_SLICE_WHOLE); // lis[:]
         } else { // lis[:<expr>]
-            emitBytes(OP_CONSTANT, 0); // start index on stack
-            expression();  // end index (exclusive) on stack
+            expression();      // end index (exclusive) on stack
             emitByte(OP_SLICE_UNTIL);
             consume(TOKEN_RIGHT_BRACK, "Expect a ']' in indexing expression.");
         }

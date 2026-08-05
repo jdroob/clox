@@ -817,11 +817,11 @@ static InterpResult_t run(void) {
             case OP_SLICE: {
                 // lis[<expr1> : <expr2> ]
                 if (!IS_NUMBER(peek(0))) {
-                    runtimeError("Slicing expressions require number type inputs.");
+                    runtimeError("Slicing expressions require number type operands.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 if (!IS_NUMBER(peek(1))) {
-                    runtimeError("Slicing expressions require number type inputs.");
+                    runtimeError("Slicing expressions require number type operands.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 if (!IS_LIST(peek(2))) {
@@ -830,19 +830,69 @@ static InterpResult_t run(void) {
                 }
                 Value_t end = pop(); // expr2 
                 Value_t start = pop(); // expr1
+                if (AS_NUMBER(start) > AS_NUMBER(end)) {
+                    runtimeError("Slice expressions require start_index <= end_index.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 Value_t lis = pop(); // list 
+                if (AS_NUMBER(start) < 0 || AS_NUMBER(end) > AS_LIST(lis)->array.count) {
+                    runtimeError("Index out of bounds in slice expression.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
                 ObjList_t *slice = newSlice(AS_LIST(lis), (unsigned)AS_NUMBER(start), (unsigned)AS_NUMBER(end));
                 push(OBJ_VAL(slice)); turnOffProtectMode((Obj_t *)slice);
                 break;
             }
             case OP_SLICE_UNTIL: {
-
+                // lis[:<end>]
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Slicing expressions require number type operands.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_LIST(peek(1))) {
+                    runtimeError("Can only slice list type objects.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t end = pop();
+                Value_t lis = pop();
+                if (AS_NUMBER(end) < 0 || AS_NUMBER(end) > AS_LIST(lis)->array.count) {
+                    runtimeError("Index out of bounds in slice expression.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjList_t *slice = newSlice(AS_LIST(lis), 0, (unsigned)AS_NUMBER(end));
+                push(OBJ_VAL(slice)); turnOffProtectMode((Obj_t *)slice);
+                break;
             }
             case OP_SLICE_REST: {
-
+                // lis[<start>:]
+                if (!IS_NUMBER(peek(0))) {
+                    runtimeError("Slicing expressions require number type operands.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                if (!IS_LIST(peek(1))) {
+                    runtimeError("Can only slice list type objects.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t start = pop();
+                Value_t lis = pop();
+                if (AS_NUMBER(start) < 0 || AS_NUMBER(start) > AS_LIST(lis)->array.count) {
+                    runtimeError("Index out of bounds in slice expression.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                ObjList_t *slice = newSlice(AS_LIST(lis), (unsigned)AS_NUMBER(start), AS_LIST(lis)->array.count);
+                push(OBJ_VAL(slice)); turnOffProtectMode((Obj_t *)slice);
+                break;
             }
             case OP_SLICE_WHOLE: {
-
+                // lis[:]
+                if (!IS_LIST(peek(0))) {
+                    runtimeError("Can only slice list type objects.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+                Value_t lis = pop();
+                ObjList_t *slice = newSlice(AS_LIST(lis), 0, AS_LIST(lis)->array.count);
+                push(OBJ_VAL(slice)); turnOffProtectMode((Obj_t *)slice);
+                break;
             }
             case OP_SET_INDEX: {
                 ObjList_t *lis;
