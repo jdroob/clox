@@ -399,6 +399,24 @@ static void concatenate(void) {
     turnOffProtectMode((Obj_t *)a);
 }
 
+static void concatenateLists(void) {
+    Value_t a = pop();
+    Value_t b = pop();
+
+    unsigned newLisCount = AS_LIST(a)->array.count + AS_LIST(b)->array.count;
+    ObjList_t *newLis = newList(newLisCount);
+    unsigned i=0;
+    for (; i<AS_LIST(b)->array.count; ++i) {
+        newLis->array.values[i] = AS_LIST(b)->array.values[i];
+    }
+    unsigned offset = AS_LIST(b)->array.count;
+    for (; i<newLisCount; ++i) {
+        newLis->array.values[i] = AS_LIST(a)->array.values[i - offset];
+    }
+    push(OBJ_VAL(newLis));
+    turnOffProtectMode((Obj_t *)newLis);
+}
+
 static void concatenateNum(void) {
     Value_t b = pop();
     Value_t a = pop();
@@ -1228,9 +1246,12 @@ static InterpResult_t run(void) {
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
                     BINARY_OP(NUMBER, NUMBER, +); 
                 } else if (IS_NUMSTR(peek(0), peek(1))) {
-                    frame->ip = ip;
+                    frame->ip = ip;  // do you need this?
                     concatenateNum();
-                } else {
+                } else if (IS_LIST(peek(0)) && IS_LIST(peek(1))) {
+                    concatenateLists();
+                } 
+                else {
                     frame->ip = ip;
                     runtimeError("Operands must be two numbers or two strings.");
                     return INTERPRET_RUNTIME_ERROR;

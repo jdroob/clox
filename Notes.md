@@ -3783,6 +3783,36 @@ static void _index(bool canAssign) {
     - memcpy for copying to slice?
     - concatenating two lists
         - lis3 = lis1 + lis2
+8/5/2026:
+    - 2 years at Intel today
+```
+rubio@MSI ~/clox % bin/lox
+> var a = [1,2];
+> var b = [3,4];
+> print a + b;
+[ 1, 2, 3, 4 ]
+> 
+```
+```c
+// vm.c
+static void concatenateLists(void) {
+    Value_t a = pop();
+    Value_t b = pop();
+
+    unsigned newLisCount = AS_LIST(a)->array.count + AS_LIST(b)->array.count;
+    ObjList_t *newLis = newList(newLisCount);
+    unsigned i=0;
+    for (; i<AS_LIST(b)->array.count; ++i) {
+        newLis->array.values[i] = AS_LIST(b)->array.values[i];
+    }
+    unsigned offset = AS_LIST(b)->array.count;
+    for (; i<newLisCount; ++i) {
+        newLis->array.values[i] = AS_LIST(a)->array.values[i - offset];
+    }
+    push(OBJ_VAL(newLis));
+    turnOffProtectMode((Obj_t *)newLis);
+}
+```
     - prepend(lis, <item>)
     - append(lis, <item>)
     - insert(lis, <idx>, <item>)
