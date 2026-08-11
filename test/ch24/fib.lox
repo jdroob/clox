@@ -5,6 +5,6 @@ fun fib(n) {
 }
 
 var start = clock();
-var fib35 = fib(5); // using small numbers to prevent stdout from exploding during GC debug
+var fib35 = fib(35); // using small numbers to prevent stdout from exploding during GC debug
 print "fib(35): " + fib35;
 print "Time fib(35): " + (clock() - start);

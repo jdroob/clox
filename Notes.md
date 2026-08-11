@@ -3819,3 +3819,116 @@ static void concatenateLists(void) {
     - remove(lis, <idx>)
     - pop_front(lis)
     - pop_back(lis)
+
+8/11/2026:
+- Added maps! :)
+
+```c
+// compiler.c
+static void map(bool canAssign) {
+    /**
+     * valN  <-- top
+     * keyN
+     * valN-1
+     * keyN-1
+     * ...
+     * val0
+     * key0
+     */
+    unsigned nKeyValPairs = mapInitializerList();
+    emitVarLenInstr(nKeyValPairs, OP_MAP, OP_MAP_LONG);
+}
+
+// vm.c
+case OP_MAP:
+case OP_MAP_LONG: {
+    unsigned len;
+    if (instruction == OP_LIST_LONG) {
+        len = (unsigned)READ_BYTES();
+    } else {
+        len = (unsigned) READ_BYTE();
+    }
+
+    ObjMap_t *map = newMap();
+    for (unsigned i=0; i<len; ++i) {
+        Value_t val = pop();
+        Value_t key = pop();
+        tableSet(&map->map, key, val);
+    }
+    push(OBJ_VAL(map)); turnOffProtectMode((Obj_t *)map);
+    break;
+}
+```
+
+rubio@MSI ~/clox % bin/lox
+> var map = { "john" : 31 };
+> print map;
+{
+        { "john" : 31 },
+}
+> 
+
+- TODO: add map indexing: get and set
+
+
+- side note: we're still slower than python :(
+- fib35: python ~0.8s, lox ~1.2
+
+## python bytecode for fib35
+```
+Disassembly of <code object fib at 0x788d23731530, file "/home/rubio/fib.py", line 5>:
+              0 COPY_FREE_VARS           1
+
+  5           2 RESUME                   0
+
+  6           4 LOAD_FAST                0 (n)
+              6 LOAD_CONST               1 (2)
+              8 COMPARE_OP               2 (<)
+             12 POP_JUMP_IF_FALSE        2 (to 18)
+             14 LOAD_FAST                0 (n)
+             16 RETURN_VALUE
+
+  7     >>   18 PUSH_NULL
+             20 LOAD_DEREF               1 (fib)
+             22 LOAD_FAST                0 (n)
+             24 LOAD_CONST               2 (1)
+             26 BINARY_OP               10 (-)
+             30 CALL                     1
+             38 PUSH_NULL
+             40 LOAD_DEREF               1 (fib)
+             42 LOAD_FAST                0 (n)
+             44 LOAD_CONST               1 (2)
+             46 BINARY_OP               10 (-)
+             50 CALL                     1
+             58 BINARY_OP                0 (+)
+             62 RETURN_VALUE
+```
+
+
+## lox bytecode for fib35
+```
+==fib==
+0000 0003 OP_ACCESS_LOCAL     1 ''
+0002  | OP_CONSTANT         0 ''
+0004  | OP_LT
+0005  | OP_JUMP_IF_FALSE    5 -> 15
+0008  | OP_POP
+0009  | OP_ACCESS_LOCAL     1 ''
+0011  | OP_RETURN
+0012  | OP_JUMP            12 -> 16
+0015  | OP_POP
+0016 0004 OP_ACCESS_GLOBAL   11 ''
+0018  | OP_ACCESS_LOCAL     1 ''
+0020  | OP_ONE
+0021  | OP_SUBTRACT
+0022  | OP_CALL             1 ''
+0024  | OP_ACCESS_GLOBAL   11 ''
+0026  | OP_ACCESS_LOCAL     1 ''
+0028  | OP_CONSTANT         0 ''
+0030  | OP_SUBTRACT
+0031  | OP_CALL             1 ''
+0033  | OP_ADD
+0034  | OP_RETURN
+0035 0005 OP_NIL
+0036  | OP_RETURN
+```

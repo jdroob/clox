@@ -1,0 +1,2 @@
+var m = { "john" : 21 };
+print m;

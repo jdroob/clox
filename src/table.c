@@ -4,6 +4,7 @@
 #include "object.h"
 #include "table.h"
 #include "value.h"
+#include "debug.h"
 #include "vm.h"
 
 
@@ -197,6 +198,22 @@ void tableAddAll(Table_t *src, Table_t *dst) {
         if (IS_EMPTY(entry->key)) continue;
         tableSet(dst, entry->key, entry->value);
     }
+}
+
+void printTable(Table_t *tbl) {
+    appendNewline = false;
+    printf("{\n");
+    for (int i=0; i<tbl->capacity; ++i) {
+        Entry_t *entry = &tbl->entries[i];
+        if (IS_EMPTY(entry->key)) continue;
+        printf("\t{ ");
+        printValue(entry->key);
+        printf(" : ");
+        printValue(entry->value); 
+        printf(" },\n");
+    }
+    printf("}");
+    appendNewline = true;
 }
 
 ObjString_t *tableFindString(Table_t *table, const char *chars, int length, uint32_t hash) {

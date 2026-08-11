@@ -230,7 +230,7 @@ static ObjFunction_t *endCompiler(void) {
         compilerLinkedListLen--;
     } else {
         error("Attempted to decrement compilerLinkedListLen at zero...\nSomething has gone horribly wrong");
-        return;
+        exit(EXIT_FAILURE);
     }
     FREE_ARRAY(Local_t, current->locals, current->capacity);
     // FREE_ARRAY(Upvalue_t, current->upvalues, current->function->upvalueCapacity);
@@ -377,6 +377,21 @@ static void string(bool canAssign) {
                                      parser.previous.length - 2);
     emitConstant(OBJ_VAL(string));
     turnOffProtectMode((Obj_t *)string);
+}
+
+static unsigned mapInitializerList(void);
+static void map(bool canAssign) {
+    /**
+     * valN  <-- top
+     * keyN
+     * valN-1
+     * keyN-1
+     * ...
+     * val0
+     * key0
+     */
+    unsigned nKeyValPairs = mapInitializerList();
+    emitVarLenInstr(nKeyValPairs, OP_MAP, OP_MAP_LONG);
 }
 
 static unsigned initializerList(void);
@@ -857,6 +872,23 @@ static unsigned initializerList(void) {
     return itemCount;
 }
 
+static unsigned mapInitializerList(void) {
+    /**
+     * currently just for ObjMap_t types
+     */
+    unsigned kvPairCount = 0;
+    if (!check(TOKEN_RIGHT_BRACE)) {
+        do {
+            expression();
+            consume(TOKEN_COLON, "Expect a ':'.");
+            expression();
+            kvPairCount++;
+        } while (match(TOKEN_COMMA));
+    }
+    consume(TOKEN_RIGHT_BRACE, "Expect a ']' to close list.");
+    return kvPairCount;
+}
+
 static unsigned argumentList(void) {
     unsigned argCount = 0;
     if (!check(TOKEN_RIGHT_PAREN)) {
@@ -878,7 +910,7 @@ static void call(bool canAssign) {
 ParseRule_t rules[] = {
     [TOKEN_LEFT_PAREN]      =  {grouping, call, PREC_CALL},
     [TOKEN_RIGHT_PAREN]     =  {NULL, NULL, PREC_NONE},
-    [TOKEN_LEFT_BRACE]      =  {NULL, NULL, PREC_NONE},
+    [TOKEN_LEFT_BRACE]      =  {map, NULL, PREC_NONE},
     [TOKEN_RIGHT_BRACE]     =  {NULL, NULL, PREC_NONE},
     [TOKEN_LEFT_BRACK]      =  {list, _index, PREC_COMMA},
     [TOKEN_RIGHT_BRACK]     =  {NULL, NULL, PREC_NONE},

@@ -66,6 +66,7 @@ InterpResult_t interpret(const char *source);
 void push(Value_t value);
 Value_t pop(void);
 bool valuesEqual(Value_t a, Value_t b);
+bool isLocalFinal(MutableTable_t *array, unsigned idx);
 void initIsFinalsArray(MutableTable_t *array);
 void freeIsFinalsArray(MutableTable_t *array);
 void writeIsFinalsArray(MutableTable_t *array, bool flag);

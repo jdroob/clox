@@ -6,7 +6,7 @@ OBJ = obj
 BIN = bin
 LIBS = -lm
 ARGS =
-CFLAGS = -Wall -Wconversion -g -O0 -Wno-sequence-point -Wno-unused-function
+CFLAGS = -Wno-sequence-point -Wno-unused-function
 DEBUG_CFLAGS = -DDEBUG
 DEBUG_JRMALLOC_CFLAGS = -DDEBUG_JRMALLOC
 JRMALLOC_CFLAGS = -DJRMALLOC
@@ -17,7 +17,11 @@ OBJECTS = $(patsubst $(SRC)/%.c, $(OBJ)/%.o, $(SOURCES))
 
 .PHONY: default setup clean
 
+default: CFLAGS += -Wall -Wconversion -g -O0
 default: $(EXE)
+
+release: CFLAGS += -O2 -Wno-incompatible-pointer-types -Wno-discarded-qualifiers -Wno-stringop-overread
+release: $(EXE)
 
 $(EXE): $(OBJECTS)
 	$(CC) $(OBJECTS) -I$(INCLUDES) $(LIBS) -o $(BIN)/$(EXE)
@@ -29,6 +33,9 @@ setup:
 	mkdir -p $(OBJ)
 	mkdir -p $(BIN)
 
+just_see_bytecode: CFLAGS+=-DDEBUG_CHUNK -DJUST_SEE_BYTECODE
+just_see_bytecode: default
+
 debug: CFLAGS+=$(DEBUG_CFLAGS)
 debug: default
 
@@ -37,6 +44,7 @@ debug_scanner: default
 
 debug_chunk: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_CHUNK
 debug_chunk: default
+view_stack: debug_chunk
 
 debug_gc: CFLAGS +=$(DEBUG_CFLAGS) -DDEBUG_STRESS_GC -DDEBUG_LOG_GC
 debug_gc: default

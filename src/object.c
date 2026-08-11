@@ -5,6 +5,7 @@
 #include "value.h"
 #include "debug.h"
 #include "vm.h"
+#include "table.h"
 
 
 #define ALLOCATE_OBJ(type, length, objectType) \
@@ -101,6 +102,23 @@ ObjClass_t *newClass(ObjString_t *name) {
     return klass;
 }
 
+ObjMap_t *newMap(void) {
+    ObjMap_t *map = ALLOCATE_OBJ(ObjMap_t, sizeof(ObjMap_t), OBJ_MAP);
+    map->obj.type = OBJ_MAP;
+    initTable(&map->map);
+    return map;
+}
+
+
+//ObjList_t *newList(unsigned initSize) {
+//    ObjList_t *lis = ALLOCATE_OBJ(ObjList_t, sizeof(ObjList_t), OBJ_LIST);
+//    // allocate actual list
+//    initValueArray(&lis->array);
+//    reserveValueArray(&lis->array, initSize); // lis->capacity = next power of two > initSize
+//    lis->array.count = initSize;
+//    return lis;
+//}
+
 ObjInstance_t *newInstance(ObjClass_t *klass) {
     ObjInstance_t *instance = ALLOCATE_OBJ(ObjInstance_t, sizeof(ObjInstance_t), OBJ_INSTANCE);
     instance->obj.type = OBJ_INSTANCE;
@@ -188,6 +206,11 @@ void printObject(Value_t val) {
         }
         case OBJ_LIST: {
             printList(AS_LIST(val));
+            if (appendNewline) printf("\n");
+            break;
+        }
+        case OBJ_MAP: {
+            printTable(&AS_MAP(val)->map);
             if (appendNewline) printf("\n");
             break;
         }

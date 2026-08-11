@@ -68,6 +68,8 @@ typedef enum {
     OP_CALL_LONG,
     OP_LIST,
     OP_LIST_LONG,
+    OP_MAP,
+    OP_MAP_LONG,
     OP_INDEX,
     OP_SET_INDEX,
     OP_CLOSURE,

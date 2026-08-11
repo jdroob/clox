@@ -14,7 +14,10 @@ VM_t vm;
  */
 static void runtimeError(const char *format, ...);
 static bool isValidOperation(int requiredMode, const char *providedMode) {
-    if (requiredMode == NULL || providedMode == NULL) {
+    // TODO: figure out what purpose of this check was for requiredMode
+    // seems useless since we only call this function with hard-coded 'r' or 'w'
+    if ((requiredMode != 'r' && requiredMode != 'w')
+         || providedMode == NULL) {
         runtimeError("Invalid access type provided OR invalid file operation performed");
         return false;
     }
@@ -424,7 +427,7 @@ static void concatenateNum(void) {
     ObjString_t *str;
     double num;
     bool bIsString;
-    str = IS_STRING(b) ? (bIsString = true, num = AS_NUMBER(a), AS_STRING(b)) : \ 
+    str = IS_STRING(b) ? (bIsString = true, num = AS_NUMBER(a), AS_STRING(b)) : \
         (bIsString = false, num = AS_NUMBER(b), AS_STRING(a));
     turnOnProtectMode((Obj_t *)str);
 
@@ -819,6 +822,24 @@ static InterpResult_t run(void) {
                     writeValueArrayAt(&lis->array, pop(), i);
                 }
                 push(OBJ_VAL(lis)); turnOffProtectMode((Obj_t *)lis);
+                break;
+            }
+            case OP_MAP:
+            case OP_MAP_LONG: {
+                unsigned len;
+                if (instruction == OP_LIST_LONG) {
+                    len = (unsigned)READ_BYTES();
+                } else {
+                    len = (unsigned) READ_BYTE();
+                }
+
+                ObjMap_t *map = newMap();
+                for (unsigned i=0; i<len; ++i) {
+                    Value_t val = pop();
+                    Value_t key = pop();
+                    tableSet(&map->map, key, val);
+                }
+                push(OBJ_VAL(map)); turnOffProtectMode((Obj_t *)map);
                 break;
             }
             case OP_INDEX: {
@@ -1509,6 +1530,10 @@ InterpResult_t interpret(const char *source) {
         // freeChunk(&function->chunk);
         return INTERPRET_COMPILE_ERROR;
     }
+
+    #ifdef JUST_SEE_BYTECODE
+    exit(0);
+    #endif
 
     push(OBJ_VAL(function));
     ObjClosure_t *closure = newClosure(function);

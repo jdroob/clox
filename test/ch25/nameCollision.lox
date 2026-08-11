@@ -1,0 +1,11 @@
+/** ensure proper function is called */
+
+fun f(name) { 
+  print "outer " +  name;
+  fun f() {
+    print "inner";
+  }
+  return;
+}
+
+f("john");

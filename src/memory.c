@@ -56,6 +56,11 @@ static void freeObject(Obj_t *object) {
             FREE(ObjList_t, object);
             break;
         }
+        case OBJ_MAP: {
+            freeTable(&((ObjMap_t *)object)->map);
+            FREE(ObjMap_t, object);
+            break;
+        }
         case OBJ_CLASS: {
             // ObjClass_t *klass = (ObjClass_t *)object;
             // GC and freeObjects take care of klass->name
@@ -178,6 +183,11 @@ static void blackenObject(Obj_t *ref) {
             for (unsigned i=0; i<lis->array.count; ++i) {
                 markValue(lis->array.values[i]);
             }
+            break;
+        }
+        case OBJ_MAP: {
+            ObjMap_t *map = (ObjMap_t *)ref;
+            markTable(&map->map);
             break;
         }
         case OBJ_CLASS: {
