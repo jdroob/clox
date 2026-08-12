@@ -843,15 +843,32 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_INDEX: {
-                ObjList_t *lis;
-                int idx;
-                if (!resolveListIndex(&lis, &idx, 0)) {
+                if (!IS_LIST(peek(1)) && !IS_MAP(peek(1))) {
+                    runtimeError("Can only index lists or maps.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                pop(); // index value
-                pop(); // list
-                push(lis->array.values[idx]);
-                break;
+                if (IS_LIST(peek(1))) {
+                    ObjList_t *lis;
+                    int idx;
+                    if (!resolveListIndex(&lis, &idx, 0)) {
+                        return INTERPRET_RUNTIME_ERROR;
+                    }
+                    pop(); // index value
+                    pop(); // list
+                    push(lis->array.values[idx]);
+                    break;
+                } else { // ObjMap_t
+                    Value_t key = pop();
+                    Value_t map = pop();
+                    Value_t val;
+                    if (!(tableGet(&AS_MAP(map)->map, key, &val))) {
+                        printf("KeyError: "); printValue(key);
+                        runtimeError("Key not found.");
+                        return INTERPRET_RUNTIME_ERROR;
+                    }
+                    push(val);
+                    break;
+                }
             }
             case OP_SLICE: {
                 // lis[<expr1> : <expr2> ]

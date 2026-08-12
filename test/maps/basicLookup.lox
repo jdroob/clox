@@ -1,0 +1,5 @@
+var map = { 1 : 1 };
+var map2 = { "john" : "jim" };
+print map[1]; // 1
+print map2["john"]; // "jim"
+print map2[1]; // KeyError: 1

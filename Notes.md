@@ -3932,3 +3932,52 @@ Disassembly of <code object fib at 0x788d23731530, file "/home/rubio/fib.py", li
 0035 0005 OP_NIL
 0036  | OP_RETURN
 ```
+
+8/12/2026:
+- Added map lookups!
+- The cool thing? Didn't need to change compiler logic at all :)
+- Since `OP_INDEX` simply yields stack state of 
+```
+[index | key]
+[container]
+```
+- And `OP_SET_INDEX` simply yields stack state of
+```
+[val to be assigned]
+[index | key]
+[container]
+```
+- the code was already general enough to support both lists and maps!
+
+- the implemntation of this opcode is basically what you'd expect
+```c
+// vm.c
+case OP_INDEX: {
+    if (!IS_LIST(peek(1)) && !IS_MAP(peek(1))) {
+        runtimeError("Can only index lists or maps.");
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    if (IS_LIST(peek(1))) {
+        ObjList_t *lis;
+        int idx;
+        if (!resolveListIndex(&lis, &idx, 0)) {
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        pop(); // index value
+        pop(); // list
+        push(lis->array.values[idx]);
+        break;
+    } else { // ObjMap_t
+        Value_t key = pop();
+        Value_t map = pop();
+        Value_t val;
+        if (!(tableGet(&AS_MAP(map)->map, key, &val))) {
+            printf("KeyError: "); printValue(key);
+            runtimeError("Key not found.");
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        push(val);
+        break;
+    }
+}
+```

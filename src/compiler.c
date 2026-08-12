@@ -401,6 +401,9 @@ static void list(bool canAssign) {
 }
 
 static void _index(bool canAssign) {
+    // TODO: look into replacing explicit slicing ops with BINARY_SLICE
+    // like what CPython does
+    // https://docs.python.org/3/library/dis.html#opcode-BINARY_SLICE
     if (match(TOKEN_COLON)) { // lis[:<expr>?]
         if (match(TOKEN_RIGHT_BRACK)) {
             emitByte(OP_SLICE_WHOLE); // lis[:]
@@ -411,15 +414,16 @@ static void _index(bool canAssign) {
         }
         return;
     }
-    expression();  // this expression produces a value that will be used to index into list (could be part of slice expression)
+    expression();  // this expression produces a value that will be used to
+                   //  index into list or map (could be part of slice expression)
     /**
      ** Assumptions for index reads:
      *      stackTop = indexVal
-     *      stackTop - 1 = ObjList_t
+     *      stackTop - 1 = ObjList_t | ObjMap_t
      ** Assumptions for index writes:
      *      stackTop = val to be assigned
      *      stackTop - 1 = indexVal
-     *      stackTop - 2 = ObjList_t
+     *      stackTop - 2 = ObjList_t | ObjMap_t
      */
     if (match(TOKEN_COLON)) { // lis[<expr> : <expr>?]
         if (match(TOKEN_RIGHT_BRACK)) {
