@@ -115,6 +115,7 @@ typedef struct {
 #define AS_MAP(value)              ((ObjMap_t *)AS_OBJ(value))
 #define IS_LIST(value)             isObjType(value, OBJ_LIST)
 #define AS_LIST(value)             ((ObjList_t *)AS_OBJ(value))
+#define IS_CONTAINER(value)        (IS_LIST(value) || IS_MAP(value))
 #define IS_STRING(value)           isObjType(value, OBJ_STRING)
 #define AS_STRING(value)           ((ObjString_t *)AS_OBJ(value))
 #define IS_CLASS(value)            isObjType(value, OBJ_CLASS)

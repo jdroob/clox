@@ -3813,12 +3813,6 @@ static void concatenateLists(void) {
     turnOffProtectMode((Obj_t *)newLis);
 }
 ```
-    - prepend(lis, <item>)
-    - append(lis, <item>)
-    - insert(lis, <idx>, <item>)
-    - remove(lis, <idx>)
-    - pop_front(lis)
-    - pop_back(lis)
 
 8/11/2026:
 - Added maps! :)
@@ -3981,3 +3975,78 @@ case OP_INDEX: {
     }
 }
 ```
+
+8/15/2026:
+- Added support for adding new values to maps
+```c
+case OP_SET_INDEX: {
+    if (!IS_LIST(peek(2)) && !IS_MAP(peek(2))) {
+        runtimeError("Can only index lists or maps.");
+        return INTERPRET_RUNTIME_ERROR;
+    }
+    if (IS_LIST(peek(2))) {
+        ObjList_t *lis;
+        int idx;
+        if (!resolveListIndex(&lis, &idx, 1)) {
+            return INTERPRET_RUNTIME_ERROR;
+        }
+        Value_t val = pop(); // value to be assigned
+        pop(); // index value
+        pop(); // list
+        writeValueArrayAt(&lis->array, val, (unsigned)idx);
+        push(val);
+        break;
+    } else {  // map
+        Value_t val2assign = pop();
+        Value_t key = pop();
+        Value_t map = pop();
+        tableSet(&AS_MAP(map)->map, key, val2assign);
+        push(val2assign);
+        break;
+    }
+}
+```
+
+- Also generalized `len`
+
+```c
+static Value_t lenNative(int argCount, Value_t *args) {
+    if (!IS_STRING(args[0]) && !IS_CONTAINER(args[0])) {
+        runtimeError("len requires string or container type argument");
+        return ERR_VAL;
+    }
+    if (IS_LIST(args[0])) {
+        ObjList_t *lis = AS_LIST(args[0]);
+        return NUMBER_VAL((double)lis->array.count);
+    } else if (IS_MAP(args[0])) {
+        ObjMap_t *map = AS_MAP(args[0]);
+        return NUMBER_VAL((double)map->map.count);
+    } else {  // string
+        size_t len = strnlen(AS_CSTRING(args[0]), LONG_MAX);    // seems reasonable?
+        return NUMBER_VAL((double)len);
+    }
+}
+```
+
+```shell
+> var str = "john"; 
+> var lis = [ str ];
+> var map = { str : "cool };
+[line 2] Error : Unterminated string.
+> var map = { str : "cool" };
+> print len(str);
+4
+> print len(lis);
+1
+> print len(map);
+1
+> 
+```
+- TODO: Add support for concatenating strings and containers
+### Container stuff to add:
+    - prepend(container, <item>)  <-- LISTS only
+    - append(container, <item>)   <-- LISTS only
+    - insert(container, <idx>, <item>)   <-- LISTS only
+    - remove(container, <idx>)   <-- BOTH
+    - pop_front(container)   <-- LISTS only
+    - pop_back(container)   <-- LISTS only
