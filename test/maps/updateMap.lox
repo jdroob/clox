@@ -1,0 +1,6 @@
+/** show that entries can be added to maps */
+var map = { "john" : "pretty cool" };
+print map; // { {"john" : "pretty cool" } }
+print("Someone has hacked into the system to spread lies...");
+map["john"] = "ehh.."; // insensitive update
+print map; // { {"john" : "ehh.." } }

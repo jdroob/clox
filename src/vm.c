@@ -133,13 +133,20 @@ static Value_t fcloseNative(int argCount, Value_t *args) {
 }
 
 static Value_t lenNative(int argCount, Value_t *args) {
-    // TODO: Add support for data structures as they become available
-    if (!IS_STRING(args[0])) {
-        runtimeError("len requires string type argument");
+    if (!IS_STRING(args[0]) && !IS_CONTAINER(args[0])) {
+        runtimeError("len requires string or container type argument");
         return ERR_VAL;
     }
-    size_t len = strnlen(AS_CSTRING(args[0]), LONG_MAX);    // seems reasonable?
-    return NUMBER_VAL((double)len);
+    if (IS_LIST(args[0])) {
+        ObjList_t *lis = AS_LIST(args[0]);
+        return NUMBER_VAL((double)lis->array.count);
+    } else if (IS_MAP(args[0])) {
+        ObjMap_t *map = AS_MAP(args[0]);
+        return NUMBER_VAL((double)map->map.count);
+    } else {  // string
+        size_t len = strnlen(AS_CSTRING(args[0]), LONG_MAX);    // seems reasonable?
+        return NUMBER_VAL((double)len);
+    }
 }
 
 static Value_t getlineNative(int argCount, Value_t *args) {
@@ -843,7 +850,7 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_INDEX: {
-                if (!IS_LIST(peek(1)) && !IS_MAP(peek(1))) {
+                if (!IS_CONTAINER(peek(1))) {
                     runtimeError("Can only index lists or maps.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -951,17 +958,30 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_SET_INDEX: {
-                ObjList_t *lis;
-                int idx;
-                if (!resolveListIndex(&lis, &idx, 1)) {
+                if (!IS_CONTAINER(peek(2))) {
+                    runtimeError("Can only index lists or maps.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
-                Value_t val = pop(); // value to be assigned
-                pop(); // index value
-                pop(); // list
-                writeValueArrayAt(&lis->array, val, (unsigned)idx);
-                push(val);
-                break;
+                if (IS_LIST(peek(2))) {
+                    ObjList_t *lis;
+                    int idx;
+                    if (!resolveListIndex(&lis, &idx, 1)) {
+                        return INTERPRET_RUNTIME_ERROR;
+                    }
+                    Value_t val = pop(); // value to be assigned
+                    pop(); // index value
+                    pop(); // list
+                    writeValueArrayAt(&lis->array, val, (unsigned)idx);
+                    push(val);
+                    break;
+                } else {  // map
+                    Value_t val2assign = pop();
+                    Value_t key = pop();
+                    Value_t map = pop();
+                    tableSet(&AS_MAP(map)->map, key, val2assign);
+                    push(val2assign);
+                    break;
+                }
             }
             case OP_CONSTANT: {
                 Value_t constant = READ_CONSTANT();

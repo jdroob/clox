@@ -1,0 +1,11 @@
+/** Extended `len` for strings and containers */
+var str = "john";
+var lis = [ str ];
+var map = { str : "clox's father" };
+
+print "The string '" + str + "' has " + len(str) + " characters";
+//print "The list " + lis + " has " + len(lis) + " items";
+print "The list "; print(lis); print " has " + len(lis) + " items"; // clunky, temp syntax
+//print "The map " + map + " has " + len(map) + " entries";
+print "The map "; print(map); print " has " + len(map) + " entries";  // clunky, temp syntax
+

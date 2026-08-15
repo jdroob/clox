@@ -21,7 +21,7 @@ make
 This produces the interpreter at `bin/lox`.
 
 ### Debug builds
-
+- `make view_stack`
 - `make debug`
 - `make debug_scanner`
 - `make debug_chunk`
@@ -60,6 +60,8 @@ This implementation follows the Lox language chapters from "Crafting Interpreter
 - Functions, call frames, and returns
 - Native functions and runtime integration
 - File I/O helpers for reading and writing files
+- Classes and inheritance
+- Containers: lists, maps, more to come.. ?
 
 ## Notes
 
