@@ -850,7 +850,7 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_INDEX: {
-                if (!IS_LIST(peek(1)) && !IS_MAP(peek(1))) {
+                if (!IS_CONTAINER(peek(1))) {
                     runtimeError("Can only index lists or maps.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -958,7 +958,7 @@ static InterpResult_t run(void) {
                 break;
             }
             case OP_SET_INDEX: {
-                if (!IS_LIST(peek(2)) && !IS_MAP(peek(2))) {
+                if (!IS_CONTAINER(peek(2))) {
                     runtimeError("Can only index lists or maps.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
