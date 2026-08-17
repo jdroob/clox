@@ -149,6 +149,25 @@ static Value_t lenNative(int argCount, Value_t *args) {
     }
 }
 
+static Value_t prependNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("Only lists can be prepended.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count != 0) {
+        Value_t prev = lis->array.values[0];
+        for (unsigned i=1; i<lis->array.count; ++i) {
+            Value_t curr = lis->array.values[i];
+            writeValueArrayAt(&lis->array, prev, i);
+            prev = curr;
+        }
+    }
+    writeValueArrayAt(&lis->array, args[1], 0);
+    lis->array.count++;
+    return OBJ_VAL(lis);
+}
+
 static Value_t getlineNative(int argCount, Value_t *args) {
     if (!IS_FILEHANDLE(args[0])) {
         runtimeError("getline requires file handle type argument");
@@ -409,6 +428,47 @@ static void concatenate(void) {
     turnOffProtectMode((Obj_t *)a);
 }
 
+static void concatenateStrContainer(void) {
+    Value_t b = pop();
+    Value_t a = pop();
+
+    // get string part
+    bool bIsString = true; // naive assumption
+    ObjString_t *str;
+
+    if (IS_STRING(b)) {
+        str = AS_STRING(b);
+    } else {
+        str = AS_STRING(a);
+        bIsString = false;
+    }
+
+    // get container part
+    Obj_t *container;
+    bool isList = true;
+    if (bIsString) {
+        if (!IS_LIST(a)) {
+            isList = false;
+        }
+        // TODO: do concatenation logic here
+        if (isList) {
+            ObjList_t *lis = AS_LIST(a);
+        } else {
+            ObjMap_t *map = AS_MAP(a);
+        }
+    } else { // a is string
+        if (!IS_LIST(b)) {
+            isList = false;
+        }
+        // TODO: do concatenation logic here
+        if (isList) {
+            ObjList_t *lis = AS_LIST(b);
+        } else {
+            ObjMap_t *map = AS_MAP(b);
+        }
+    }
+}
+
 static void concatenateLists(void) {
     Value_t a = pop();
     Value_t b = pop();
@@ -540,6 +600,7 @@ void initVM(void) {
     defineNative("hasattr", hasattrNative, 2);
     defineNative("getattr", getattrNative, 2);
     defineNative("setattr", setattrNative, 3);
+    defineNative("prepend", prependNative, 2);
     vm.isInitialized = true;
 }
 
@@ -1301,7 +1362,15 @@ static InterpResult_t run(void) {
             case OP_ADD: {
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
                     concatenate();
-                } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
+                } else if (IS_STRING(peek(0)) && IS_CONTAINER(peek(1))
+                    || IS_CONTAINER(peek(0)) && IS_STRING(peek(1))) {
+                    runtimeError("Concatenation of stings and containers is not yet supported."
+                                "\nThis feature is coming soon! (I hope)"
+                                "\nUntil then, please just awkwardly print strings then print objects in separate statements.");
+                    return INTERPRET_RUNTIME_ERROR;
+                    concatenateStrContainer();
+                } 
+                else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
                     BINARY_OP(NUMBER, NUMBER, +); 
                 } else if (IS_NUMSTR(peek(0), peek(1))) {
                     frame->ip = ip;  // do you need this?

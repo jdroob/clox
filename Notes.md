@@ -4043,8 +4043,35 @@ static Value_t lenNative(int argCount, Value_t *args) {
 > 
 ```
 - TODO: Add support for concatenating strings and containers
+    - this deserves its own branch / effort
+    - I believe this will require using snprintf and passing around char * 's
+    - Consider the case of printing `[<some map>, <some list>]`
+    - Concatenating a string to that list would first involve stringifying the list
+    - This basically requires a duplication of all the `printValue`, `printObject`
+    functions but `snprintf`'ing instead (and passing a char * to point to the growing list)
+    - This is doable but I want to sit down and focus on this task when I get to it.
 ### Container stuff to add:
-    - prepend(container, <item>)  <-- LISTS only
+    - prepend(container, <item>)  <-- LISTS only  <-- IMPLEMENTED
+```c
+static Value_t prependNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("Only lists can be prepended.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count != 0) {
+        Value_t prev = lis->array.values[0];
+        for (unsigned i=1; i<lis->array.count; ++i) {
+            Value_t curr = lis->array.values[i];
+            writeValueArrayAt(&lis->array, prev, i);
+            prev = curr;
+        }
+    }
+    writeValueArrayAt(&lis->array, args[1], 0);
+    lis->array.count++;
+    return OBJ_VAL(lis);
+}
+```
     - append(container, <item>)   <-- LISTS only
     - insert(container, <idx>, <item>)   <-- LISTS only
     - remove(container, <idx>)   <-- BOTH

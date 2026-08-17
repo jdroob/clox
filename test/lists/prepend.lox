@@ -1,0 +1,4 @@
+var lis = [];
+print lis;
+prepend(lis, 42);
+print lis;
