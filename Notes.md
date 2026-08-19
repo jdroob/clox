@@ -4077,3 +4077,33 @@ static Value_t prependNative(int argCount, Value_t *args) {
     - remove(container, <idx>)   <-- BOTH
     - pop_front(container)   <-- LISTS only
     - pop_back(container)   <-- LISTS only
+
+
+- Added `append`; was simpler to implement than prepend
+```c
+static Value_t appendNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("Only lists can be appended.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    writeValueArray(&lis->array, args[1]);
+    return OBJ_VAL(lis);
+}
+```
+
+and `pop_back`
+```c
+static Value_t pop_backNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("pop_back only valid on lists.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count > 0) lis->array.count--;
+    return OBJ_VAL(lis);
+}
+```
+    - insert(container, <idx>, <item>)   <-- LISTS only
+    - remove(container, <idx>)   <-- BOTH
+    - pop_front(container)   <-- LISTS only

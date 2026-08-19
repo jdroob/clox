@@ -28,6 +28,24 @@ static bool isValidOperation(int requiredMode, const char *providedMode) {
     return false;
 }
 
+static Value_t helpNative(int argCount, Value_t *args) {
+    printf("Available built-in functions:\n");
+    printf("  help()                    - Display this help message\n");
+    printf("  clock()                   - Get CPU time in seconds\n");
+    printf("  wallclock()               - Get real wall-clock time\n");
+    printf("  open(path, mode)          - Open file (mode: \"r\", \"w\", \"r+\")\n");
+    printf("  close(handle)             - Close file handle\n");
+    printf("  read(handle)              - Read entire file contents\n");
+    printf("  write(string, handle)     - Write string to file\n");
+    printf("  getline(handle)           - Read one line from file\n");
+    printf("  len(obj)                  - Get length of string or container\n");
+    printf("  append(list, value)       - Append value to list\n");
+    printf("  prepend(list, value)      - Prepend value to list\n");
+    printf("  hasattr(obj, name)        - Check if instance has attribute\n");
+    printf("  getattr(obj, name)        - Get instance attribute\n");
+    printf("  setattr(obj, name, val)   - Set instance attribute\n");
+    return NIL_VAL;
+}
 static Value_t clockNative(int argCount, Value_t *args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
@@ -149,7 +167,18 @@ static Value_t lenNative(int argCount, Value_t *args) {
     }
 }
 
+static Value_t appendNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("Only lists can be appended.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    writeValueArray(&lis->array, args[1]);
+    return OBJ_VAL(lis);
+}
+
 static Value_t prependNative(int argCount, Value_t *args) {
+    // TODO: yikes this is slow..
     if (!IS_LIST(args[0])) {
         runtimeError("Only lists can be prepended.");
         return ERR_VAL;
@@ -165,6 +194,16 @@ static Value_t prependNative(int argCount, Value_t *args) {
     }
     writeValueArrayAt(&lis->array, args[1], 0);
     lis->array.count++;
+    return OBJ_VAL(lis);
+}
+
+static Value_t pop_backNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("pop_back only valid on lists.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count > 0) lis->array.count--;
     return OBJ_VAL(lis);
 }
 
@@ -589,6 +628,7 @@ void initVM(void) {
     vm.initString = makeString("init", 4);
     
     // define native functions
+    defineNative("help", helpNative, 0);
     defineNative("clock", clockNative, 0);
     defineNative("wallclock", clockRealNative, 0);
     defineNative("open", fopenNative, 2);
@@ -601,6 +641,8 @@ void initVM(void) {
     defineNative("getattr", getattrNative, 2);
     defineNative("setattr", setattrNative, 3);
     defineNative("prepend", prependNative, 2);
+    defineNative("append", appendNative, 2);
+    defineNative("pop_back", pop_backNative, 1);
     vm.isInitialized = true;
 }
 

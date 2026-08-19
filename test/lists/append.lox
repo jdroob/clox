@@ -1,8 +1,8 @@
 var lis = [];
 print lis;
-prepend(lis, 42);
+append(lis, 42);
 print lis;
 for (var i=0; i<10; i=i+1) {
-  prepend(lis, i);
+  append(lis, i);
 }
 print lis;
