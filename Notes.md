@@ -4101,9 +4101,45 @@ static Value_t pop_backNative(int argCount, Value_t *args) {
     }
     ObjList_t *lis = AS_LIST(args[0]);
     if (lis->array.count > 0) lis->array.count--;
-    return OBJ_VAL(lis);
+    return lis->array[lis->array.count];
 }
 ```
+
     - insert(container, <idx>, <item>)   <-- LISTS only
     - remove(container, <idx>)   <-- BOTH
     - pop_front(container)   <-- LISTS only
+
+8/24/2026
+-  Sister came to town & work is crazy.. but we all have excuses
+- Anyway, made `pop_front` and `pop_back` more robust
+
+```c
+static Value_t pop_backNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("pop_back only valid on lists.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count > 0) {
+        lis->array.count--;
+        return lis->array.values[lis->array.count];
+    }
+    return NIL_VAL;
+}
+
+static Value_t pop_frontNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("pop_front only valid on lists.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count <= 0) {
+        return NIL_VAL;
+    }
+    Value_t front = getValueAt(&lis->array, 0);
+    memmove(lis->array.values, &lis->array.values[1], sizeof(Value_t) * --(lis->array.count));
+    return front;
+}
+```
+    - insert(container, <idx | key>, <value>)   <-- BOTH 
+    - remove(container, <idx | key>)   <-- BOTH

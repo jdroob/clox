@@ -203,8 +203,25 @@ static Value_t pop_backNative(int argCount, Value_t *args) {
         return ERR_VAL;
     }
     ObjList_t *lis = AS_LIST(args[0]);
-    if (lis->array.count > 0) lis->array.count--;
-    return OBJ_VAL(lis);
+    if (lis->array.count > 0) {
+        lis->array.count--;
+        return lis->array.values[lis->array.count];
+    }
+    return NIL_VAL;
+}
+
+static Value_t pop_frontNative(int argCount, Value_t *args) {
+    if (!IS_LIST(args[0])) {
+        runtimeError("pop_front only valid on lists.");
+        return ERR_VAL;
+    }
+    ObjList_t *lis = AS_LIST(args[0]);
+    if (lis->array.count <= 0) {
+        return NIL_VAL;
+    }
+    Value_t front = getValueAt(&lis->array, 0);
+    memmove(lis->array.values, &lis->array.values[1], sizeof(Value_t) * --(lis->array.count));
+    return front;
 }
 
 static Value_t getlineNative(int argCount, Value_t *args) {
@@ -643,6 +660,7 @@ void initVM(void) {
     defineNative("prepend", prependNative, 2);
     defineNative("append", appendNative, 2);
     defineNative("pop_back", pop_backNative, 1);
+    defineNative("pop_front", pop_frontNative, 1);
     vm.isInitialized = true;
 }
 
