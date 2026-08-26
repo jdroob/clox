@@ -311,11 +311,20 @@ void printValue(Value_t val) {
             printf("nil");
             if (appendNewline) printf("\n");
             break;
+        case VAL_ERR:
+            printf("err");
+            if (appendNewline) printf("\n");
+            break;
         case VAL_NUM:
             printf("%g", AS_NUMBER(val));
             if (appendNewline) printf("\n");
             break;
-        case VAL_OBJ: printObject(val);
+        case VAL_OBJ: 
+            printObject(val);
+            break;
+        default:
+            fprintf(stderr, "What the hell happened?\n");
+            exit(1);
     }
 }
 

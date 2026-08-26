@@ -50,6 +50,14 @@ static void boundsCheck(ValueArray_t *array, unsigned idx) {
     }
 }
 
+void growArray(ValueArray_t *array) {
+    if (array->capacity < array->count + 1) {
+        size_t oldCapacity = array->capacity;
+        array->capacity = GROW_CAPACITY(oldCapacity);
+        array->values = GROW_ARRAY(Value_t, array->values, oldCapacity, array->capacity);
+    }
+}
+
 void writeValueArrayAt(ValueArray_t *array, Value_t value, unsigned idx) {
     if (array->capacity < array->count + 1) {
         size_t oldCapacity = array->capacity;

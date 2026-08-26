@@ -1,0 +1,12 @@
+var lis = [];
+for (var i=0; i<10; i=i+1) {
+  append(lis, i);
+}
+print lis;
+pop_front(lis);
+pop_front(lis);
+print lis;
+for (var i=0; i<10; i=i+1) {
+  pop_front(lis);  // no-op when lis is empty
+}
+print lis;

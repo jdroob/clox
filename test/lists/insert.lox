@@ -1,0 +1,20 @@
+var lis = [1,2,3,4];
+print lis; // [1,2,3,4]
+insert(lis, 1, "john");
+print lis; // [1,"john",2,3,4];
+
+/**
+rubio@MSI ~/clox % bin/lox
+> var lis = [];
+> insert(lis, 0, "john");
+> print lis;
+[ "john" ]
+> insert(lis, 1, "joe");
+> print lis;
+[ "john", "joe" ]
+> insert(lis, -1, "james");
+Attempting to insert element out of bounds.
+[line 1]: <script>
+> 
+
+*/

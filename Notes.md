@@ -4141,5 +4141,44 @@ static Value_t pop_frontNative(int argCount, Value_t *args) {
     return front;
 }
 ```
+
+8/26/2026
+- Added support for inserting to lists
+```c
+static Value_t insertNative(int argCount, Value_t *args) {
+    if (!IS_CONTAINER(args[0])) {
+        runtimeError("insert requires container type.");
+        return ERR_VAL; // TODO: probs makes sense to have vm_err and user_err distinction someday; this way we can have user error values
+    }
+    if (IS_LIST(args[0])) {
+        if (!IS_NUMBER(args[1])) {
+            runtimeError("index must be a number.");
+            return ERR_VAL;
+        }
+        ObjList_t *lis = AS_LIST(args[0]);
+        double dblIdx = AS_NUMBER(args[1]);
+        if (fmod(dblIdx, 1.0) != 0.0) {
+            runtimeError("'insert' index cannot have fractional part.");
+            return ERR_VAL;
+        }
+        int idx = (int)dblIdx;
+        if (idx < 0 || idx > lis->array.count) {
+            runtimeError("Attempting to insert element out of bounds.");
+            return ERR_VAL;
+        }
+        growArray(&lis->array);  // grow capacity if needed
+        memmove(&lis->array.values[idx + 1], 
+                &lis->array.values[idx], 
+                (lis->array.count - idx) * sizeof(Value_t)
+            );
+        writeValueArrayAt(&lis->array, args[2], idx);
+        lis->array.count++;
+        return args[2];
+    } else {  // ObjMap_t
+        return ERR_VAL;
+    }
+}
+```
+
     - insert(container, <idx | key>, <value>)   <-- BOTH 
     - remove(container, <idx | key>)   <-- BOTH

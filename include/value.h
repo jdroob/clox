@@ -60,6 +60,7 @@ void reserveValueArray(ValueArray_t *array, unsigned initSize);
 void writeValueArray(ValueArray_t *array, Value_t value);
 void writeValueArrayAt(ValueArray_t *array, Value_t value, unsigned idx);
 void freeValueArray(ValueArray_t *array);
+void growArray(ValueArray_t *array);
 Value_t getValueAt(ValueArray_t *array, unsigned idx);
 Value_t makeValue(double val, ValueType_e type);
 
