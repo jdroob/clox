@@ -1,0 +1,12 @@
+var listKey = [1, 2];
+var mapKey = { "name" : "alice" };
+var m = {};
+
+insert(m, listKey, "list-key");
+insert(m, mapKey, "map-key");
+
+print m[listKey];
+print m[mapKey];
+
+insert(m, listKey, "updated-list-key");
+print m[listKey];

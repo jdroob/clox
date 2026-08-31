@@ -4180,5 +4180,17 @@ static Value_t insertNative(int argCount, Value_t *args) {
 }
 ```
 
-    - insert(container, <idx | key>, <value>)   <-- BOTH 
+    - insert(container, <idx | key>, <value>)   <-- BOTH   <-- done
+    ```c
+    } else {  // ObjMap_t
+        // args[1] can be any value type (for now.. lists are and maps are a weird case)
+        tableSet(&AS_MAP(args[0])->map, args[1], args[2]);
+   ```
+- Note to self: I *reeally* think we should try to call this project "finished" after adding remove :)
+- Doesn't mean we can't add onto this over time - just that there are  other projects to work on before you die
     - remove(container, <idx | key>)   <-- BOTH
+
+## Other features to add
+- string interpolation
+- converting objects to strings
+- string indexing

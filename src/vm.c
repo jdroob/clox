@@ -30,20 +30,22 @@ static bool isValidOperation(int requiredMode, const char *providedMode) {
 
 static Value_t helpNative(int argCount, Value_t *args) {
     printf("Available built-in functions:\n");
-    printf("  help()                    - Display this help message\n");
-    printf("  clock()                   - Get CPU time in seconds\n");
-    printf("  wallclock()               - Get real wall-clock time\n");
-    printf("  open(path, mode)          - Open file (mode: \"r\", \"w\", \"r+\")\n");
-    printf("  close(handle)             - Close file handle\n");
-    printf("  read(handle)              - Read entire file contents\n");
-    printf("  write(string, handle)     - Write string to file\n");
-    printf("  getline(handle)           - Read one line from file\n");
-    printf("  len(obj)                  - Get length of string or container\n");
-    printf("  append(list, value)       - Append value to list\n");
-    printf("  prepend(list, value)      - Prepend value to list\n");
-    printf("  hasattr(obj, name)        - Check if instance has attribute\n");
-    printf("  getattr(obj, name)        - Get instance attribute\n");
-    printf("  setattr(obj, name, val)   - Set instance attribute\n");
+    printf("  help()                          - Display this help message\n");
+    printf("  clock()                         - Get CPU time in seconds\n");
+    printf("  wallclock()                     - Get real wall-clock time\n");
+    printf("  open(path, mode)                - Open file (mode: \"r\", \"w\", \"r+\")\n");
+    printf("  close(handle)                   - Close file handle\n");
+    printf("  read(handle)                    - Read entire file contents\n");
+    printf("  write(string, handle)           - Write string to file\n");
+    printf("  getline(handle)                 - Read one line from file\n");
+    printf("  len(obj)                        - Get length of string or container\n");
+    printf("  append(list, value)             - Append value to list\n");
+    printf("  prepend(list, value)            - Prepend value to list\n");
+    printf("  insert(container, index, value) - Insert value into list or map\n");
+    printf("  remove(container, key)          - Remove key/value from map or list element\n");
+    printf("  hasattr(obj, name)              - Check if instance has attribute\n");
+    printf("  getattr(obj, name)              - Get instance attribute\n");
+    printf("  setattr(obj, name, val)         - Set instance attribute\n");
     return NIL_VAL;
 }
 static Value_t clockNative(int argCount, Value_t *args) {
@@ -224,16 +226,29 @@ static Value_t pop_frontNative(int argCount, Value_t *args) {
     return front;
 }
 
+static Value_t removeNative(int argCount, Value_t *args) {
+    if (!IS_CONTAINER(args[0])) {
+        runtimeError("remove requires container type.");
+        return ERR_VAL; // TODO: probs makes sense to have vm_err and user_err distinction someday; this way we can have user error values
+    }
+    if (IS_MAP(args[0])) {
+        tableDelete(&AS_MAP(args[0])->map, args[1]);
+    } else {  // ObjList
+
+    }
+    return args[2];
+}
+
 static Value_t insertNative(int argCount, Value_t *args) {
     if (!IS_CONTAINER(args[0])) {
         runtimeError("insert requires container type.");
         return ERR_VAL; // TODO: probs makes sense to have vm_err and user_err distinction someday; this way we can have user error values
     }
-    if (!IS_NUMBER(args[1])) {
-        runtimeError("index must be a number.");
-        return ERR_VAL;
-    }
     if (IS_LIST(args[0])) {
+        if (!IS_NUMBER(args[1])) {
+            runtimeError("index must be a number.");
+            return ERR_VAL;
+        }
         ObjList_t *lis = AS_LIST(args[0]);
         double dblIdx = AS_NUMBER(args[1]);
         if (fmod(dblIdx, 1.0) != 0.0) {
@@ -252,10 +267,11 @@ static Value_t insertNative(int argCount, Value_t *args) {
             );
         writeValueArrayAt(&lis->array, args[2], idx);
         lis->array.count++;
-        return args[2];
     } else {  // ObjMap_t
-        return ERR_VAL;
+        // args[1] can be any value type (for now.. lists are and maps are a weird case)
+        tableSet(&AS_MAP(args[0])->map, args[1], args[2]);
     }
+    return args[2];
 }
 
 static Value_t getlineNative(int argCount, Value_t *args) {
@@ -494,6 +510,15 @@ bool valuesEqual(Value_t a, Value_t b) {
                     return AS_STRING(a)->length == AS_STRING(b)->length &&
                            AS_STRING(a)->hash == AS_STRING(b)->hash &&
                             !memcmp(AS_CSTRING(a), AS_CSTRING(b), AS_STRING(a)->length);
+                default:
+                    /**
+                     * For following object types, compare by reference:
+                     *  - lists TODO: want to reconsider this?
+                     *  - maps
+                     *  - functions
+                     *  - everything that isn't a string for now
+                     */
+                    return a.as.obj == b.as.obj;
             }
         }
         default: return false;
@@ -696,6 +721,7 @@ void initVM(void) {
     defineNative("pop_back", pop_backNative, 1);
     defineNative("pop_front", pop_frontNative, 1);
     defineNative("insert", insertNative, 3);
+    defineNative("remove", removeNative, 2);
     vm.isInitialized = true;
 }
 

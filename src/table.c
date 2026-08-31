@@ -44,6 +44,10 @@ static uint32_t getHash(Value_t key) {
                     ObjString_t *string = (ObjString_t *)obj;
                     return string->hash;
                 }
+                default: {
+                    uint32_t n = obj;
+                    return (n << 12) | (n >> (32 - 12)); // NOTE: this is *super* arbitrarty
+                }
             }
         }
         default:

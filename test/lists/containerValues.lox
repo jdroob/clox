@@ -1,0 +1,6 @@
+var row = [1, 2];
+var grid = [row, [3, 4]];
+
+print grid[0][1];
+print grid[1][0];
+print grid[0];
