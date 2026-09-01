@@ -1,0 +1,13 @@
+print "=== File I/O ===";
+help();
+
+var path = "test/tutorial/demo_output.txt";
+var fh = open(path, "w");
+write("Hello from clox!", fh);
+close(fh);
+
+var readHandle = open(path, "r");
+var contents = read(readHandle);
+print "Contents: " + contents;
+print "Bytes: " + len(contents);
+close(readHandle);

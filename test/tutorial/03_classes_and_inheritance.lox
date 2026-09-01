@@ -1,0 +1,27 @@
+print "=== Classes and inheritance ===";
+
+class Animal {
+    init(name) {
+        this.name = name;
+    }
+
+    speak() {
+        print "I am " + this.name;
+    }
+}
+
+class Dog : Animal {
+    init(name, breed) {
+        super.init(name);
+        this.breed = breed;
+    }
+
+    bark() {
+        print this.name + " says woof!";
+    }
+}
+
+var dog = Dog("Buddy", "beagle");
+dog.speak();
+dog.bark();
+print "Breed: " + dog.breed;

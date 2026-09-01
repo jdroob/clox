@@ -1,0 +1,28 @@
+print "=== Functions and closures ===";
+
+fun factorial(n) {
+    if (n <= 1) return 1;
+    return n * factorial(n - 1);
+}
+
+print "factorial(5) = " + factorial(5);
+
+fun makeCounter() {
+    var count = 0;
+    fun increment() {
+        count = count + 1;
+        return count;
+    }
+    return increment;
+}
+
+var counter = makeCounter();
+print counter();
+print counter();
+print counter();
+
+fun greet(name) {
+    print "Hello from " + name;
+}
+
+greet("clox");

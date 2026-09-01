@@ -1,0 +1,45 @@
+print "=== Language basics ===";
+
+var name = "Ada";
+final var answer = 42;
+var points = 10;
+
+print "Hello, " + name + "!";
+print "The answer is " + answer;
+
+if (points >= 10 and answer == 42) {
+    var status = points > 5 ? "winner" : "try again";
+    print "Conditionals + short-circuit + ternary: " + status;
+} else {
+    print "Unexpected branch";
+}
+
+if (points < 5 or answer == 42) {
+    print "This branch also demonstrates or.";
+}
+
+var count = 0;
+while (count < 3) {
+    print "while: " + count;
+    count = count + 1;
+}
+
+for (var i = 0; i < 3; i = i + 1) {
+    print "for: " + i;
+}
+
+switch (answer) {
+    case 41: {
+        print "close, but not quite";
+        break;
+    }
+    case 42: {
+        print "exactly 42";
+        break;
+    }
+    default: {
+        print "other value";
+    }
+}
+
+print "Final values stay fixed.";

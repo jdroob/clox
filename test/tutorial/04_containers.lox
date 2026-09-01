@@ -1,0 +1,18 @@
+print "=== Lists and maps ===";
+
+var numbers = [1, 2, 3];
+insert(numbers, 1, 99);
+print numbers;
+
+var people = { "alice" : 30, "bob" : 28 };
+print people["alice"];
+insert(people, "charlie", 35);
+print people;
+print "Length of numbers: " + len(numbers);
+print "Length of people: " + len(people);
+
+var matrix = [[1, 2], [3, 4]];
+print matrix[1][0];
+
+remove(people, "bob");
+print people;

@@ -42,7 +42,7 @@ bin/lox
 Run a Lox source file:
 
 ```sh
-bin/lox test/ch24/debug.lox
+bin/lox test/tutorial/01_language_basics.lox
 ```
 
 See list of built-in functions:
