@@ -45,6 +45,12 @@ Run a Lox source file:
 bin/lox test/ch24/debug.lox
 ```
 
+See list of built-in functions:
+
+```
+help()
+```
+
 ## Features
 
 This implementation follows the Lox language chapters from "Crafting Interpreters" and includes:
