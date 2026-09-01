@@ -47,8 +47,8 @@ bin/lox test/ch24/debug.lox
 
 See list of built-in functions:
 
-```
-help()
+```python
+help();
 ```
 
 ## Features
