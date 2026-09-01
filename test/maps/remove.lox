@@ -1,0 +1,6 @@
+var map = { "john" : "jim", "jack" : "jill", "jane" : "jones" };
+print map; // { {"john" : "jim"}, {"jack" : "jill"}, {"jane" : "jones"} }
+print remove(map, "jack"); // "jill"
+print map; // { {"john" : "jim"}, {"jane" : "jones"} }
+print remove(map, "john"); // "jim"
+print map; // { {"jane" : "jones"} }

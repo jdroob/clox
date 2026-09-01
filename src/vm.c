@@ -232,11 +232,34 @@ static Value_t removeNative(int argCount, Value_t *args) {
         return ERR_VAL; // TODO: probs makes sense to have vm_err and user_err distinction someday; this way we can have user error values
     }
     if (IS_MAP(args[0])) {
+        Value_t val;
+        if (!tableGet(&AS_MAP(args[0])->map, args[1], &val)) {
+            return ERR_VAL;
+        }
         tableDelete(&AS_MAP(args[0])->map, args[1]);
+        return val;
     } else {  // ObjList
-
+        ObjList_t *lis = AS_LIST(args[0]);
+        if (lis->array.count == 0) return ERR_VAL;
+        double dblIdx = AS_NUMBER(args[1]);
+        if (fmod(dblIdx, 1.0) != 0.0) {
+            runtimeError("'remove' index cannot have fractional part.");
+            return ERR_VAL;
+        }
+        int idx = (int)dblIdx;
+        if (idx < 0 || idx > lis->array.count) {
+            runtimeError("Attempting to remove element out of bounds.");
+            return ERR_VAL;
+        }
+        Value_t removed = lis->array.values[idx];
+        lis->array.count--;
+        if (lis->array.count > 1) {
+            memmove(&lis->array.values[idx], 
+                    &lis->array.values[idx + 1], 
+                    sizeof(Value_t) * lis->array.count);
+        }
+        return removed;
     }
-    return args[2];
 }
 
 static Value_t insertNative(int argCount, Value_t *args) {

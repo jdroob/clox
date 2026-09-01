@@ -4190,6 +4190,48 @@ static Value_t insertNative(int argCount, Value_t *args) {
 - Doesn't mean we can't add onto this over time - just that there are  other projects to work on before you die
     - remove(container, <idx | key>)   <-- BOTH
 
+9/1/2026
+- Added support for `remove`
+```c
+static Value_t removeNative(int argCount, Value_t *args) {
+    if (!IS_CONTAINER(args[0])) {
+        runtimeError("remove requires container type.");
+        return ERR_VAL; // TODO: probs makes sense to have vm_err and user_err distinction someday; this way we can have user error values
+    }
+    if (IS_MAP(args[0])) {
+        Value_t val;
+        if (!tableGet(&AS_MAP(args[0])->map, args[1], &val)) {
+            return ERR_VAL;
+        }
+        tableDelete(&AS_MAP(args[0])->map, args[1]);
+        return val;
+    } else {  // ObjList
+        ObjList_t *lis = AS_LIST(args[0]);
+        if (lis->array.count == 0) return ERR_VAL;
+        double dblIdx = AS_NUMBER(args[1]);
+        if (fmod(dblIdx, 1.0) != 0.0) {
+            runtimeError("'remove' index cannot have fractional part.");
+            return ERR_VAL;
+        }
+        int idx = (int)dblIdx;
+        if (idx < 0 || idx > lis->array.count) {
+            runtimeError("Attempting to remove element out of bounds.");
+            return ERR_VAL;
+        }
+        Value_t removed = lis->array.values[idx];
+        lis->array.count--;
+        if (lis->array.count > 1) {
+            memmove(&lis->array.values[idx], 
+                    &lis->array.values[idx + 1], 
+                    sizeof(Value_t) * lis->array.count);
+        }
+        return removed;
+    }
+}
+```
+
+- Well wasn't that fun?! :)
+
 ## Other features to add
 - string interpolation
 - converting objects to strings
