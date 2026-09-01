@@ -1757,7 +1757,10 @@ static InterpResult_t run(void) {
                 ip = frame->ip;
                 break;
             }
-            default:
+            default: {
+                runtimeError("Could not decode opcode.");
+                return INTERPRET_RUNTIME_ERROR;
+            }
         }
     }
 
