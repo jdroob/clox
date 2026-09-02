@@ -53,7 +53,7 @@ help();
 
 ## Features
 
-This implementation follows the Lox language chapters from "Crafting Interpreters" and includes:
+This implementation follows the Lox language chapters from "Crafting Interpreters" (plus some additional features) and includes:
 
 - REPL and script execution modes
 - Scanner and parser for Lox syntax
